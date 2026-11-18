@@ -163,7 +163,7 @@ typedef struct {
     uint8_t out_v_backporch;    // output active starts at line 3+out_v_backporch
     uint8_t v_start;            // first line of the first group (before "Line phase")
     uint16_t in_crop;           // source pixels cropped on each side
-    uint8_t ar43;               // HD format: 0 = 16:9, 1 = center 4:3, 2 = wide (720p: 180p, 1080p: 216p)
+    uint8_t ar43;               // format: 0 = 16:9 (full), 1 = center 4:3, 2 = wide (720p: 180p, 1080p: 216p, 480p: 160p)
     uint8_t hfilt;              // ADC samples averaged per stored sample: 0 = 1, 1 = 2, 2 = 4 (3: not used)
     uint8_t ilace;              // 480i output: one field per input frame
     uint8_t fB_st, fB_n;        // 480i field B: line in group / lines averaged
@@ -179,7 +179,7 @@ typedef struct {
     // full resolution: store RGB, one pixel per word, instead of YCbCr 4:2:2
     // (480p / VGA: few lines of read/write drift, the line buffer has room)
     uint8_t rgb444;
-    // 720p "Wide": 180 active lines centered in the 240 line field
+    // "Wide": 180 active lines (or rows) centered in the 240 line field
     uint8_t wide;
     // 50Hz source, 288p (310-314 lines) / 576i (625 lines) output
     uint8_t pal;
@@ -190,6 +190,10 @@ typedef struct {
     uint16_t adc_h_total;
 } ds_mode_t;
 
+#ifndef WD_ADC_480
+#define WD_ADC_480  1392
+#define WD_ADC_VGA  1456
+#endif
 static const ds_mode_t ds_modes[] = {
     // 720p60: 655x750 -> 1875x262 (2.86 input lines per output line)
     /* ---- 240p output (262 lines) ---- */
@@ -288,6 +292,27 @@ static const ds_mode_t ds_modes[] = {
     // 480p; 288p (310-314 lines, 15.5-15.7kHz) or 576i (625 lines)
     { HDMI_576p50,      625,  864, 2700, 312, 1, 2, 3,  0, 0,   0, 0, 0, 0, 0, 0, "576p>288pF", 0, 0, 0, 1, 1, 0, 1 },
     { HDMI_576p50,      625,  864, 2700, 625, 1, 2, 3,  0, 0,   0, 0, 0, 1, 1, 1, "576p>576iF", 0, 0, 0, 1, 1, 0, 1 },
+    // 480p / VGA / 576p "Center 4:3" (anamorphic 16:9 sources): the middle
+    // 3/4 of the width (540 / 480 pixels, 90 / 80 cropped per side) at 4
+    // clocks per pixel instead of 3: the same width on screen
+    { HDMI_480p60,      525,  858, 2700, 262, 1, 3, 3,  0, 0,  90, 1, 0, 0, 0, 0, "480C>240p",  0, 0, 0, 1, 1 },
+    { HDMI_480p60,      525,  858, 2700, 525, 1, 3, 3,  0, 0,  90, 1, 0, 1, 1, 1, "480C>480i",  0, 0, 0, 1, 1 },
+    { HDMI_640x480p60,  525,  800, 2400, 262, 1, 3, 3,  0, 0,  80, 1, 0, 0, 0, 0, "VGAC>240p",  0, 0, 0, 1, 1 },
+    { HDMI_640x480p60,  525,  800, 2400, 525, 1, 3, 3,  0, 0,  80, 1, 0, 1, 1, 1, "VGAC>480i",  0, 0, 0, 1, 1 },
+    { HDMI_576p50,      625,  864, 2700, 312, 1, 3, 3,  0, 0,  90, 1, 0, 0, 0, 0, "576C>288p",  0, 0, 0, 1, 1, 0, 1 },
+    { HDMI_576p50,      625,  864, 2700, 625, 1, 3, 3,  0, 0,  90, 1, 0, 1, 1, 1, "576C>576i",  0, 0, 0, 1, 1, 0, 1 },
+    // 480p / VGA "Wide" (anamorphic 16:9 sources, letterboxed): 3 lines per
+    // row, 480 -> 160 rows, the picture 2:1 instead of 16:9. Rows take 1.5
+    // output lines of input: ~55 rows of read/write drift, so the line buffer
+    // rows are short: 4 ADC samples averaged per pixel, the ADC at 1392 (480p)
+    // / 1456 (VGA) samples per line, 292 pixels, 7 clocks per pixel, YCbCr
+    // 4:2:2. 240p: the 3 lines averaged; 480i as 720p (field A = line 0,
+    // field B = lines 1-2). 576p (192 rows) would need ~65 line buffer slots,
+    // more than the 63 of the register: no Wide.
+    { HDMI_480p60,      525, WD_ADC_480/4, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 2, 0, 0, 0, "480W>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
+    { HDMI_480p60,      525, WD_ADC_480/4, 2730, 525, 2, 6, 3,  0, 0, 0, 2, 2, 1, 2, 2, "480W>480i",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
+    { HDMI_640x480p60,  525, WD_ADC_VGA/4, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 2, 0, 0, 0, "VGAW>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_VGA },
+    { HDMI_640x480p60,  525, WD_ADC_VGA/4, 2730, 525, 2, 6, 3,  0, 0, 0, 2, 2, 1, 2, 2, "VGAW>480i",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_VGA },
     // 480p: native sampling (858/line, 720 active), exactly 2 input lines per output line
     { HDMI_480p60,      525,  858, 1716, 525, 1, 1, 1, 16, 0,   0, 0, 0, 1, 1, 1, "480p>480i" },
     { HDMI_480p60,      525,  858, 3432, 525, 1, 3, 1, 16, 0,   0, 0, 1, 1, 1, 1, "480p>480i" },
@@ -342,16 +367,16 @@ static int ds_row_match(const ds_mode_t *m, mode_data_t *preset) {
     return (m->vic != HDMI_Unknown) || (preset->timings.v_total == m->in_v_total);
 }
 
-// "HD format" applies to these sources
+// "Format" applies to these sources
 static int ds_hd_vic(HDMI_Video_Type vic) {
-    return (vic == HDMI_720p60) || (vic == HDMI_1080p60);
+    return (vic == HDMI_720p60) || (vic == HDMI_1080p60) ||
+           (vic == HDMI_480p60) || (vic == HDMI_640x480p60) || (vic == HDMI_576p50);
 }
 
-static const ds_mode_t* find_ds_mode(avconfig_t *cc, mode_data_t *preset, mode_data_t *vm_in) {
+static const ds_mode_t* find_ds_mode_ar(avconfig_t *cc, mode_data_t *preset, mode_data_t *vm_in, uint8_t ar) {
     unsigned i;
     const ds_mode_t *match = NULL;
     uint8_t want_hfilt = !cc->ds_hfilt_off;
-    uint8_t ar;
     // wanted output: 0 = 240p, 1 = 480i
     uint8_t want[2];
     unsigned pass, npass = 0;
@@ -367,9 +392,6 @@ static const ds_mode_t* find_ds_mode(avconfig_t *cc, mode_data_t *preset, mode_d
         pal = 1;
     else
         return NULL;
-    // "HD format" (720p and 1080p; Wide: 180p for 720p, 216p for 1080p)
-    ar = cc->ds_720p_ar;
-
     if (cc->ds_480i)
         want[npass++] = 1;
     want[npass++] = 0;
@@ -402,6 +424,16 @@ static const ds_mode_t* find_ds_mode(avconfig_t *cc, mode_data_t *preset, mode_d
             return match;
     }
     return NULL;
+}
+
+// "Format" (720p, 1080p, 480p, VGA, 576p; Wide: 180p for 720p, 216p for
+// 1080p, 160p for 480p); a format not available for the source (or the
+// sampling) falls back to Full
+static const ds_mode_t* find_ds_mode(avconfig_t *cc, mode_data_t *preset, mode_data_t *vm_in) {
+    const ds_mode_t *m = find_ds_mode_ar(cc, preset, vm_in, cc->ds_720p_ar);
+    if (!m && cc->ds_720p_ar)
+        m = find_ds_mode_ar(cc, preset, vm_in, 0);
+    return m;
 }
 
 // Output clock / line length for the full resolution modes. The PLL makes
@@ -869,7 +901,21 @@ static int setup_ds_mode(const ds_mode_t *m, avconfig_t *cc, mode_data_t *vm_in,
             vm_conf->ds_vflt = 1;
             vm_conf->ds_vflt_a = cc->ds_flicker;
         }
-        // lines after the active ones used by the last field B row
+        // lines after the active ones used by the last row (flicker filters,
+        // or "Line phase" with groups ending at the last active line: up to
+        // 4 front porch lines, blank)
+        {
+            int g = m->vdec+1, k = DS_OUT_V_ROWS(m), p = cc->ds_vphase % g;
+            int fp = vm_in->timings.v_total - vm_in->timings.v_synclen - vm_in->timings.v_backporch - vm_in->timings.v_active;
+            int last = m->v_start + p + g*(k-1) + ((st_a > st_b+bofs) ? st_a : (m->ilace ? st_b+bofs : st_a));
+            int need = last - (vm_in->timings.v_active - 1);
+            if (fp > 4)
+                fp = 4;
+            if (need > fp)
+                need = fp;
+            if (need > ext)
+                ext = need;
+        }
         vm_in->timings.v_active += ext;
     }
     vm_conf->ds_hfilt = m->hfilt;

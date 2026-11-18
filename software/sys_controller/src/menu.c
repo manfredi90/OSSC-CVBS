@@ -281,7 +281,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "480p input",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.s480p_mode,    OPT_WRAP,   SETTING_ITEM(ds_480p_in_desc) } } },
     { "15kHz input",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_i2p,       OPT_WRAP,   SETTING_ITEM(ds_i2p_desc) } } },
     { "Flicker filter",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_flicker,   OPT_WRAP,   SETTING_ITEM(ds_flicker_desc) } } },
-    { "HD format",                              OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_720p_ar,   OPT_WRAP,   SETTING_ITEM(ds_720p_ar_desc) } } },
+    { "Format",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_720p_ar,   OPT_WRAP,   SETTING_ITEM(ds_720p_ar_desc) } } },
     { "Line blending",                          OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_vblend_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
     { "Line phase",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_vphase,     OPT_WRAP, 0, 3, value_disp } } },
     { "Width",                                  OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_width,      OPT_NOWRAP, DS_WIDTH_MIN, DS_WIDTH_MAX, ds_width_disp } } },

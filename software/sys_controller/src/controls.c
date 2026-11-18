@@ -77,7 +77,7 @@ alt_u8 remote_rpt, remote_rpt_prev;
 alt_u32 btn_code, btn_code_prev;
 
 // Downscaler firmware: 2nd PCB button, short press = 240p / 480i, long press
-// (held 1s) = next HD format (Full 16:9 / Center 4:3 / Wide)
+// (held 1s) = next format (Full 16:9 / Center 4:3 / Wide)
 #define PB1_LONG_US     1000000
 #define PB1_SHORT       1
 #define PB1_LONG        2
@@ -457,7 +457,7 @@ Prof_Hotkey_Prompt:
 Button_Check:
     if (btn_code & PB0_BIT)
         man_target_input = next_input;
-    // Downscaler firmware: 2nd button = output mode / HD format (scanlines
+    // Downscaler firmware: 2nd button = output mode / format (scanlines
     // are not available)
     if (pb1_event == PB1_SHORT)
         tc.ds_480i = !tc.ds_480i;

@@ -64,9 +64,9 @@ Supported inputs and outputs
 | 1280x960p           | 240p / 480i | VESA standard timing only (1800x1000, 60kHz, 108MHz). 4 lines per output line: exactly 240 lines, ideal for 320x240 content scaled x4. 640 pixels (2 averaged) |
 | 1280x720p           | 240p / 480i | **Full 16:9** (squeezed to 4:3), **Center 4:3** (crop), **Wide** (whole 16:9 picture letterboxed: 180 lines centered, 4x4 pixel average) |
 | 1024x768p           | 240p / 480i | VESA standard timing only (1344x806, 48kHz, 65MHz). 3 lines per output line, the 960x720 center window (32 pixels and 24 lines cropped per side, 4:3), full resolution |
-| 720x480p            | 240p / 480i | optional flicker filter in 480i |
-| 640x480p            | 240p / 480i | optional flicker filter in 480i |
-| 720x576p (50Hz)     | 288p / 576i | 312 lines per field (310–314, 15.5–15.7kHz) or 625 lines; optional flicker filter in 576i |
+| 720x480p            | 240p / 480i | **Full 16:9**: the whole frame. For anamorphic 16:9 sources: **Center 4:3**, the 540 center pixels shown at the full width; **Wide**, the whole picture letterboxed in 160 lines centered (3 input lines each, aspect ratio 2:1 instead of 16:9), 292 pixels (4 averaged), ~5ms of delay. Optional flicker filter in 480i |
+| 640x480p            | 240p / 480i | as 720x480p (Center 4:3: the 480 center pixels) |
+| 720x576p (50Hz)     | 288p / 576i | 312 lines per field (310–314, 15.5–15.7kHz) or 625 lines; Full 16:9 or Center 4:3 (as 720x480p; no Wide: it would need a deeper line buffer); optional flicker filter in 576i |
 | 480i                | 480i, or 240p | passthrough, or each field shown as a progressive frame on the same scanlines ("15kHz input"). Also 576i -> 288p |
 
 * 240p: 260–264 lines per field (15.6–15.9kHz), 480i: 525 lines. 50Hz sources:
@@ -92,7 +92,7 @@ Installation
 
 Buttons on the OSSC: the 1st one selects the next input (as in the official
 firmware); the 2nd one switches between 240p and 480i (short press) and
-selects the next HD format, Full 16:9 / Center 4:3 / Wide (held 1 second).
+selects the next format, Full 16:9 / Center 4:3 / Wide (held 1 second).
 
 To return to the official firmware, power cycle the OSSC.
 
@@ -108,7 +108,7 @@ Downscaler menu
 | 480p input | Auto, 720x480, 640x480 | 720x480 and 640x480 have the same line rate and are told apart by the hsync width; select the format manually if a source is misdetected (symptom: shimmer on horizontal motion) |
 | 15kHz input | Passthru, 240p | 480i sources: unchanged, or both fields shown on the same scanlines as 240p (no interlacing, the picture keeps the 240p look) |
 | Flicker filter | Off, 1–4 | 480i output. 480p / 640x480 / 576p sources: each field line mixed with the lines above and below (weights a, 1-2a, a with a = level/16; 4 = 1/4, 1/2, 1/4). Higher levels: less interlace flicker, softer picture. HD and PC sources (1080p Full / Center 4:3, 1280x1024, 1280x960, 720p Wide: 4 input lines per output line): each field line averages 3 input lines (levels 1–2) or 4 (levels 3–4) instead of 2; 720p and 1024x768 (3 lines per output line): 3 lines in field A and 2 in field B (one strength for all levels). Not available with some "Line phase" values (no input lines left below the picture: 720p phase 2, 720p Wide phases 2–3, 1280x960 phases 1–3) |
-| HD format | Full 16:9, Center 4:3, Wide | 720p and 1080p (Wide: 180p for 720p, 216p for 1080p) |
+| Format | Full 16:9, Center 4:3, Wide | 720p, 1080p, and 480p / 640x480 / 576p for anamorphic 16:9 sources (see the inputs table; 576p: no Wide) |
 | Line blending | On, Off | average of the input lines that make one output line |
 | Line phase | 0–3 | shifts the input line groups by whole lines, to align them with integer-scaled content |
 | Width | 78%–107% | picture width, 100% = standard width (80% of the line) |
