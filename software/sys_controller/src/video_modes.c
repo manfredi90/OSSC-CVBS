@@ -305,7 +305,7 @@ static const ds_mode_t ds_modes[] = {
     // row, 480 -> 160 rows, the picture 2:1 instead of 16:9. Rows take 1.5
     // output lines of input: ~55 rows of read/write drift, so the line buffer
     // rows are short: 4 ADC samples averaged per pixel, the ADC at 1392 (480p)
-    // / 1456 (VGA) samples per line, 292 pixels, 7 clocks per pixel, YCbCr
+    // / 1456 (VGA) samples per line, 292 / 290 pixels, 7 clocks per pixel, YCbCr
     // 4:2:2. 240p: the 3 lines averaged; 480i as 720p (field A = line 0,
     // field B = lines 1-2). 576p (192 rows) would need ~65 line buffer slots,
     // more than the 63 of the register: no Wide.
@@ -717,6 +717,10 @@ static int setup_ds_mode(const ds_mode_t *m, avconfig_t *cc, mode_data_t *vm_in,
     if (m->t0_auto) {
         uint16_t sk = ds_hskip1(m);
         smp_active = vm_in->timings.h_active/sk;
+        // YCbCr 4:2:2: an even number of pixels (an odd last pixel would
+        // take its chroma from the blanking)
+        if (!m->rgb444 && (smp_active & 1))
+            smp_active--;
         vm_in->timings.h_synclen = (vm_in->timings.h_synclen + sk/2)/sk;
         vm_in->timings.h_backporch = (vm_in->timings.h_backporch + sk/2)/sk;
     } else {

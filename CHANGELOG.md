@@ -9,7 +9,7 @@ Unreleased (test build 1.5.1)
   anamorphic 16:9 sources: Center 4:3 shows the middle 3/4 of the width
   (540 / 480 pixels) at the full width, full resolution; Wide (480p and
   640x480) shows the whole picture letterboxed in 160 lines (3 input lines
-  each, aspect ratio 2:1 instead of 16:9), 292 pixels (4 ADC samples
+  each, aspect ratio 2:1 instead of 16:9), 292 / 290 pixels (4 ADC samples
   averaged), with ~5ms of delay (as 720p Wide, the line buffer absorbs the
   rows written over the whole frame and read in 160 lines). 576p has no
   Wide (192 rows would need more line buffer rows than available): it shows
