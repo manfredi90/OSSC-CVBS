@@ -1,8 +1,8 @@
 Changelog
 =========
 
-Unreleased (test build 1.5.1)
------------------------------
+v1.6
+----
 
 ### New
 - "Format" (was "HD format") also for 480p, 640x480 and 576p, for
@@ -15,7 +15,23 @@ Unreleased (test build 1.5.1)
   Wide (192 rows would need more line buffer rows than available): it shows
   Full. The 2nd button cycles the formats for these sources too.
 
+### Changed
+- 480i from 3 input lines per output line (720p Full 16:9 / Center 4:3,
+  1024x768, 480p / 640x480 Wide) with "Line blending" On: both fields are
+  now a weighted mix of 2 lines, field A = 3/4 of line 0 + 1/4 of line 1,
+  field B = 1/4 of line 1 + 3/4 of line 2 (was line 0 alone / the average
+  of lines 1-2), so the two fields are equally sharp. With "Line blending"
+  Off, or the flicker filter on, unchanged.
+- Output PLL: VCO at most 1250MHz (was 1300MHz, the datasheet maximum).
+  Same output timings; only the PLL dividers change, with some Width
+  values (480p / 640x480 Wide, 576p, 1080p Center 4:3).
+- Full resolution 4:2:2 modes store an even number of pixels (640x480
+  Wide: 290 instead of 291).
+
 ### Fixed
+- 640x480 Wide 480i: cyclic disturbance (stable, then more and more torn
+  lines at the top, then stable again): the output PLL ran at 1278MHz,
+  too close to its limit.
 - With "Line phase" > 0, the last row could use lines after the active
   picture that were not captured (720p, 480p, 640x480, 576p, 1280x960 and
   1080p Wide): up to 4 blank lines after the active ones are now captured.
