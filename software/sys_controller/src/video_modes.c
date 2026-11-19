@@ -191,8 +191,8 @@ typedef struct {
 } ds_mode_t;
 
 #ifndef WD_ADC_480
-#define WD_ADC_480  1392
-#define WD_ADC_VGA  1456
+#define WD_ADC_480  1144    // 4 samples per 3 pixels of the 858
+#define WD_ADC_VGA  1280    // 4 samples per 2.5 pixels of the 800
 #endif
 static const ds_mode_t ds_modes[] = {
     // 720p60: 655x750 -> 1875x262 (2.86 input lines per output line)
@@ -304,11 +304,15 @@ static const ds_mode_t ds_modes[] = {
     // 480p / VGA "Wide" (anamorphic 16:9 sources, letterboxed): 3 lines per
     // row, 480 -> 160 rows, the picture 2:1 instead of 16:9. Rows take 1.5
     // output lines of input: ~55 rows of read/write drift, so the line buffer
-    // rows are short: 4 ADC samples averaged per pixel, the ADC at 1392 (480p)
-    // / 1456 (VGA) samples per line, 292 / 290 pixels, 7 clocks per pixel, YCbCr
-    // 4:2:2. 240p: the 3 lines averaged; 480i as 720p (field A = line 0,
-    // field B = lines 1-2). 576p (192 rows) would need ~65 line buffer slots,
-    // more than the 63 of the register: no Wide.
+    // rows are short: 4 ADC samples averaged per pixel, the ADC at an integer
+    // ratio of the source pixels so that the sampling phase repeats every few
+    // pixels (no shimmer bands on horizontal motion): 480p 1144 samples per
+    // line, each pixel exactly 3 source pixels (240 pixels); VGA 1280, 2.5
+    // source pixels, the pattern repeating every 5 (256 pixels). 7 clocks per
+    // pixel, YCbCr 4:2:2. 240p: the 3 lines averaged; 480i as 720p (field A =
+    // lines 0-1, field B = lines 1-2, weighted, see DS_W31). 576p (192 rows)
+    // would need ~65 line buffer slots, more than the 63 of the register: no
+    // Wide.
     { HDMI_480p60,      525, WD_ADC_480/4, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 2, 0, 0, 0, "480W>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
     { HDMI_480p60,      525, WD_ADC_480/4, 2730, 525, 2, 6, 3,  0, 0, 0, 2, 2, 1, 2, 2, "480W>480i",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
     { HDMI_640x480p60,  525, WD_ADC_VGA/4, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 2, 0, 0, 0, "VGAW>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_VGA },
