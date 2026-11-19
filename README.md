@@ -74,7 +74,10 @@ Supported inputs and outputs
   give 288p / 576i with them.
 * Every source pixel is sampled ("full resolution" sampling) and the output
   clock is generated at an exact ratio of the input clock, so horizontal
-  scrolling stays smooth.
+  scrolling stays smooth. Exception: 480p / 640x480 **Wide** stores ~290
+  pixels per line (4 ADC samples averaged, not an integer fraction of the
+  720 / 640 source pixels), so fine detail shimmers a little on horizontal
+  motion; Full 16:9 and Center 4:3 sample every pixel.
 * Other native 15kHz sources are passed through unchanged; any other input
   shows the test pattern with "Unsupported".
 
@@ -124,7 +127,7 @@ firmware's own sector, independent of the official profiles).
 Known issues and limitations
 ----------------------------
 
-* No known issues at the moment.
+* 480p / 640x480 Wide: some shimmer on horizontal motion (see above).
 * 50Hz HD sources (720p50, 1080p50) are not supported: at 50Hz the input
   lines that make one output line take longer than the output line itself,
   and the line buffer (no frame buffer) cannot absorb the drift at a useful
