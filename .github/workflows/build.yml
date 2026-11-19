@@ -31,10 +31,61 @@ jobs:
           # downscaler firmware patches to submodules
           git -C ip/ibex_qsys apply ../../scripts/patches/ibex_qsys-no-debug.patch
 
+      # Toolchain packages are cached (installed without network on later
+      # runs): the apt mirrors sometimes hang
+      - name: Restore toolchain packages
+        id: debs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/riscv-debs
+          key: riscv-debs-ubuntu-24.04-v2
+
       - name: Install toolchain
+        timeout-minutes: 25
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          set -u
+          D=~/riscv-debs; mkdir -p "$D"
+          # Ubuntu 24.04 packages (picolibc alone is 158MB: a slow mirror
+          # makes apt time out), checked with their SHA512
+          cat > /tmp/debs.txt <<'LIST'
+          b/binutils-riscv64-unknown-elf/binutils-riscv64-unknown-elf_2.42-1ubuntu1+6_amd64.deb 8ca8c2eab62850886c632004dfe8dc1699966d1f95c059cd41daea1ad00fa9ba7ebe4f84b8b79459ef76c05da2d1dfcabecd3b2e9e8d06a1eae5b228ea303034
+          g/gcc-riscv64-unknown-elf/gcc-riscv64-unknown-elf_13.2.0-11ubuntu1+12_amd64.deb 0b57882434a4bf6eb4c58d13b5f06d1a3f35b59bbcbe6b8e97c9add89c984f70efffa0a94c48551075032cfe095396418db5474dc3cc8960425aab6bf1df15b6
+          p/picolibc/picolibc-riscv64-unknown-elf_1.8.6-2_all.deb d59349043f638467f11b5cf2de8fed0d69f6c816f53f0719397dc477e682ae3f505b29df9fef257e0ce4da057c8969cb8a96bfa03a64fcf49711c6d90bc06e69
+          LIST
+          ok=1
+          while read -r path sum; do
+            f="$D/$(basename "$path")"
+            if [ -f "$f" ] && echo "$sum  $f" | sha512sum -c --quiet; then
+              echo "cached: $(basename "$f")"; continue
+            fi
+            got=0
+            for m in http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu \
+                     http://us.archive.ubuntu.com/ubuntu https://mirrors.edge.kernel.org/ubuntu; do
+              echo "download $(basename "$f") from $m"
+              # give up on a mirror below 200kB/s for 30s
+              if curl -fL --retry 3 --connect-timeout 20 --speed-limit 200000 --speed-time 30 -sS \
+                   -o "$f" "$m/pool/universe/${path//+/%2b}" && echo "$sum  $f" | sha512sum -c --quiet; then
+                got=1; echo "SAVE_DEBS=1" >> "$GITHUB_ENV"; break
+              fi
+              rm -f "$f"
+            done
+            [ "$got" = 1 ] || ok=0
+          done < <(sed 's/^ *//' /tmp/debs.txt)
+          if [ "$ok" = 1 ] && sudo dpkg -i "$D"/*.deb; then
+            riscv64-unknown-elf-gcc --version | head -1
+            exit 0
+          fi
+          # last resort: apt (verbose, no per-command time limit)
+          echo "SAVE_DEBS=0" >> "$GITHUB_ENV"
+          sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y -f \
+            gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+
+      - name: Save toolchain packages
+        if: env.SAVE_DEBS == '1'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/riscv-debs
+          key: riscv-debs-ubuntu-24.04-v2
 
       - name: Pull Quartus image
         run: docker pull -q "$QUARTUS_IMAGE"
@@ -60,12 +111,15 @@ jobs:
         run: |
           # version comes from DS_VERSION in firmware.h; file name carries it
           DS_VERSION=$(sed -n 's/^#define DS_VERSION *"\(.*\)"/\1/p' software/sys_controller/inc/firmware.h)
-          echo "Downscaler version: $DS_VERSION"
+          # image tag: "ds" (downscaler) unless DS_FW_TAG says otherwise ("hd")
+          FW_TAG=$(sed -n 's/^#define DS_FW_TAG *"\(.*\)"/\1/p' software/sys_controller/inc/firmware.h)
+          FW_TAG=${FW_TAG:-ds}
+          echo "Firmware: $FW_TAG v$DS_VERSION"
           gcc tools/create_fw_img.c -o tools/create_fw_img
           cd output_files
-          ../tools/create_fw_img ossc_2nd.rbf ../software/sys_controller/mem_init/flash.bin 0x50000 "$DS_VERSION" ds
-          mv "ossc_${DS_VERSION}-ds.bin" "ossc_ds_v${DS_VERSION}.bin"
-          python3 ../scripts/check_fw_img.py "ossc_ds_v${DS_VERSION}.bin"
+          ../tools/create_fw_img ossc_2nd.rbf ../software/sys_controller/mem_init/flash.bin 0x50000 "$DS_VERSION" "$FW_TAG"
+          mv "ossc_${DS_VERSION}-${FW_TAG}.bin" "ossc_${FW_TAG}_v${DS_VERSION}.bin"
+          python3 ../scripts/check_fw_img.py "ossc_${FW_TAG}_v${DS_VERSION}.bin"
 
       - name: Timing summary
         if: always()
@@ -79,7 +133,7 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/out && cd /tmp/out
-          cp "$GITHUB_WORKSPACE"/output_files/ossc_ds_v*.bin . 2>/dev/null || true
+          cp "$GITHUB_WORKSPACE"/output_files/ossc_*_v*.bin . 2>/dev/null || true
           cp "$GITHUB_WORKSPACE"/output_files/*.summary "$GITHUB_WORKSPACE"/output_files/*.rpt . 2>/dev/null || true
           cp "$GITHUB_WORKSPACE"/ci_logs/* "$GITHUB_WORKSPACE"/output_files/timing.txt . 2>/dev/null || true
           echo "${GITHUB_SHA} run ${GITHUB_RUN_ID} ${{ job.status }}" > BUILD_INFO.txt
@@ -93,7 +147,7 @@ jobs:
         with:
           name: ossc-2nd-fw
           path: |
-            output_files/ossc_ds_v*.bin
+            output_files/ossc_*_v*.bin
             output_files/*.rpt
             output_files/*.summary
           if-no-files-found: warn
