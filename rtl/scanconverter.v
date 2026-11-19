@@ -61,6 +61,7 @@ module scanconverter (
     input ds_vflt,              // 480p -> 480i flicker filter (see linebuf_top)
     input [1:0] ds_vflt_bofs,
     input [4:0] ds_vflt_a,
+    input ds_w31,               // 480i, groups of 3: 3:1 / 1:3 weighted rows (see linebuf_top)
     input [9:0] lb_stride,      // line buffer layout 3: words per line
     input [5:0] lb_slots,       // line buffer layout 3: number of lines
     input lb_rgb,               // line buffer layout 3: RGB, one pixel per word
@@ -403,6 +404,7 @@ linebuf_top #(
     .vflt(ds_vflt),
     .vflt_bofs(ds_vflt_bofs),
     .vflt_a(ds_vflt_a),
+    .w31(ds_w31),
     .in_field(in_field),
     .lb_stride(lb_stride),
     .lb_slots(lb_slots),

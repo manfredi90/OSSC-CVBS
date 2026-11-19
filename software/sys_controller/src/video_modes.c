@@ -469,6 +469,11 @@ static int ds_t0_window_ok(const ds_mode_t *m, avconfig_t *cc, mode_data_t *vm_i
 // it (n, ending at st), for field A (240p: every field) and field B (480i);
 // field B groups start *bofs lines later, and *ext more input lines are
 // captured after the active ones so that the last row is written.
+// 480i from groups of 3 lines (720p, XGA, 480p / VGA Wide: field B = lines
+// 1-2) with line blending: field A = 3/4 L0 + 1/4 L1, field B = 1/4 L1 +
+// 3/4 L2 (see linebuf_top), both fields interpolated alike
+#define DS_W31(m, cc)   ((m)->ilace && ((m)->vdec == 2) && ((m)->fB_st == 2) && ((m)->fB_n == 2) && !(cc)->ds_vblend_off)
+
 static void ds_field_lines(const ds_mode_t *m, avconfig_t *cc, mode_data_t *vm_in,
                            int *st_a, int *n_a, int *st_b, int *n_b, int *bofs, int *ext) {
     *bofs = 0;
@@ -529,8 +534,9 @@ static void ds_field_lines(const ds_mode_t *m, avconfig_t *cc, mode_data_t *vm_i
         *st_b = cc->ds_vblend_off ? 2 : 3;
         *n_b = *n_a;
     } else if (m->ilace) {
-        *st_a = 0;
-        *n_a = 1;
+        // (DS_W31: field A = lines 0-1, weighted)
+        *st_a = DS_W31(m, cc) ? 1 : 0;
+        *n_a = DS_W31(m, cc) ? 2 : 1;
         *st_b = m->fB_st;
         *n_b = m->fB_n;
     } else if (!cc->ds_vblend_off) {
@@ -896,6 +902,8 @@ static int setup_ds_mode(const ds_mode_t *m, avconfig_t *cc, mode_data_t *vm_in,
         vm_conf->ds_field_cfg = (st_a & 3) | ((n_a & 3)<<2) | ((st_b & 3)<<4) | ((n_b & 3)<<6) |
                                 (((st_a >> 2) & 1)<<8) | (((st_b >> 2) & 1)<<9);
         vm_conf->ds_vflt_bofs = bofs;
+        // (not with the HD 480i flicker filter: bofs 2)
+        vm_conf->ds_w31 = DS_W31(m, cc) && (bofs == 0) && (st_a == 1) && (n_a == 2);
         if (DS_VFLT(m, cc)) {
             // flicker filter (see linebuf_top): both fields write at group
             // position 1, field B groups start one line later. Rows are

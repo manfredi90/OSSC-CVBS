@@ -70,6 +70,13 @@ module linebuf_top (
     // filter above, 2 for the HD 480i flicker filter (rows of 3-4 lines)
     input [1:0] vflt_bofs,
     input [4:0] vflt_a,
+    // 480i from groups of 3 lines (720p, XGA, 480p / VGA Wide) with line
+    // blending: 2-line rows (field A lines 0-1, field B lines 1-2) weighted
+    // 3:1 / 1:3, so that both fields are interpolated alike (rows at 1/4
+    // and 7/4 of the group: evenly spaced, the centers of the 480 frame
+    // lines). The first line is kept as (w*L)/2 (w = 3 for field A, 1 for
+    // B) in the blend RAM, the row is (2*acc + (4-w)*L + 2) / 4.
+    input w31,
 
     // layout 3 (YCbCr 4:2:2, or RGB one pixel per word with lb_rgb): words
     // per line, number of lines, read base
@@ -598,6 +605,16 @@ wire [9:0] s1 = {1'b0, acc_q2[26:18]} + {2'b0, u1b[23:16]};
 wire [9:0] s2 = {1'b0, acc_q2[17:9]}  + {2'b0, u1b[15:8]};
 wire [9:0] s3 = {1'b0, acc_q2[8:0]}   + {2'b0, u1b[7:0]};
 
+// 3:1 / 1:3 rows (w31): 3*L, and the row (2*acc + w*L + 2) / 4 (<= 1021)
+wire [9:0] l3_0 = {1'b0, u1b[31:24], 1'b0} + {2'b0, u1b[31:24]};
+wire [9:0] l3_1 = {1'b0, u1b[23:16], 1'b0} + {2'b0, u1b[23:16]};
+wire [9:0] l3_2 = {1'b0, u1b[15:8], 1'b0}  + {2'b0, u1b[15:8]};
+wire [9:0] l3_3 = {1'b0, u1b[7:0], 1'b0}   + {2'b0, u1b[7:0]};
+wire [9:0] r0 = {acc_q2[35:27], 1'b0} + (fld_b ? l3_0 : {2'b0, u1b[31:24]}) + 10'd2;
+wire [9:0] r1 = {acc_q2[26:18], 1'b0} + (fld_b ? l3_1 : {2'b0, u1b[23:16]}) + 10'd2;
+wire [9:0] r2 = {acc_q2[17:9], 1'b0}  + (fld_b ? l3_2 : {2'b0, u1b[15:8]})  + 10'd2;
+wire [9:0] r3 = {acc_q2[8:0], 1'b0}   + (fld_b ? l3_3 : {2'b0, u1b[7:0]})   + 10'd2;
+
 // 4-line blend at the written line: 2 x (sum of 3 lines / 2) + this line
 wire [10:0] t0 = {1'b0, acc_q2[35:27], 1'b0} + {3'b0, u1b[31:24]};
 wire [10:0] t1 = {1'b0, acc_q2[26:18], 1'b0} + {3'b0, u1b[23:16]};
@@ -627,12 +644,15 @@ always @(posedge PCLK_CAP_i) begin
     acc_we <= vflt ? (uv1b & (ua1b < 11'd768)) : (uv1b & ds_inblend & ~ds_store & (ua1b < 11'd768));
     acc_wa <= ua1b[9:0];
     acc_wd <= vflt ? (vf_center ? {vs0[11:0], vs1[11:0], vs2[11:0]} : {vc0_1b, vc1_1b, vc2_1b}) :
-              (ds_first ? {1'b0, u1b[31:24], 1'b0, u1b[23:16], 1'b0, u1b[15:8], 1'b0, u1b[7:0]} :
+              (ds_first ? (w31 ? (fld_b ? {2'b0, u1b[31:25], 2'b0, u1b[23:17], 2'b0, u1b[15:9], 2'b0, u1b[7:1]} :
+                                          {l3_0[9:1], l3_1[9:1], l3_2[9:1], l3_3[9:1]}) :
+                                 {1'b0, u1b[31:24], 1'b0, u1b[23:16], 1'b0, u1b[15:8], 1'b0, u1b[7:0]}) :
                (ds_halve ? {s0[9:1], s1[9:1], s2[9:1], s3[9:1]} : {s0[8:0], s1[8:0], s2[8:0], s3[8:0]}));
     if (acc_we)
         acc_mem[acc_wa] <= acc_wd;
 
-    {s0_2, s1_2, s2_2, s3_2} <= {s0, s1, s2, s3};
+    // (w31: the weighted row in [7:0])
+    {s0_2, s1_2, s2_2, s3_2} <= w31 ? {2'b0, r0[9:2], 2'b0, r1[9:2], 2'b0, r2[9:2], 2'b0, r3[9:2]} : {s0, s1, s2, s3};
     vout_2 <= {vs0[11:4], vs1[11:4], vs2[11:4]};
     // (rounded: 2 x floor(sum3/2) + line is 1 low when sum3 is odd)
     {q0_2, q1_2, q2_2, q3_2} <= {t0[9:2] + t0[1], t1[9:2] + t1[1], t2[9:2] + t2[1], t3[9:2] + t3[1]};
@@ -657,7 +677,7 @@ reg [10:0] ua3;
 reg uv3, blended_3;
 
 always @(posedge PCLK_CAP_i) begin
-    {h0_3, h1_3, h2_3, h3_3} <= {s0_2[8:1], s1_2[8:1], s2_2[8:1], s3_2[8:1]};
+    {h0_3, h1_3, h2_3, h3_3} <= w31 ? {s0_2[7:0], s1_2[7:0], s2_2[7:0], s3_2[7:0]} : {s0_2[8:1], s1_2[8:1], s2_2[8:1], s3_2[8:1]};
     {q0_3, q1_3, q2_3, q3_3} <= {q0_2, q1_2, q2_2, q3_2};
     {d0_3, d1_3, d2_3, d3_3} <= {d0[16:9], d1[16:9], d2[16:9], d3[16:9]};
     u3 <= u2;
