@@ -164,7 +164,7 @@ typedef struct {
     uint8_t v_start;            // first line of the first group (before "Line phase")
     uint16_t in_crop;           // source pixels cropped on each side
     uint8_t ar43;               // format: 0 = 16:9 (full), 1 = center 4:3, 2 = wide (720p: 180p, 1080p: 216p, 480p: 160p)
-    uint8_t hfilt;              // ADC samples averaged per stored sample: 0 = 1, 1 = 2, 2 = 4 (3: not used)
+    uint8_t hfilt;              // ADC samples averaged per stored sample: 0 = 1, 1 = 2, 2 = 4, 3 = 3
     uint8_t ilace;              // 480i output: one field per input frame
     uint8_t fB_st, fB_n;        // 480i field B: line in group / lines averaged
     char name[11];
@@ -191,7 +191,7 @@ typedef struct {
 } ds_mode_t;
 
 #ifndef WD_ADC_480
-#define WD_ADC_480  1144    // 4 samples per 3 pixels of the 858
+#define WD_ADC_480  858     // (the source pixels, 3 averaged)
 #define WD_ADC_VGA  1280    // 4 samples per 2.5 pixels of the 800
 #endif
 static const ds_mode_t ds_modes[] = {
@@ -304,17 +304,17 @@ static const ds_mode_t ds_modes[] = {
     // 480p / VGA "Wide" (anamorphic 16:9 sources, letterboxed): 3 lines per
     // row, 480 -> 160 rows, the picture 2:1 instead of 16:9. Rows take 1.5
     // output lines of input: ~55 rows of read/write drift, so the line buffer
-    // rows are short: 4 ADC samples averaged per pixel, the ADC at an integer
-    // ratio of the source pixels so that the sampling phase repeats every few
-    // pixels (no shimmer bands on horizontal motion): 480p 1144 samples per
-    // line, each pixel exactly 3 source pixels (240 pixels); VGA 1280, 2.5
-    // source pixels, the pattern repeating every 5 (256 pixels). 7 clocks per
+    // rows are short, each pixel a whole number of source pixels (no shimmer
+    // bands on horizontal motion): 480p, the ADC at the source pixel clock
+    // and 3 pixels averaged (240 pixels); VGA, the ADC at 1280 samples per
+    // line and 4 averaged, 2.5 source pixels, the pattern repeating every 5
+    // (256 pixels: 3 averaged would leave 213). 7 clocks per
     // pixel, YCbCr 4:2:2. 240p: the 3 lines averaged; 480i as 720p (field A =
     // lines 0-1, field B = lines 1-2, weighted, see DS_W31). 576p (192 rows)
     // would need ~65 line buffer slots, more than the 63 of the register: no
     // Wide.
-    { HDMI_480p60,      525, WD_ADC_480/4, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 2, 0, 0, 0, "480W>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
-    { HDMI_480p60,      525, WD_ADC_480/4, 2730, 525, 2, 6, 3,  0, 0, 0, 2, 2, 1, 2, 2, "480W>480i",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
+    { HDMI_480p60,      525, WD_ADC_480/3, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 3, 0, 0, 0, "480W>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
+    { HDMI_480p60,      525, WD_ADC_480/3, 2730, 525, 2, 6, 3,  0, 0, 0, 2, 3, 1, 2, 2, "480W>480i",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_480 },
     { HDMI_640x480p60,  525, WD_ADC_VGA/4, 2730, 262, 2, 6, 3,  0, 0, 0, 2, 2, 0, 0, 0, "VGAW>160p",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_VGA },
     { HDMI_640x480p60,  525, WD_ADC_VGA/4, 2730, 525, 2, 6, 3,  0, 0, 0, 2, 2, 1, 2, 2, "VGAW>480i",  0, 0, 0, 1, 0, 1, 0, 160, WD_ADC_VGA },
     // 480p: native sampling (858/line, 720 active), exactly 2 input lines per output line
@@ -357,7 +357,7 @@ static uint16_t ds_framesync_line, ds_v_active, ds_hofs;
 
 // ADC samples per stored sample
 static uint16_t ds_hskip1(const ds_mode_t *m) {
-    static const uint8_t n[4] = {1, 2, 4, 4};
+    static const uint8_t n[4] = {1, 2, 4, 3};
     return n[m->hfilt & 3];
 }
 

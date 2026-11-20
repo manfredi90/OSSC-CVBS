@@ -45,7 +45,9 @@ module linebuf_top (
     // 2 = 16 x 512 px (deep, for large read/write drift)
     input [1:0] lb_layout,
     // Horizontal box filter for oversampled input: 0 = off, 1 = average of 2
-    // ADC samples (h_skip=1), 2 = average of 4 (h_skip=3); 3 is not used
+    // ADC samples (h_skip=1), 2 = average of 4 (h_skip=3), 3 = average of 3
+    // (h_skip=2; one ADC sample later than the others: the window is the 3
+    // samples before the selected one)
     input [1:0] ds_hfilt,
     // Vertical line selection. Input lines are grouped by (ds_vdec+1) starting
     // at line ds_vstart; in each group the line at position st (0..ds_vdec) is
@@ -428,11 +430,15 @@ reg [8:0] s2R_b, s2G_b, s2B_b, s2R_cd, s2G_cd, s2B_cd;
 wire [9:0] s4R = {1'b0, s2R_b} + {1'b0, s2R_cd};
 wire [9:0] s4G = {1'b0, s2G_b} + {1'b0, s2G_cd};
 wire [9:0] s4B = {1'b0, s2B_b} + {1'b0, s2B_cd};
+// average of 3: the sum at stage A, times 683/2048 at stage B
+reg [9:0] s3R_a, s3G_a, s3B_a;
+reg [19:0] p3R_b, p3G_b, p3B_b;
 reg [7:0] R_h, G_h, B_h;
 always @(*) begin
     case (ds_hfilt)
         2'h1: {R_h, G_h, B_h} = {s2R_b[8:1], s2G_b[8:1], s2B_b[8:1]};
         2'h2: {R_h, G_h, B_h} = {s4R[9:2], s4G[9:2], s4B[9:2]};
+        2'h3: {R_h, G_h, B_h} = {p3R_b[18:11], p3G_b[18:11], p3B_b[18:11]};
         default: {R_h, G_h, B_h} = {Rr_b, Gr_b, Br_b};
     endcase
 end
@@ -454,6 +460,9 @@ always @(posedge PCLK_CAP_i) begin
     {R_d, G_d, B_d} <= {R_c, G_c, B_c};
     x_a <= xpos_i;
     v_a <= DE_i & datavalid_i & wr_x_ok;
+    s3R_a <= {2'b0, R_i} + {2'b0, R_a} + {2'b0, R_b};
+    s3G_a <= {2'b0, G_i} + {2'b0, G_a} + {2'b0, G_b};
+    s3B_a <= {2'b0, B_i} + {2'b0, B_a} + {2'b0, B_b};
 
     // stage B (R_a = selected sample, R_b/R_c = the previous ADC samples)
     s2R_b <= {1'b0, R_a} + {1'b0, R_b};
@@ -463,6 +472,9 @@ always @(posedge PCLK_CAP_i) begin
     s2G_cd <= {1'b0, G_c} + {1'b0, G_d};
     s2B_cd <= {1'b0, B_c} + {1'b0, B_d};
     {Rr_b, Gr_b, Br_b} <= {R_a, G_a, B_a};
+    p3R_b <= s3R_a * 10'd683;
+    p3G_b <= s3G_a * 10'd683;
+    p3B_b <= s3B_a * 10'd683;
     x_b <= x_a;
     v_b <= v_a;
 
