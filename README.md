@@ -64,7 +64,7 @@ Supported inputs and outputs
 | 1280x960p           | 240p / 480i | VESA standard timing only (1800x1000, 60kHz, 108MHz). 4 lines per output line: exactly 240 lines, ideal for 320x240 content scaled x4. 640 pixels (2 averaged) |
 | 1280x720p           | 240p / 480i | **Full 16:9** (squeezed to 4:3), **Center 4:3** (crop), **Wide** (whole 16:9 picture letterboxed: 180 lines centered, 4x4 pixel average) |
 | 1024x768p           | 240p / 480i | VESA standard timing only (1344x806, 48kHz, 65MHz). 3 lines per output line, the 960x720 center window (32 pixels and 24 lines cropped per side, 4:3), full resolution |
-| 720x480p            | 240p / 480i | **Full 16:9**: the whole frame. For anamorphic 16:9 sources: **Center 4:3**, the 540 center pixels shown at the full width; **Wide**, the whole picture letterboxed in 160 lines centered (3 input lines each, aspect ratio 2:1 instead of 16:9), ~290 pixels (4 averaged), ~5ms of delay. Optional flicker filter in 480i |
+| 720x480p            | 240p / 480i | **Full 16:9**: the whole frame. For anamorphic 16:9 sources: **Center 4:3**, the 540 center pixels shown at the full width; **Wide**, the whole picture letterboxed in 160 lines centered (3 input lines each, aspect ratio 2:1 instead of 16:9), 240 pixels, each the average of exactly 3 source pixels (640x480: 256, 2.5 source pixels each), ~5ms of delay. Optional flicker filter in 480i |
 | 640x480p            | 240p / 480i | as 720x480p (Center 4:3: the 480 center pixels) |
 | 720x576p (50Hz)     | 288p / 576i | 312 lines per field (310–314, 15.5–15.7kHz) or 625 lines; Full 16:9 or Center 4:3 (as 720x480p; no Wide: it would need a deeper line buffer); optional flicker filter in 576i |
 | 480i                | 480i, or 240p | passthrough, or each field shown as a progressive frame on the same scanlines ("15kHz input"). Also 576i -> 288p |
@@ -72,12 +72,10 @@ Supported inputs and outputs
 * 240p: 260–264 lines per field (15.6–15.9kHz), 480i: 525 lines. 50Hz sources:
   288p (310–314 lines) and 576i (625 lines); the menu items named 240p / 480i
   give 288p / 576i with them.
-* Every source pixel is sampled ("full resolution" sampling) and the output
-  clock is generated at an exact ratio of the input clock, so horizontal
-  scrolling stays smooth. Exception: 480p / 640x480 **Wide** stores ~290
-  pixels per line (4 ADC samples averaged, not an integer fraction of the
-  720 / 640 source pixels), so fine detail shimmers a little on horizontal
-  motion; Full 16:9 and Center 4:3 sample every pixel.
+* Every source pixel is sampled ("full resolution" sampling), or averaged in
+  groups of a whole number of source pixels, and the output clock is
+  generated at an exact ratio of the input clock, so horizontal scrolling
+  stays smooth.
 * Other native 15kHz sources are passed through unchanged; any other input
   shows the test pattern with "Unsupported".
 
@@ -127,7 +125,6 @@ firmware's own sector, independent of the official profiles).
 Known issues and limitations
 ----------------------------
 
-* 480p / 640x480 Wide: some shimmer on horizontal motion (see above).
 * 50Hz HD sources (720p50, 1080p50) are not supported: at 50Hz the input
   lines that make one output line take longer than the output line itself,
   and the line buffer (no frame buffer) cannot absorb the drift at a useful

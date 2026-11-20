@@ -1,6 +1,17 @@
 Changelog
 =========
 
+v1.6.1
+------
+
+### Fixed
+- 480p / 640x480 Wide: shimmer on horizontal motion. The ADC took 1392 /
+  1456 samples per line, not an integer ratio of the source pixels; now
+  1144 (480p: 240 pixels, each the average of exactly 3 source pixels) and
+  1280 (640x480: 256 pixels, 2.5 source pixels each, the pattern repeating
+  every 5). Slightly softer, and the line buffer timing margin is about 3
+  times larger.
+
 v1.6
 ----
 
