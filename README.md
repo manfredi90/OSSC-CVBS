@@ -147,4 +147,7 @@ Credits and license
 * Based on the [Open Source Scan Converter](https://github.com/marqs85/ossc)
   by Markus Hiienkari and contributors (see [CREDITS](CREDITS)).
 * Inspired by e8root's VoidScaler, a closed-source OSSC downscaler firmware.
+* Thanks to [MarcoRetro](https://www.youtube.com/channel/UCjia1y1U3GKA5MFSF8gZnog)
+  and his "Downscaling Chronicles" series, which got me interested in the
+  subject. Viva la pizza!
 * License: GPLv3, same as the OSSC project (see [LICENSE](LICENSE)).
