@@ -24,9 +24,12 @@
 #include "av_controller.h"
 #include "controls.h"
 #include "utils.h"
+#include "cvbs.h"
 
-#define DS_SETTINGS_MAGIC   0x4F534453  // "OSDS"
-#define DS_SETTINGS_VERSION 4     // 2: v0.12-v0.16, 3: v1.0-v1.3 (migrated on load)
+// CVBS firmware: own magic (the downscaler / HD firmware settings in the same
+// sector have another format and are not loaded)
+#define DS_SETTINGS_MAGIC   0x4F534356  // "OSCV"
+#define DS_SETTINGS_VERSION 1
 
 typedef struct {
     uint32_t magic;
@@ -57,7 +60,7 @@ int ds_settings_load() {
     memcpy(&blob, f, sizeof(blob));
 
     if ((blob.magic != DS_SETTINGS_MAGIC) ||
-        ((blob.version != DS_SETTINGS_VERSION) && (blob.version != 2) && (blob.version != 3)) ||
+        (blob.version != DS_SETTINGS_VERSION) ||
         (blob.len != sizeof(ds_settings_blob_t)) ||
         (blob.crc != blob_crc(&blob)))
     {
@@ -73,13 +76,6 @@ int ds_settings_load() {
         tc.ds_vpos = SIGNED_NUMVAL_ZERO;
     if (tc.ds_width == 0)
         tc.ds_width = SIGNED_NUMVAL_ZERO;
-    if (blob.version == 2) {
-        // v0.16 and earlier: one sampling phase for all inputs; width in % of
-        // the line relative to 80% (now in % of the standard width)
-        int d = (int)tc.ds_width - SIGNED_NUMVAL_ZERO;
-        d = (d >= 0) ? (d*5 + 2)/4 : -((-d*5 + 2)/4);
-        tc.ds_width = SIGNED_NUMVAL_ZERO + d;
-    }
     // options no longer in the menu (v1.0): full resolution sampling,
     // 260-264 lines, no phase hotkey (fixed sampling phase)
     tc.ds_native = 1;
@@ -94,9 +90,17 @@ int ds_settings_load() {
         tc.ds_flicker = 0;
     // test pattern design: not kept, Gray at start
     tc.ds_tp_sel = 0;
-    // HDMI range: new in v4 (the byte held the old sampling phase)
-    if ((blob.version < 4) || (tc.ds_out_range > 2))
+    if (tc.ds_out_range > 2)
         tc.ds_out_range = 0;
+    // decoder settings out of range: defaults
+    if ((tc.cv_std > CV_STD_PALN) || (tc.cv_sat > CV_SAT_MAX) ||
+        (tc.cv_hue < SIGNED_NUMVAL_ZERO-CV_HUE_RANGE) || (tc.cv_hue > SIGNED_NUMVAL_ZERO+CV_HUE_RANGE) ||
+        (tc.cv_contrast < CV_CONTRAST_MIN) || (tc.cv_contrast > CV_CONTRAST_MAX) ||
+        (tc.cv_bright < SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE) || (tc.cv_bright > SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE) ||
+        (tc.cv_adcgain > 15) || (tc.cv_bgate < CV_BGATE_MIN) || (tc.cv_bgate > CV_BGATE_MAX)) {
+        extern const avconfig_t tc_default;
+        memcpy(&tc.cv_std, &tc_default.cv_std, offsetof(avconfig_t, cv_cmoffs_off) + 1 - offsetof(avconfig_t, cv_std));
+    }
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
     if (tc.ds_720p_ar == 3)       // 1.2.2-1.2.3 "Wide (216p)": now "Wide"

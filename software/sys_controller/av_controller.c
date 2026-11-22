@@ -36,6 +36,7 @@
 #include "firmware.h"
 #include "userdata.h"
 #include "ds_settings.h"
+#include "cvbs.h"
 #include "it6613.h"
 #include "it6613_sys.h"
 #include "HDMI_TX.h"
@@ -527,7 +528,16 @@ status_t get_status(tvp_sync_input_t syncinput)
         SetupAudio(cm.cc.tx_mode);
     }
 
+    // CVBS decoder settings: the ADC gain / offset need the TVP7002 setup
+    // (mode reprogram), the rest only the decoder registers
+    if (cv_mode && sync_active && valid_mode &&
+        ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_cmoffs_off != cm.cc.cv_cmoffs_off) || (tc.cv_bgate != cm.cc.cv_bgate)))
+        status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
+    if (tc.cv_std != cm.cc.cv_std)
+        cvbs_reset_auto();
+
     {
+        int cv_changed = memcmp(&tc.cv_std, &cm.cc.cv_std, offsetof(avconfig_t, cv_cmoffs_off) + 1 - offsetof(avconfig_t, cv_std));
         int ds_csync_changed = (tc.ds_csync != cm.cc.ds_csync);
         int ds_range_changed = (tc.ds_out_range != cm.cc.ds_out_range);
         int ds_tp_changed = (tc.ds_tp_sel != cm.cc.ds_tp_sel);
@@ -535,7 +545,7 @@ status_t get_status(tvp_sync_input_t syncinput)
         cm.cc = tc;
         update_cur_vm = 0;
 
-        if (ds_csync_changed || ds_range_changed || ds_tp_changed)
+        if (ds_csync_changed || ds_range_changed || ds_tp_changed || cv_changed)
             update_sc_config();
         if (ds_range_changed) {
             hdmitx_rgb_limited = (tc.ds_out_range != 0);
@@ -721,6 +731,16 @@ void update_sc_config()
         sl_config3.data = vm_conf.ds_vdec ? ((vm_conf.ds_lb_stride & 0x3ff) | ((vm_conf.ds_lb_slots & 0x3f) << 10) | ((vm_conf.ds_hofs & 0x1fff) << 16) | ((alt_u32)vm_conf.ds_lb_rgb << 29)) : 0;
     }
 
+    // CVBS firmware: sl_config / sl_config3 and the high bits of sl_config2
+    // configure the colour decoder (the downscaler is not in the FPGA)
+    {
+        uint32_t hc, flags, inc;
+        cvbs_get_regs(&hc, &flags, &inc);
+        sl_config.data = hc;
+        sl_config2.data = (sl_config2.data & 0xff) | (flags << 8);
+        sl_config3.data = inc;
+    }
+
     sc->hv_in_config = hv_in_config;
     sc->hv_in_config2 = hv_in_config2;
     sc->hv_in_config3 = hv_in_config3;
@@ -803,6 +823,12 @@ void program_mode()
 
     if (retval == -1) {
         printf ("ERROR: no suitable mode preset found\n");
+        vm_conf.si_pclk_mult = 0;
+        show_safe_screen("  Unsupported");
+        return;
+    }
+    if (cv_mode && !cvbs_group_ok(vmode_in.group)) {
+        printf("CVBS: not a 15kHz SD mode\n");
         vm_conf.si_pclk_mult = 0;
         show_safe_screen("  Unsupported");
         return;
@@ -899,6 +925,10 @@ void program_mode()
                      vmode_changed);
     set_lpf(cm.cc.video_lpf);
     set_csc(cm.cc.ypbpr_cs);
+
+    // decoder inputs: TVP7002 levels / clamp, decoder input parameters
+    cvbs_tvp_setup((alt_u8)h_synclen_px, pll_h_total, cm.clkcnt);
+    cvbs_set_input(pll_h_total, cm.totlines, !cm.progressive, cm.pcnt_field);
 
     set_sampler_phase(vm_conf.ds_vdec ? ds_cur_phase(&cm.cc) : video_modes_plm[cm.id].sampler_phase, 0);
 
@@ -1141,11 +1171,17 @@ void print_vm_stats() {
     if (menu_active) {
         return;
     } else if (cm.id >= 0) {
-        sniprintf(lrow1, LCD_ROW_LEN+1, "%s %lu", vmode_out.name, cm.pclk_o_hz / ((vm_conf.tx_pixelrep+1) * vmode_out.timings.h_total));
-        sniprintf(lrow2, LCD_ROW_LEN+1, "R%03u P%04u/%04u", (unsigned)((st >> 14) & 0xff), (unsigned)((st >> 22) & 0x3ff), (unsigned)(ds_fperiod_exp & 0x3ff));
+        if (cv_mode) {
+            // decoder: mode, colour system, burst / blank / peak levels
+            sniprintf(lrow1, LCD_ROW_LEN+1, "%s %s", vmode_out.name, cvbs_std_name());
+            cvbs_diag_str(lrow2, LCD_ROW_LEN+1);
+        } else {
+            sniprintf(lrow1, LCD_ROW_LEN+1, "%s %lu", vmode_out.name, cm.pclk_o_hz / ((vm_conf.tx_pixelrep+1) * vmode_out.timings.h_total));
+            sniprintf(lrow2, LCD_ROW_LEN+1, "R%03u P%04u/%04u", (unsigned)((st >> 14) & 0xff), (unsigned)((st >> 22) & 0x3ff), (unsigned)(ds_fperiod_exp & 0x3ff));
+        }
     } else {
         sniprintf(lrow1, LCD_ROW_LEN+1, "No mode");
-        sniprintf(lrow2, LCD_ROW_LEN+1, "Downscaler %s", DS_VERSION);
+        sniprintf(lrow2, LCD_ROW_LEN+1, "CVBS dec. %s", DS_VERSION);
     }
     lcd_write(lrow1, lrow2);
 
@@ -1169,7 +1205,7 @@ void print_vm_stats() {
         sniprintf((char*)osd->osd_array.data[++row][0], OSD_CHAR_COLS, "Line rate:");
         sniprintf((char*)osd->osd_array.data[row][1], OSD_CHAR_COLS, "%lu Hz", cm.pclk_o_hz / ((vm_conf.tx_pixelrep+1) * vmode_out.timings.h_total));
         sniprintf((char*)osd->osd_array.data[++row][0], OSD_CHAR_COLS, "FW:");
-        sniprintf((char*)osd->osd_array.data[row][1], OSD_CHAR_COLS, "Downscaler %s", DS_VERSION);
+        sniprintf((char*)osd->osd_array.data[row][1], OSD_CHAR_COLS, "CVBS decoder %s", DS_VERSION);
         sniprintf((char*)osd->osd_array.data[++row][0], OSD_CHAR_COLS, "FW date:");
         sniprintf((char*)osd->osd_array.data[row][1], OSD_CHAR_COLS, __DATE__);
 
@@ -1287,9 +1323,9 @@ int main(int argc, char **argv, char **envp)
 
     if (init_stat >= 0) {
         printf("### DIY VIDEO DIGITIZER / SCANCONVERTER INIT OK ###\n\n");
-        strncpy(row1, "OSSC  Downscaler", LCD_ROW_LEN+1);
+        strncpy(row1, "OSSC CVBS decod.", LCD_ROW_LEN+1);
 #ifndef DEBUG
-        sniprintf(row2, LCD_ROW_LEN+1, "DS v%s 15kHz", DS_VERSION);   // fits 16 chars with x.y.z versions
+        sniprintf(row2, LCD_ROW_LEN+1, "CV v%s 15kHz", DS_VERSION);   // fits 16 chars with x.y.z versions
 #else
         strncpy(row2, "** DEBUG BUILD *", LCD_ROW_LEN+1);
 #endif
@@ -1392,12 +1428,12 @@ int main(int argc, char **argv, char **envp)
                 target_format = FORMAT_RGBS;
                 break;
             case AV1_RGsB:
-            case AV2_RGsB:
+            case AV2_RGsB:      // CVBS firmware: composite on Y
+            case AV2_YPBPR:     // CVBS firmware: S-Video, Y and chroma on Pb
             case AV3_RGsB:
                 target_format = FORMAT_RGsB;
                 break;
             case AV1_YPBPR:
-            case AV2_YPBPR:
             case AV3_YPBPR:
                 target_format = FORMAT_YPbPr;
                 break;
@@ -1429,6 +1465,8 @@ int main(int argc, char **argv, char **envp)
             printf("### SWITCH MODE TO %s ###\n", avinput_str[target_input]);
 
             cm.avinput = target_input;
+            cv_mode = cvbs_input_mode(target_input);
+            cvbs_reset_auto();
             cm.sync_active = 0;
             last_input = target_input;
             ths_source_sel(target_ths, (cm.cc.video_lpf > 1) ? (VIDEO_LPF_MAX-cm.cc.video_lpf) : THS_LPF_BYPASS);
@@ -1535,6 +1573,10 @@ int main(int argc, char **argv, char **envp)
                 break;
             }
         }
+
+        // CVBS: automatic colour system detection
+        if ((cm.avinput != AV_TESTPAT) && cm.sync_active && !ds_safe_screen && (cm.id >= 0) && cvbs_update())
+            update_sc_config();
 
         // Hardware 15kHz watchdog tripped and stays tripped: fall back to the
         // safe screen (should never happen unless a mode is wrong)

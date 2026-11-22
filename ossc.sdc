@@ -11,15 +11,15 @@ create_generated_clock -name flash_clk_out -master_clock flash_clk -source [get_
 
 ### Scanconverter clock constraints ###
 
-# Downscaler firmware: the ADC runs at up to 148.5MHz (1080p, one sample per
-# pixel), which only clocks the capture side (TVP7002 frontend, line buffer
-# write). The output side runs on the ADC clock only in the standard sampling
-# modes and in 15kHz passthrough (<= ~89MHz), otherwise on the FPGA PLL
-# (<= 66MHz): pclk_tvp_high (90MHz) is the master of the clock mux output,
-# pclk_tvp_cap (150MHz) constrains the capture logic.
-create_clock -period 90MHz -name pclk_tvp_high [get_ports TVP_PCLK_i]
+# CVBS firmware: only 15kHz sources are processed. The decoder inputs are
+# sampled at ~27MHz (1716 / 1728 samples per line), the other 15kHz
+# passthrough modes at < 50MHz; anything else shows the test pattern from the
+# 27MHz reference (the TVP7002 clock is then not used for the output).
+# pclk_tvp_high is the master of the clock mux output, pclk_tvp_cap constrains
+# the capture logic and the colour decoder.
+create_clock -period 55MHz -name pclk_tvp_high [get_ports TVP_PCLK_i]
 create_clock -period 33MHz -name pclk_tvp_low [get_ports TVP_PCLK_i] -add
-create_clock -period 150MHz -name pclk_tvp_cap [get_ports TVP_PCLK_i] -add
+create_clock -period 55MHz -name pclk_tvp_cap [get_ports TVP_PCLK_i] -add
 
 #derive_pll_clocks
 # Downscaler firmware: the FPGA PLL only produces the separate output clock of

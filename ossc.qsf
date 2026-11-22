@@ -250,6 +250,7 @@ set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to HDMI_TX_DE
 set_global_assignment -name VERILOG_FILE rtl/videogen.v
 set_global_assignment -name VERILOG_FILE rtl/ir_rcv.v
 set_global_assignment -name VERILOG_FILE rtl/ossc.v
+set_global_assignment -name VERILOG_FILE rtl/cvbs_decoder.v
 set_global_assignment -name VERILOG_FILE rtl/scanconverter.v
 set_global_assignment -name VERILOG_FILE rtl/linebuf_top.v
 set_global_assignment -name VERILOG_FILE rtl/tvp7002_frontend.v

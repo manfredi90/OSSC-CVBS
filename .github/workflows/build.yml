@@ -2,7 +2,7 @@ name: Build secondary firmware
 
 on:
   push:
-    branches: [downscaler]
+    branches: [cvbs]
   workflow_dispatch:
 
 env:
@@ -13,8 +13,14 @@ permissions:
   contents: write
 
 jobs:
+  # One fitter seed per job, in parallel; the "pick" job keeps the image of
+  # the seed with the best timing
   build:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [1, 2, 3, 4]
     steps:
       - name: Free disk space
         run: |
@@ -101,7 +107,7 @@ jobs:
           set -o pipefail
           mkdir -p output_files ci_logs
           docker run --rm -v "$PWD:/build" -w /build --entrypoint /bin/bash \
-            "$QUARTUS_IMAGE" -c "bash ./scripts/ci_build_fpga.sh" 2>&1 | tee ci_logs/fpga.log
+            -e SEEDS="${{ matrix.seed }}" "$QUARTUS_IMAGE" -c "bash ./scripts/ci_build_fpga.sh" 2>&1 | tee ci_logs/fpga.log
 
       - name: Fix file ownership (container runs as root)
         if: always()
@@ -127,27 +133,60 @@ jobs:
           grep -A40 "Slow 1200mV 85C Model Setup Summary" output_files/ossc.sta.rpt | head -40 || true
           grep -i "critical warning" output_files/*.rpt | head -40 || true
 
-      # Build outputs and logs are also pushed to the "ci-out" branch, so they
-      # can be fetched with plain git.
-      - name: Publish to ci-out branch
-        if: always()
-        run: |
-          mkdir -p /tmp/out && cd /tmp/out
-          cp "$GITHUB_WORKSPACE"/output_files/ossc_*_v*.bin . 2>/dev/null || true
-          cp "$GITHUB_WORKSPACE"/output_files/*.summary "$GITHUB_WORKSPACE"/output_files/*.rpt . 2>/dev/null || true
-          cp "$GITHUB_WORKSPACE"/ci_logs/* "$GITHUB_WORKSPACE"/output_files/timing.txt . 2>/dev/null || true
-          echo "${GITHUB_SHA} run ${GITHUB_RUN_ID} ${{ job.status }}" > BUILD_INFO.txt
-          git init -q -b ci-out
-          git -c user.name=ci -c user.email=ci@localhost add -A
-          git -c user.name=ci -c user.email=ci@localhost commit -q -m "CI output for ${GITHUB_SHA::8}"
-          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-out
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ossc-2nd-fw
+          name: seed-${{ matrix.seed }}
           path: |
             output_files/ossc_*_v*.bin
             output_files/*.rpt
             output_files/*.summary
+            output_files/timing.txt
+            ci_logs/fpga.log
           if-no-files-found: warn
+
+  pick:
+    needs: build
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: seeds
+
+      # Best seed: timing met, then the largest worst setup slack
+      - name: Pick the best seed
+        run: |
+          best=""; best_slack=-1000
+          for d in seeds/seed-*; do
+            [ -f "$d/output_files/ossc.sta.summary" ] || continue
+            ls "$d"/output_files/ossc_*_v*.bin > /dev/null 2>&1 || continue
+            slack=$(awk '/Setup/{s=1} s && /^Slack/{print $3; s=0}' "$d/output_files/ossc.sta.summary" | sort -g | head -1)
+            echo "$d: worst setup slack $slack ($(cat "$d/output_files/timing.txt" 2>/dev/null))"
+            if awk -v a="$slack" -v b="$best_slack" 'BEGIN{exit !(a > b)}'; then best="$d"; best_slack="$slack"; fi
+          done
+          [ -n "$best" ] || { echo "no successful build"; exit 1; }
+          echo "Best: $best (worst setup slack $best_slack)"
+          mkdir -p out
+          cp "$best"/output_files/ossc_*_v*.bin "$best"/output_files/*.summary "$best"/output_files/*.rpt "$best"/output_files/timing.txt out/ 2>/dev/null || true
+          cp "$best"/ci_logs/fpga.log out/ 2>/dev/null || true
+          echo "$best worst setup slack $best_slack" > out/SEED.txt
+          for d in seeds/seed-*; do
+            echo "$d: $(awk '/Setup/{s=1} s && /^Slack/{print $3; s=0}' "$d/output_files/ossc.sta.summary" 2>/dev/null | sort -g | head -1)" >> out/SEED.txt
+          done
+
+      # Build outputs and logs are also pushed to the "ci-out-cvbs" branch,
+      # so they can be fetched with plain git.
+      - name: Publish to ci-out-cvbs branch
+        run: |
+          cd out
+          echo "${GITHUB_SHA} run ${GITHUB_RUN_ID}" > BUILD_INFO.txt
+          git init -q -b ci-out-cvbs
+          git -c user.name=ci -c user.email=ci@localhost add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -q -m "CI output for ${GITHUB_SHA::8}"
+          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-out-cvbs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ossc-cv-fw
+          path: out/

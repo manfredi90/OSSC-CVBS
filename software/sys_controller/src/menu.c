@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "menu.h"
 #include "ds_settings.h"
+#include "cvbs.h"
 int ds_diagnostics();
 #include "av_controller.h"
 #include "firmware.h"
@@ -107,6 +108,7 @@ static const char* const ds_out_desc[] = { "240p", "480i" };
 static const char* const ds_480p_in_desc[] = { "Auto", "720x480", "640x480" };
 static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
+static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
 
 static void sync_vth_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d mV", (v*1127)/100); }
 static void intclks_to_time_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u.%.2u us", (unsigned)(((1000000U*v)/(TVP_INTCLK_HZ/1000))/1000), (unsigned)((((1000000U*v)/(TVP_INTCLK_HZ/1000))%1000)/10)); }
@@ -121,6 +123,10 @@ static void pixels_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, LNG("%u 
 static void value_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", v); }
 static void ds_width_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d%%", 100+(alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void signed_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
+static void cv_pct5_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*5); }
+static void cv_pct2_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*2); }
+static void cv_deg_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d deg", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
+static void cv_gain_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u (%u.%02uVpp)", (unsigned)v, (unsigned)(1000/(5+v))/100, (unsigned)((1000/(5+v))%100)); }
 static void lt_disp(alt_u8 v) { strncpy(menu_row2, lt_desc[v], LCD_ROW_LEN+1); }
 static void aud_db_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d dB", ((alt_8)v-AUDIO_GAIN_0DB)); }
 static void vm_display_name (alt_u8 v) { strncpy(menu_row2, video_modes_plm[v].name, LCD_ROW_LEN+1); }
@@ -275,25 +281,27 @@ MENU(menu_settings, P99_PROTECT({ \
 }))
 
 MENU(menu_downscaler, P99_PROTECT({ \
-    { "Output mode",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_480i,      OPT_WRAP,   SETTING_ITEM(ds_out_desc) } } },
+    { "Color system",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_std,       OPT_WRAP,   SETTING_ITEM(cv_std_desc) } } },
+    { "Saturation",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sat,        OPT_NOWRAP, 0, CV_SAT_MAX, cv_pct5_disp } } },
+    { "Hue",                                    OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_hue,        OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_HUE_RANGE, SIGNED_NUMVAL_ZERO+CV_HUE_RANGE, cv_deg_disp } } },
+    { "Contrast",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_contrast,   OPT_NOWRAP, CV_CONTRAST_MIN, CV_CONTRAST_MAX, cv_pct2_disp } } },
+    { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
+    { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
+    { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
+    { "ADC gain",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcgain,    OPT_NOWRAP, 0, 15, cv_gain_disp } } },
+    { "ADC CM offset",                          OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_cmoffs_off, OPT_WRAP,  SETTING_ITEM(on_off_desc) } } },
+    { "Burst position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bgate,      OPT_NOWRAP, CV_BGATE_MIN, CV_BGATE_MAX, value_disp } } },
+    { "Subcarrier loop",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_loop_off,  OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
     { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },
-    { "480p input",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.s480p_mode,    OPT_WRAP,   SETTING_ITEM(ds_480p_in_desc) } } },
-    { "15kHz input",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_i2p,       OPT_WRAP,   SETTING_ITEM(ds_i2p_desc) } } },
-    { "Flicker filter",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_flicker,   OPT_WRAP,   SETTING_ITEM(ds_flicker_desc) } } },
-    { "Format",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_720p_ar,   OPT_WRAP,   SETTING_ITEM(ds_720p_ar_desc) } } },
-    { "Line blending",                          OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_vblend_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
-    { "Line phase",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_vphase,     OPT_WRAP, 0, 3, value_disp } } },
-    { "Width",                                  OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_width,      OPT_NOWRAP, DS_WIDTH_MIN, DS_WIDTH_MAX, ds_width_disp } } },
     { "H. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_hpos,       OPT_NOWRAP, DS_HPOS_MIN, DS_HPOS_MAX, signed_disp } } },
     { "V. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_vpos,       OPT_NOWRAP, DS_VPOS_MIN, DS_VPOS_MAX, signed_disp } } },
-    { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { ds_diagnostics, NULL } } },
     { "Test pattern",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_tp_sel,    OPT_WRAP,   SETTING_ITEM(ds_tp_desc) } } },
 }))
 
 
 MENU(menu_main, P99_PROTECT({ \
-    {     "Downscaler opt.>",                   OPT_SUBMENU,            { .sub = { &menu_downscaler, NULL, NULL } } },
+    {     "CVBS decoder   >",                   OPT_SUBMENU,            { .sub = { &menu_downscaler, NULL, NULL } } },
     { LNG("Video in opt.  >","ﾀｲｵｳｴｲｿﾞｳ     >"),  OPT_SUBMENU,            { .sub = { &menu_vinput_opt, NULL, NULL } } },
     { LNG("Sync opt.      >","ﾄﾞｳｷｵﾌﾟｼｮﾝ    >"),  OPT_SUBMENU,            { .sub = { &menu_sync, NULL, NULL } } },
     { LNG("Output opt.    >","ｼｭﾂﾘｮｸｵﾌﾟｼｮﾝ  >"),  OPT_SUBMENU,            { .sub = { &menu_output, NULL, NULL } } },

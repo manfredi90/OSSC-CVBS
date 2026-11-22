@@ -26,6 +26,7 @@
 #include "video_modes.h"
 #include "av_controller.h"
 #include "avconfig.h"
+#include "cvbs.h"
 
 #define VM_OUT_YMULT        (vm_conf->y_rpt+1)
 #define VM_OUT_XMULT        (vm_conf->x_rpt+1)
@@ -1161,7 +1162,8 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     memset(vm_conf, 0, sizeof(vm_proc_config_t));
 
     {
-        const ds_mode_t *ds = find_ds_mode(cc, mode_preset, vm_in);
+        // CVBS firmware: no downscaling (not in the FPGA)
+        const ds_mode_t *ds = NULL;
         if (ds && (ds->out_h_total <= DS_OUT_H_TOTAL_MAX)) {
             if (setup_ds_mode(ds, cc, vm_in, vm_out, vm_conf) != 0)
                 return -1;
@@ -1190,9 +1192,10 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         case MODE_PT:
             vm_out->vic = vm_in->vic;
 
-            if (0) {
-                vm_conf->x_rpt = vm_conf->h_skip = 3;
-                x_rpt_decr += 1;
+            if (cv_mode && cvbs_group_ok(mode_preset->group)) {
+                // CVBS decoder: every sample at ~27MHz (1716 / 1728 per line)
+                vmode_hv_mult(vm_in, 2, 1);
+                vmode_hv_mult(vm_out, 2, 1);
             } else if ((cc->pt_mode == 1) && ((mode_preset->group >= GROUP_384P) && (mode_preset->group <= GROUP_576P))) {
                 vmode_hv_mult(vm_in, 2, 1);
                 vmode_hv_mult(vm_out, 2, 1);

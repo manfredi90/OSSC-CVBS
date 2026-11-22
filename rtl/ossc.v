@@ -87,40 +87,34 @@ wire [31:0] misc_config, sl_config, sl_config2, sl_config3;
 wire [31:0] misc_config_fe = {misc_config[31:15], 3'h0, 5'h0, misc_config[6:0]};
 wire [31:0] misc_config_sc = {misc_config[31:25], 1'b0, 8'h0, 1'b0, misc_config[14:0]};
 
-// Downscaler controls (misc_config reserved bits)
-// store 1 of every (ds_vdec+1) input lines (bit 2 in sl_config: groups of 6)
-wire [2:0] ds_vdec = {sl_config[7], misc_config[26:25]};
-wire [1:0] ds_csync = misc_config[28:27];   // 0=off, 1=XOR, 2=AND (CSync on HSYNC)
+// CVBS firmware: the downscaler is not used, its controls are tied off so
+// that synthesis prunes it (15kHz passthrough only). The registers that
+// carried them now configure the colour decoder:
+//   sl_config  = chroma coefficient (hc) and luma gain
+//   sl_config2 = [5:0] horizontal timing extension bits, [31:8] decoder flags
+//   sl_config3 = DDS increment
+wire [2:0] ds_vdec = 3'h0;
+wire [1:0] ds_csync = misc_config[28:27];   // 0=off, 1=XOR, 2=AND, 3=standard (CSync on HSYNC)
 // HDMI RGB range: 0 = full 0-255, 1 = limited 16-235, 2 = 16-255 (DACs that
 // clip below 16). misc_config[8:7]: the stock reverse LPF bits, not used
 // here (masked off for the frontend)
 wire [1:0] out_range = misc_config[8:7];
-wire [1:0] ds_lb_layout = misc_config[30:29]; // line buffer layout (see linebuf_top)
-// sl_config (scanlines removed) now carries downscaler filter controls,
-// sl_config2 the extension bits of the wide horizontal output timings
-wire [1:0] ds_hfilt = sl_config[1:0];       // horizontal filter: 0=off, 1=avg of 2, 2=avg of 4, 3=avg of 6 ADC samples
-wire ds_ilace = sl_config[3];               // interlaced (480i) output, one field per input frame
-wire ds_fswap = sl_config[2];               // 480i: swapped field order
-// 480i/576i input shown as 240p/288p: both fields with the vsync at a line
-// start (same scanlines)
-wire ds_i2p = sl_config[4];
-// 480p -> 480i flicker filter (RGB rows, groups of 2 lines): 3 lines per
-// field row with weights a, 16-2a, a (1/16); field B groups start one line later
-wire ds_vflt = sl_config[5];
-wire [1:0] ds_vflt_bofs = {sl_config[23], sl_config[6]};   // field B group offset (lines)
-wire [4:0] ds_vflt_a = sl_config[20:16];
-// 480i from groups of 3 lines (720p, XGA, 480p Wide), line blending: field
-// A = 3/4 L0 + 1/4 L1, field B = 1/4 L1 + 3/4 L2 (see linebuf_top)
-wire ds_w31 = sl_config[24];
-wire [9:0] ds_lb_stride = sl_config3[9:0];  // line buffer layout 3: words per line
-wire [5:0] ds_lb_slots = sl_config3[15:10]; //   number of lines
-wire ds_lb_rgb = sl_config3[29];            //   1 = RGB, one pixel per word (else YCbCr 4:2:2)
-wire [12:0] ds_hofs = sl_config3[28:16];    // output H position at the input frame start
+wire [1:0] ds_lb_layout = 2'h0;
+wire [1:0] ds_hfilt = 2'h0;
+wire ds_ilace = 1'b0;
+wire ds_fswap = 1'b0;
+wire ds_i2p = 1'b0;
+wire ds_vflt = 1'b0;
+wire [1:0] ds_vflt_bofs = 2'h0;
+wire [4:0] ds_vflt_a = 5'h0;
+wire ds_w31 = 1'b0;
+wire [9:0] ds_lb_stride = 10'h0;
+wire [5:0] ds_lb_slots = 6'h0;
+wire ds_lb_rgb = 1'b0;
+wire [12:0] ds_hofs = 13'h0;
 wire [7:0] ds_resync_cnt;
 wire [9:0] ds_fperiod_lo;
-// per-field line selection/blending (see linebuf_top); bits 9:8 = bit 2 of
-// the field A / field B line position (groups of 6)
-wire [9:0] ds_field_cfg = {sl_config[22:21], sl_config[15:8]};
+wire [9:0] ds_field_cfg = 10'h0;
 
 wire pll_clkout, pll_clkswitch, pll_locked;
 wire clkmux_clkout;
@@ -263,6 +257,33 @@ tvp7002_frontend u_tvp_frontend (
     .sync_active(TVP_sync_active),
     .lumacode_addr(lumacode_addr),
     .lumacode_rden(lumacode_rden)
+);
+
+// Composite / S-Video colour decoder (bypassed for the other inputs, same
+// latency): video and every frontend signal the scan converter uses go
+// through it together
+wire [7:0] R_dec, G_dec, B_dec;
+wire HSYNC_dec, VSYNC_dec, DE_dec, FID_dec, datavalid_dec, frame_change_dec;
+wire [10:0] xpos_dec, ypos_dec;
+wire [31:0] cv_status;
+cvbs_decoder #(
+    .SIDE_W(28)
+) u_cvbs (
+    .clk(TVP_PCLK_i),
+    .R_i(TVP_R_post),
+    .G_i(TVP_G_post),
+    .B_i(TVP_B_post),
+    .HS_i(TVP_HSYNC_post),
+    .VS_i(TVP_VSYNC_post),
+    .side_i({TVP_fe_frame_change, TVP_FID_post, TVP_datavalid_post, TVP_DE_post, TVP_VSYNC_post, TVP_HSYNC_post, TVP_fe_xpos, TVP_fe_ypos}),
+    .cfg(sl_config2[31:8]),
+    .hc(sl_config),
+    .inc(sl_config3),
+    .R_o(R_dec),
+    .G_o(G_dec),
+    .B_o(B_dec),
+    .side_o({frame_change_dec, FID_dec, datavalid_dec, DE_dec, VSYNC_dec, HSYNC_dec, xpos_dec, ypos_dec}),
+    .status(cv_status)
 );
 
 // Insert synchronizers to async inputs (synchronize to CPU clock)
@@ -505,7 +526,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     .sc_config_0_sc_if_fe_status_i          ({ds_fperiod_lo, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
-    .sc_config_0_sc_if_lt_status_i          ({lt_finished, 3'h0, lt_stb_result, lt_lat_result}),
+    .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),
     .sc_config_0_sc_if_hv_in_config2_o      (hv_in_config2),
     .sc_config_0_sc_if_hv_in_config3_o      (hv_in_config3),
@@ -542,23 +563,23 @@ sys sys_inst(
 
 scanconverter #(
     .EMIF_ENABLE(0),
-    .NUM_LINE_BUFFERS(16)   // stock modes only use the LSB (2 lines), downscaler uses all 16
+    .NUM_LINE_BUFFERS(16)   // passthrough only uses the LSB (2 lines, line buffer RAM 4096 words)
   ) scanconverter_inst (
     .PCLK_CAP_i(TVP_PCLK_i),
     .PCLK_OUT_i(clkmux_clkout),
     .reset_n(hw_reset_n),  //TODO: sync to pclk_capture
-    .R_i(TVP_R_post),
-    .G_i(TVP_G_post),
-    .B_i(TVP_B_post),
-    .HSYNC_i(TVP_HSYNC_post),
-    .VSYNC_i(TVP_VSYNC_post),
-    .DE_i(TVP_DE_post),
-    .FID_i(TVP_FID_post),
-    .datavalid_i(TVP_datavalid_post),
+    .R_i(R_dec),
+    .G_i(G_dec),
+    .B_i(B_dec),
+    .HSYNC_i(HSYNC_dec),
+    .VSYNC_i(VSYNC_dec),
+    .DE_i(DE_dec),
+    .FID_i(FID_dec),
+    .datavalid_i(datavalid_dec),
     .interlaced_in_i(TVP_fe_interlace),
-    .frame_change_i(TVP_fe_frame_change),
-    .xpos_i(TVP_fe_xpos),
-    .ypos_i(TVP_fe_ypos),
+    .frame_change_i(frame_change_dec),
+    .xpos_i(xpos_dec),
+    .ypos_i(ypos_dec),
     .h_in_active(hv_in_config[23:12]),
     .hv_out_config(hv_out_config),
     .hv_out_config2(hv_out_config2),

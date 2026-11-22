@@ -62,7 +62,8 @@
 #define L5FMT_1600x1200     1
 #define L5FMT_1920x1200     2
 
-static const char *avinput_str[] = { "Test pattern", "AV1_RGBS", "AV1_RGsB", "AV1_YPbPr", "AV2_YPbPr", "AV2_RGsB", "AV3_RGBHV", "AV3_RGBS", "AV3_RGsB", "AV3_YPbPr", "Last used" };
+// CVBS firmware: AV2 is the decoder input (Composite on Y, S-Video on Y + Pb)
+static const char *avinput_str[] = { "Test pattern", "AV1_RGBS", "AV1_RGsB", "AV1_YPbPr", "AV2 S-Video", "AV2 Composite", "AV3_RGBHV", "AV3_RGBS", "AV3_RGsB", "AV3_YPbPr", "Last used" };
 
 typedef enum {
     AV_TESTPAT      = 0,
@@ -183,6 +184,18 @@ typedef struct {
     alt_u8 ds_fixlines;     // 240p: 0 = 260-264 lines (fine width steps), 1 = always 262 lines (fixed to 0, not in the menu)
     alt_u8 ds_unused3;      // was: 480p / VGA sampling phase (v0.17)
     alt_u8 ds_tp_sel;       // test pattern: 0 = gray, 1 = grid, 2 = monoscope, 3 = RGB (not kept: 0 at start; was: v1.1.2 test field order)
+
+    /* CVBS decoder settings (cv_std .. cv_cmoffs_off are compared as a block) */
+    alt_u8 cv_std;          // colour system: cv_std_t
+    alt_u8 cv_sat;          // saturation, 5% steps (20 = 100%)
+    alt_u8 cv_hue;          // hue, degrees (SIGNED_NUMVAL_ZERO = 0)
+    alt_u8 cv_contrast;     // contrast, 2% steps (50 = 100%)
+    alt_u8 cv_bright;       // brightness (SIGNED_NUMVAL_ZERO = 0)
+    alt_u8 cv_adcgain;      // TVP7002 coarse gain 0-15 (gain 0.5 + n/10)
+    alt_u8 cv_bgate;        // burst gate start (samples from the hsync leading edge)
+    alt_u8 cv_notch_off;    // 0 = luma notch on
+    alt_u8 cv_loop_off;     // 0 = subcarrier frequency loop on
+    alt_u8 cv_cmoffs_off;   // 0 = ~300mV ADC common mode offset on (room below blank)
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

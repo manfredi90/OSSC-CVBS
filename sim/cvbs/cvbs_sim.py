@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""Composite / S-Video test signal generator and checker for cvbs_decoder.v
+
+Generates line-locked TVP7002-like samples (8-bit), runs the RTL with
+iverilog and measures the decoded colour bars.
+"""
+import argparse, math, os, subprocess, sys
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
+
+FSC = {'ntsc': 3579545.45, 'pal': 4433618.75, 'pal60': 4433618.75,
+       'ntsc443': 4433618.75, 'palm': 3575611.49, 'paln': 3582056.25}
+
+# 75% colour bars (R, G, B 0..1): white, yellow, cyan, green, magenta, red, blue, black
+BARS = [(.75, .75, .75), (.75, .75, 0), (0, .75, .75), (0, .75, 0),
+        (.75, 0, .75), (.75, 0, 0), (0, 0, .75), (0, 0, 0)]
+
+
+def cfg_for(std, svideo=False, bstart=163, bright=0, nonotch=False, loop_off=False):
+    pal = std in ('pal', 'pal60', 'palm', 'paln')
+    bp443 = FSC[std] > 4e6
+    cfg = (1 | (svideo << 1) | (pal << 2) | (bp443 << 3) | (nonotch << 4) |
+           (loop_off << 5) | (bstart << 8) | ((bright & 0x3f) << 16))
+    return cfg, pal
+
+
+def hc_for(pal, sat=1.0, hue_deg=0.0):
+    k = 77.3 if pal else 102.0
+    re = int(round(k * sat * math.cos(math.radians(-hue_deg))))
+    im = int(round(k * sat * math.sin(math.radians(-hue_deg))))
+    return (re & 0x3ff) | ((im & 0x3ff) << 16)
+
+
+def gen(args):
+    std = args.std
+    lines625 = std in ('pal', 'paln')
+    N = 1728 if lines625 else 1716
+    if args.fh:
+        fh = args.fh
+    else:
+        fh = 15625.0 if lines625 else (FSC['ntsc'] / 227.5 if std == 'ntsc' else 15734.26)
+    fsc = FSC[std] * (1 + args.fsc_ppm * 1e-6)
+    fs = N * fh
+    pal = std in ('pal', 'pal60', 'palm', 'paln')
+    os_ = 4                                 # oversampling for the analog model
+    t_line = 1.0 / fh
+    us = 1e-6
+    cpv = args.codes_per_v
+    blank_code = args.blank_code
+
+    sync_w = 4.7 * us
+    b_start = (5.6 if pal else 5.3) * us
+    b_cyc = 10 if pal else 9
+    act0 = (10.5 if pal else 9.4) * us
+    act1 = t_line - 1.5 * us
+    a_burst = 0.15 if pal else 0.14
+    a_burst *= args.burst_scale
+
+    tt = (np.arange(N * os_) / (fs * os_))  # time inside a line
+    cv_all, c_all = [], []
+    rng = np.random.default_rng(1)
+    for ln in range(args.lines):
+        t0 = ln * t_line
+        t = t0 + tt
+        ph = 2 * math.pi * fsc * t + args.phase0
+        vsw = 1 if (not pal or (ln % 2 == 0)) else -1   # PAL: +V on even lines
+        y = np.zeros_like(tt)
+        c = np.zeros_like(tt)
+        y[tt < sync_w] = -0.3
+        fl = 312 if lines625 else 262
+        vbl = args.vblank and (ln % fl) < 9
+        bm = (tt >= b_start) & (tt < b_start + b_cyc / fsc) & (not vbl) & (not args.bw)
+        if pal:
+            # amplitude a_burst, phase 135 / 225 degrees
+            c[bm] = a_burst * (-np.sin(ph[bm]) + vsw * np.cos(ph[bm])) / math.sqrt(2)
+        else:
+            c[bm] = -a_burst * np.sin(ph[bm])
+        am = (tt >= act0) & (tt < act1) & (not vbl)
+        pos = (tt[am] - act0) / (act1 - act0)
+        bar = np.minimum((pos * 8).astype(int), 7)
+        rgb = np.array(BARS)[bar]
+        Y = 0.299 * rgb[:, 0] + 0.587 * rgb[:, 1] + 0.114 * rgb[:, 2]
+        U = 0.492 * (rgb[:, 2] - Y)
+        V = 0.877 * (rgb[:, 0] - Y)
+        y[am] = 0.7 * Y
+        c[am] = (0 if args.bw else 0.7) * args.chroma_scale * (U * np.sin(ph[am]) + vsw * V * np.cos(ph[am]))
+        if args.svideo:
+            cv = y
+            cc = c
+        else:
+            cv = y + c
+            cc = np.zeros_like(c)
+        cv_all.append(cv)
+        c_all.append(cc)
+    cv = np.concatenate(cv_all)
+    cc = np.concatenate(c_all)
+    # analog bandwidth (~6MHz, gaussian) then sampling
+    k = np.arange(-12, 13)
+    sig = fs * os_ / (2 * math.pi * 6e6)
+    g = np.exp(-0.5 * (k / sig) ** 2)
+    g /= g.sum()
+    cv = np.convolve(cv, g, mode='same')[::os_]
+    cc = np.convolve(cc, g, mode='same')[::os_]
+    G = np.clip(np.round(blank_code + cv * cpv + rng.normal(0, args.noise, cv.shape)), 0, 255).astype(int)
+    B = np.clip(np.round(128 + cc * cpv + rng.normal(0, args.noise, cc.shape)), 0, 255).astype(int)
+    n = np.arange(len(G))
+    hs = ((n % N) >= int(4.7e-6 * fs)).astype(int)
+    fl = 312 if lines625 else 262
+    vs = np.ones_like(hs)
+    if args.vblank:
+        vs[((n // N) % fl) < 3] = 0
+    inc = int(round(FSC[std] * (1 + args.osc_ppm * 1e-6) / fs * 2 ** 32)) & 0xffffffff
+    return G, B, hs, vs, N, inc, pal
+
+
+def run(args):
+    G, B, hs, vs, N, inc, pal = gen(args)
+    cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off)
+    hc = hc_for(pal, args.sat, args.hue)
+    with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
+        f.write('%06x %08x %08x\n' % (cfg, hc, inc))
+        for a, b, c, d in zip(G, B, hs, vs):
+            f.write('%02x %02x %x %x\n' % (a, b, c, d))
+    exe = os.path.join(HERE, 'tb.vvp')
+    subprocess.run(['iverilog', '-g2005', '-o', exe, os.path.join(HERE, 'tb_cvbs.v'),
+                    os.path.join(ROOT, 'rtl', 'cvbs_decoder.v')], check=True)
+    subprocess.run(['vvp', '-n', exe], check=True, cwd=ROOT, stdout=subprocess.DEVNULL)
+    rows = [l.replace('x', '0').split() for l in open(os.path.join(ROOT, 'out.txt'))]
+    os.replace(os.path.join(ROOT, 'out.txt'), os.path.join(HERE, 'out.txt'))
+    os.replace(os.path.join(ROOT, 'in.txt'), os.path.join(HERE, 'in.txt'))
+    R = np.array([int(r[0], 16) for r in rows])
+    Gq = np.array([int(r[1], 16) for r in rows])
+    Bq = np.array([int(r[2], 16) for r in rows])
+    side = np.array([int(r[3], 16) for r in rows])
+    st = np.array([int(r[4], 16) for r in rows])
+    hs_o = (side >> 1) & 1
+    starts = np.where((hs_o[:-1] == 1) & (hs_o[1:] == 0))[0] + 1
+    return R, Gq, Bq, starts, st, N, pal
+
+
+def measure(R, G, B, starts, N, pal, line):
+    s = starts[line]
+    fs_us = N / 64.0 if pal else N / 63.556
+    act0 = (10.5 if pal else 9.4)
+    act1 = (64.0 if pal else 63.556) - 1.5
+    res = []
+    for i in range(8):
+        c = act0 + (i + 0.5) * (act1 - act0) / 8
+        a = s + int((c - 1.2) * fs_us)
+        b = s + int((c + 1.2) * fs_us)
+        res.append((R[a:b].mean(), G[a:b].mean(), B[a:b].mean(), max(R[a:b].std(), G[a:b].std(), B[a:b].std())))
+    return res
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--std', default='pal', choices=list(FSC))
+    ap.add_argument('--lines', type=int, default=80)
+    ap.add_argument('--svideo', action='store_true')
+    ap.add_argument('--fsc-ppm', type=float, default=0.0, help='source subcarrier error')
+    ap.add_argument('--osc-ppm', type=float, default=0.0, help='error of the increment (OSSC crystal)')
+    ap.add_argument('--fh', type=float, default=0.0, help='line rate (default: standard)')
+    ap.add_argument('--noise', type=float, default=0.5)
+    ap.add_argument('--codes-per-v', type=float, default=228.6)
+    ap.add_argument('--blank-code', type=float, default=64)
+    ap.add_argument('--burst-scale', type=float, default=1.0)
+    ap.add_argument('--chroma-scale', type=float, default=1.0)
+    ap.add_argument('--phase0', type=float, default=0.3)
+    ap.add_argument('--bstart', type=int, default=163)
+    ap.add_argument('--sat', type=float, default=1.0)
+    ap.add_argument('--hue', type=float, default=0.0)
+    ap.add_argument('--nonotch', action='store_true')
+    ap.add_argument('--loop-off', action='store_true')
+    ap.add_argument('--vblank', action='store_true', help='fields with 9 blanked lines (no burst) and vsync')
+    ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
+    ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')
+    args = ap.parse_args()
+    R, G, B, starts, st, N, pal = run(args)
+    exp = [tuple(int(round(v * 255)) for v in b) for b in BARS]
+    print('lines out: %d, last status %08x' % (len(starts), st[-1]))
+    s = st[-1]
+    corr = ((s >> 27) & 0x1f)
+    corr = corr - 32 if corr & 0x10 else corr
+    print('status: burst %d blank %d peak %d kill %d alt %d corr_sat %d corr %d' % (
+        s & 0xff, (s >> 8) & 0xff, (s >> 16) & 0xff, (s >> 24) & 1, (s >> 25) & 1, (s >> 26) & 1, corr))
+    worst = 0
+    for ln in range(len(starts) - 1 - args.show, len(starts) - 1):
+        m = measure(R, G, B, starts, N, pal, ln)
+        errs = [max(abs(a - e) for a, e in zip(mm[:3], ee)) for mm, ee in zip(m, exp)]
+        worst = max(worst, max(errs))
+        print('line %3d: ' % ln + ' '.join('%3.0f/%3.0f/%3.0f(%2.0f)' % mm for mm in m) + '  maxerr %.1f' % max(errs))
+    print('expected: ' + ' '.join('%3d/%3d/%3d    ' % e for e in exp))
+    print('WORST %.1f' % worst)
+
+
+if __name__ == '__main__':
+    main()

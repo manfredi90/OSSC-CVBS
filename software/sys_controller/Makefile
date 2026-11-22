@@ -154,6 +154,7 @@ endif
 C_SRCS += src/video_modes.c
 C_SRCS += src/flash.c
 C_SRCS += src/ds_settings.c
+C_SRCS += src/cvbs.c
 C_SRCS += src/firmware.c
 ifeq ($(OSDLANG),JP)
 C_SRCS += src/userdata_sjis.c
