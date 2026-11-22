@@ -119,30 +119,44 @@ always @(posedge clk) begin
 end
 
 // ---------------------------------------------------------------------------
-// blank level: mean of x0 over the burst gate (the burst averages out), then
-// low-pass over lines (4 fractional bits)
-wire gate_h = (h >= {4'h0, bstart}) && (h < {4'h0, bstart} + GATE_LEN);
-reg gate_h_prev;
-reg [12:0] bl_acc;
+// blank level: x0 is first filtered by a 6-sample box (about one subcarrier
+// cycle), then averaged over 30 samples of the burst gate: the burst residual
+// is < 1% of its amplitude, so the level no longer beats with the burst phase
+// from line to line. Low-pass over lines (4 fractional bits). The integer
+// level used by the luma path is updated only at the start of a field, and
+// only when the filtered value is more than 0.75 code away (hysteresis): a
+// level toggling between two codes inside the field showed as flickering
+// horizontal bands.
+wire gate_h = (h >= {4'h0, bstart}) && (h < {4'h0, bstart} + GATE_LEN);   // burst gate
+wire gate_bl = (h >= {4'h0, bstart} + 12'd3) && (h < {4'h0, bstart} + 12'd33);
+reg gate_bl_prev;
+reg [9:0] bx_a, bx_b;
+reg [10:0] bx6;
+reg [15:0] bl_acc;
 reg bl_upd;
 reg [11:0] blank_f = 12'd960;   // 60.0
 reg [11:0] bl_line;     // mean of the gate, 4 fractional bits
+reg [7:0] blank = 8'd60;
 wire signed [12:0] bl_diff = $signed({1'b0, bl_line}) - $signed({1'b0, blank_f});
 wire [11:0] bl_step = {{3{bl_diff[12]}}, bl_diff[11:3]};
+wire signed [12:0] bl_err = $signed({1'b0, blank_f}) - $signed({1'b0, blank, 4'h0});
+wire [22:0] bl_scaled = bl_acc * 7'd91;     // x16/180
 always @(posedge clk) begin
-    gate_h_prev <= gate_h;
+    bx_a <= x0d[1] + x0d[2] + x0d[3];
+    bx_b <= x0d[4] + x0d[5] + x0d[6];
+    bx6 <= bx_a + bx_b;
+    gate_bl_prev <= gate_bl;
     bl_upd <= 1'b0;
-    if (gate_h) begin
-        bl_acc <= bl_acc + x0d[1];
-    end else if (gate_h_prev) begin
-        bl_line <= bl_acc[12:1];        // /32 (x16)
-        bl_acc <= 13'h0;
+    if (gate_bl) begin
+        bl_acc <= bl_acc + bx6;
+    end else if (gate_bl_prev) begin
+        bl_line <= bl_scaled[21:10];
+        bl_acc <= 16'h0;
         bl_upd <= 1'b1;
     end
     if (bl_upd)     // blank_f += (line*16 - blank_f) / 8
         blank_f <= blank_f + bl_step;
 end
-wire [7:0] blank = blank_f[11:4] + blank_f[3];
 
 // ---------------------------------------------------------------------------
 // band-pass: c_bp = 2*c(n-4) - c(n-4-k) - c(n-4+k), k = 3 (4.43) or 4 (3.58).
@@ -348,6 +362,9 @@ wire s_new = pal ? ((vb & pv) ? meas_w : ~s_cur) : 1'b1;
 
 // vsync leading edge (field counters)
 wire vs_fall = vs0_prev & ~vs0;
+always @(posedge clk)
+    if (vs_fall && (bl_err > 13'sd12 || bl_err < -13'sd12))
+        blank <= blank_f[11:4] + blank_f[3];
 
 always @(posedge clk) begin
     if (vs_fall) begin
@@ -700,7 +717,7 @@ initial begin
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
-    bl_acc = 0; bl_line = 0; accI = 0; accQ = 0; gate_zd = 0;
+    bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
     h = 0; c_bp = 0; sc_q = 0; x0 = 0; c0 = 0; hs0 = 1; hs0_prev = 1; vs0 = 1; vs0_prev = 1;
     for (j=1; j<=6; j=j+1) begin pI_d[j] = 0; pQ_d[j] = 0; end

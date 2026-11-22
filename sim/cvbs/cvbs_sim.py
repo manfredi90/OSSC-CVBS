@@ -203,6 +203,12 @@ def main():
         print('line %3d: ' % ln + ' '.join('%3.0f/%3.0f/%3.0f(%2.0f)' % mm for mm in m) + '  maxerr %.1f' % max(errs))
     print('expected: ' + ' '.join('%3d/%3d/%3d    ' % e for e in exp))
     print('WORST %.1f' % worst)
+    # luma stability of the white bar over the lines (bands)
+    wl = [measure(R, G, B, starts, N, pal, ln)[0][1] for ln in range(30, len(starts) - 1)]
+    print('WL', ' '.join('%.0f' % v for v in wl))
+    bk = [measure(R, G, B, starts, N, pal, ln)[7][1] for ln in range(30, len(starts) - 1)]
+    print('BK', ' '.join('%.1f' % v for v in bk))
+    print('WHITE G over lines: min %.1f max %.1f p-p %.1f' % (min(wl), max(wl), max(wl) - min(wl)))
     if args.stripes:
         ln = len(starts) - 3
         s0 = starts[ln]

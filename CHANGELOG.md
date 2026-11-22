@@ -1,6 +1,18 @@
 Changelog
 =========
 
+CVBS decoder 0.5
+----------------
+
+### Fixed
+- Flickering horizontal bands (light / dark, 5-10 lines tall, at fixed
+  heights that moved with the colour system), less visible at higher ADC
+  gain. The blank level was measured over the burst with a residual that
+  beat with the burst phase, and its rounded value toggled between two codes
+  inside the field. The measurement now cancels the burst (6-sample box
+  filter, 30-sample mean), and the level is updated only at the start of a
+  field, with hysteresis.
+
 CVBS decoder 0.4
 ----------------
 
