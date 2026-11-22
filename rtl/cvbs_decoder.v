@@ -173,9 +173,17 @@ wire signed [9:0] cos_q = sc_q[9:0];
 wire signed [19:0] pI_full = c_bp * cos_q;
 wire signed [19:0] pQ_full = c_bp * sin_q;
 reg signed [10:0] pI, pQ;
+// The box filters are running sums: an error (e.g. a clock glitch while the
+// TVP7002 PLL is reprogrammed) would stay forever. They are flushed in the
+// hsync of every line: zero input from h = 20, then the sums are forced to 0
+// once their delay lines hold zeros (h = 30 / 40 / 52, until h = 60).
+wire flush_p = (h >= 12'd20) && (h < 12'd60);
+wire flush_b6 = (h >= 12'd30) && (h < 12'd60);
+wire flush_b7 = (h >= 12'd40) && (h < 12'd60);
+wire flush_b8 = (h >= 12'd52) && (h < 12'd60);
 always @(posedge clk) begin
-    pI <= pI_full[18:8];
-    pQ <= -pQ_full[18:8];
+    pI <= flush_p ? 11'sd0 : pI_full[18:8];
+    pQ <= flush_p ? 11'sd0 : -pQ_full[18:8];
 end
 
 // sin/cos delayed to the Z stage (13 clocks after sc_q)
@@ -217,12 +225,12 @@ always @(posedge clk) begin
         b7I_d[i] <= b7I_d[i-1];
         b7Q_d[i] <= b7Q_d[i-1];
     end
-    b6I <= b6I + pI - pI_d[6];
-    b6Q <= b6Q + pQ - pQ_d[6];
-    b7I <= b7I + b6I - b6I_d[7];
-    b7Q <= b7Q + b6Q - b6Q_d[7];
-    b8I <= b8I + b7I - b7I_d[8];
-    b8Q <= b8Q + b7Q - b7Q_d[8];
+    b6I <= flush_b6 ? 14'sd0 : b6I + pI - pI_d[6];
+    b6Q <= flush_b6 ? 14'sd0 : b6Q + pQ - pQ_d[6];
+    b7I <= flush_b7 ? 17'sd0 : b7I + b6I - b6I_d[7];
+    b7Q <= flush_b7 ? 17'sd0 : b7Q + b6Q - b6Q_d[7];
+    b8I <= flush_b8 ? 20'sd0 : b8I + b7I - b7I_d[8];
+    b8Q <= flush_b8 ? 20'sd0 : b8Q + b7Q - b7Q_d[8];
 end
 wire signed [15:0] zI = b8I[19:4];
 wire signed [15:0] zQ = b8Q[19:4];
