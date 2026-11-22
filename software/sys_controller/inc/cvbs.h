@@ -33,6 +33,8 @@ typedef enum {
 #define CV_ADCOFS_DEFAULT   (SIGNED_NUMVAL_ZERO-31)     // blank at ~97
 #define CV_CLAMP_MIN        0
 #define CV_CLAMP_MAX        120
+#define CV_SHARP_MAX        7
+#define CV_CDELAY_RANGE     4       // +-4 samples (~37ns)
 #define CV_BGATE_MIN        120
 #define CV_BGATE_MAX        220
 

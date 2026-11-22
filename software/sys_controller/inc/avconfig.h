@@ -199,6 +199,9 @@ typedef struct {
     alt_u8 cv_edge;         // chroma suppression at luma edges: 0 off, 1-3
     alt_u8 cv_clamp;        // TVP7002 clamp start, pixels after the hsync trailing edge
     alt_u8 cv_line2x;       // test option: 1 = Line2x output (31kHz, HDMI TVs), never kept (0 at every boot)
+    /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
+    alt_u8 cv_sharp;        // luma sharpness 0-7 (0 = off)
+    alt_u8 cv_cdelay;       // chroma delay, samples (SIGNED_NUMVAL_ZERO = 0, +-CV_CDELAY_RANGE)
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

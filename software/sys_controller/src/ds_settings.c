@@ -29,7 +29,9 @@
 // CVBS firmware: own magic (the downscaler / HD firmware settings in the same
 // sector have another format and are not loaded)
 #define DS_SETTINGS_MAGIC   0x4F534356  // "OSCV"
-#define DS_SETTINGS_VERSION 3     // 3: 0.3 (edge suppression, clamp position; older settings not loaded)
+#define DS_SETTINGS_VERSION 4     // 4: 0.6 (sharpness, chroma delay at the end of avconfig_t)
+                                  // 3: 0.3 (edge suppression, clamp position; older settings not loaded)
+#define V3_TC_LESS          2     // bytes added to avconfig_t in v4
 
 typedef struct {
     uint32_t magic;
@@ -57,12 +59,34 @@ void set_default_settings();
 int ds_settings_load() {
     const ds_settings_blob_t *f = (const ds_settings_blob_t*)(INTEL_GENERIC_SERIAL_FLASH_INTERFACE_TOP_0_AVL_MEM_BASE + DS_SETTINGS_FLASH_ADDR);
 
+    extern const avconfig_t tc_default;
+    int migrated = 0;
+
     memcpy(&blob, f, sizeof(blob));
 
-    if ((blob.magic != DS_SETTINGS_MAGIC) ||
-        (blob.version != DS_SETTINGS_VERSION) ||
-        (blob.len != sizeof(ds_settings_blob_t)) ||
-        (blob.crc != blob_crc(&blob)))
+    // v3 (0.3-0.5): same layout, avconfig_t without the fields added at its end
+    if ((blob.magic == DS_SETTINGS_MAGIC) && (blob.version == 3)) {
+        const unsigned char *p = (const unsigned char*)f;
+        unsigned tco = offsetof(ds_settings_blob_t, tc);
+        unsigned tcl = sizeof(avconfig_t) - V3_TC_LESS;
+        unsigned crco = offsetof(ds_settings_blob_t, crc) - V3_TC_LESS;
+        uint32_t crc_s;
+        memcpy(&crc_s, p + crco, 4);
+        if ((blob.len == ((crco + 4 + 3) & ~3u)) && (crc32((unsigned char*)p, crco, 1) == crc_s)) {
+            memcpy(&blob.tc, p + tco, tcl);
+            memcpy((unsigned char*)&blob.tc + tcl, (const unsigned char*)&tc_default + tcl, V3_TC_LESS);
+            memcpy(&blob.ts, p + tco + tcl, sizeof(settings_t));
+            memcpy(blob.rc_keymap, p + tco + tcl + sizeof(settings_t), sizeof(blob.rc_keymap));
+            migrated = 1;
+            printf("DS settings: v3 migrated\n");
+        }
+    }
+
+    if (!migrated &&
+        ((blob.magic != DS_SETTINGS_MAGIC) ||
+         (blob.version != DS_SETTINGS_VERSION) ||
+         (blob.len != sizeof(ds_settings_blob_t)) ||
+         (blob.crc != blob_crc(&blob))))
     {
         printf("DS settings: none stored (using defaults)\n");
         return -1;
@@ -102,9 +126,12 @@ int ds_settings_load() {
         (tc.cv_adcgain > 15) || (tc.cv_bgate < CV_BGATE_MIN) || (tc.cv_bgate > CV_BGATE_MAX) ||
         (tc.cv_adcofs < SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE) || (tc.cv_adcofs > SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE) ||
         (tc.cv_edge > 3) || (tc.cv_clamp > CV_CLAMP_MAX)) {
-        extern const avconfig_t tc_default;
         memcpy(&tc.cv_std, &tc_default.cv_std, offsetof(avconfig_t, cv_clamp) + 1 - offsetof(avconfig_t, cv_std));
     }
+    if (tc.cv_sharp > CV_SHARP_MAX)
+        tc.cv_sharp = 0;
+    if ((tc.cv_cdelay < SIGNED_NUMVAL_ZERO-CV_CDELAY_RANGE) || (tc.cv_cdelay > SIGNED_NUMVAL_ZERO+CV_CDELAY_RANGE))
+        tc.cv_cdelay = SIGNED_NUMVAL_ZERO;
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
     if (tc.ds_720p_ar == 3)       // 1.2.2-1.2.3 "Wide (216p)": now "Wide"

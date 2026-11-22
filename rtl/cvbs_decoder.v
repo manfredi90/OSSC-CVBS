@@ -41,11 +41,15 @@ module cvbs_decoder #(
     input [SIDE_W-1:0] side_i,  // other signals delayed with the video
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
     // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] frequency loop off,
+    // [6] sharpness bit 2,
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
-    input [31:0] hc,            // [9:0] re, [25:16] im (signed)
+    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [13:10] chroma
+    // delay + 4 (0-8: -4..+4 samples, + = chroma later), [15:14] sharpness
+    // bits 1:0 (bit 2 = cfg[6])
+    input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
     output reg [7:0] G_o,
@@ -60,7 +64,7 @@ module cvbs_decoder #(
 localparam ZDL = 64;            // chroma / luma delay after the Z stage: the
                                 // reference of a line is computed from its own
                                 // burst before its active video is demodulated
-localparam LAT = 40 + ZDL;      // inputs -> outputs (clocks)
+localparam LAT = 44 + ZDL;      // inputs -> outputs (clocks)
 localparam GATE_LEN = 32;       // burst gate length (samples)
 localparam ZD = 22;             // h counter -> Z stage delay
 
@@ -76,6 +80,8 @@ wire signed [5:0] bright = cfg[21:16];
 wire signed [9:0] hc_re = hc[9:0];
 wire signed [9:0] hc_im = hc[25:16];
 wire [6:0] luma_gain = {1'b0, hc[31:26]} + 7'd32;   // x1/32 (32-95)
+wire [3:0] cdel = hc[13:10];        // chroma delay + 4
+wire [2:0] sharp = {cfg[6], hc[15:14]};
 
 // ---------------------------------------------------------------------------
 // side signals and bypass path
@@ -601,38 +607,71 @@ always @(posedge clk) begin
     VA <= kill ? 11'sd0 : V3;
 end
 
+// stage S: sharpness (peaking). The luma of a composite signal is low-passed
+// by the notch, and the sampling is not locked to the pixels of the source:
+// edges are soft. y' = y + k/32 * hp, hp = [-1 -2 1 4 1 -2 -1] * y: zero gain
+// at DC and at the Nyquist frequency (no noise boost), peak ~9.5 at 5MHz,
+// 5 at 2.7MHz (k = 0-7). 4 clocks (yS = yA delayed 4 when k = 0).
+reg signed [10:0] yAd [1:6];
+reg signed [10:0] yS;
+wire signed [13:0] s_hp = $signed({yAd[3], 2'b0}) + yAd[2] + yAd[4]
+                        - $signed({yAd[1], 1'b0}) - $signed({yAd[5], 1'b0}) - yA - yAd[6];
+wire signed [17:0] s_p = s_hp * $signed({1'b0, sharp});
+wire signed [13:0] s_sum = yAd[3] + (s_p >>> 5);
+always @(posedge clk) begin
+    yAd[1] <= yA;
+    for (i=2; i<=6; i=i+1)
+        yAd[i] <= yAd[i-1];
+    yS <= sat11(s_sum);
+end
+
 // stage E: chroma suppression at luma edges. A sharp luma edge has energy at
 // the subcarrier, which is demodulated as colour fringes (cross-colour, e.g.
 // blue / purple at black / white edges). The chroma is attenuated around the
 // edges: edge strength e = |Y(n) - Y(n-4)|, envelope decaying by 6 per
-// sample, chroma and luma delayed by 9 so that the attenuation also covers
-// the fringe before the edge.
-reg signed [10:0] yE_d [1:9];
-reg signed [10:0] uE_d [1:8];
-reg signed [10:0] vE_d [1:8];
+// sample, chroma delayed by 12 (luma: 4 in stage S, then 8 + 1) so that the
+// attenuation also covers the fringe before the edge. Chroma delay: the luma
+// is taken from tap 9 - d of its delay line (d = -4..+4).
+reg signed [10:0] yE_d [1:13];
+reg signed [10:0] uE_d [1:12];
+reg signed [10:0] vE_d [1:12];
 reg [10:0] e_env;
 reg [8:0] e_att;
 reg signed [10:0] yE, UE, VE;
-wire signed [11:0] e_diff = yA - yE_d[4];
+wire signed [11:0] e_diff = yS - yE_d[4];
 wire [10:0] e_abs = e_diff[11] ? -e_diff[10:0] : e_diff[10:0];
 wire [10:0] e_dec = (e_env > 11'd6) ? e_env - 11'd6 : 11'd0;
 wire [13:0] e_scaled = {3'b0, e_env} << edge_sup;   // x2 / x4 / x8
 wire signed [9:0] e_gain = 10'sd256 - $signed({1'b0, e_att});
-wire signed [20:0] uE_p = uE_d[8] * e_gain;
-wire signed [20:0] vE_p = vE_d[8] * e_gain;
+wire signed [20:0] uE_p = uE_d[12] * e_gain;
+wire signed [20:0] vE_p = vE_d[12] * e_gain;
+reg signed [10:0] yE_sel;
+always @(*) begin
+    case (cdel)
+    4'd0: yE_sel = yE_d[13];
+    4'd1: yE_sel = yE_d[12];
+    4'd2: yE_sel = yE_d[11];
+    4'd3: yE_sel = yE_d[10];
+    4'd5: yE_sel = yE_d[8];
+    4'd6: yE_sel = yE_d[7];
+    4'd7: yE_sel = yE_d[6];
+    4'd8: yE_sel = yE_d[5];
+    default: yE_sel = yE_d[9];
+    endcase
+end
 always @(posedge clk) begin
-    yE_d[1] <= yA;
+    yE_d[1] <= yS;
     uE_d[1] <= UA;
     vE_d[1] <= VA;
-    for (i=2; i<=9; i=i+1)
+    for (i=2; i<=13; i=i+1)
         yE_d[i] <= yE_d[i-1];
-    for (i=2; i<=8; i=i+1) begin
+    for (i=2; i<=12; i=i+1) begin
         uE_d[i] <= uE_d[i-1];
         vE_d[i] <= vE_d[i-1];
     end
     e_env <= (e_abs > e_dec) ? e_abs : e_dec;
     e_att <= (edge_sup == 2'h0) ? 9'h0 : ((e_scaled > 14'd256) ? 9'd256 : e_scaled[8:0]);
-    yE <= yE_d[9];
+    yE <= yE_sel;
     UE <= uE_p >>> 8;
     VE <= vE_p >>> 8;
 end
@@ -727,8 +766,10 @@ initial begin
     for (j=1; j<=26+ZDL; j=j+1) x0d[j] = 0;
     for (j=1; j<=8; j=j+1) cb[j] = 0;
     c_bp2 = 0; e_env = 0; e_att = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
-    for (j=1; j<=9; j=j+1) yE_d[j] = 0;
-    for (j=1; j<=8; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
+    for (j=1; j<=13; j=j+1) yE_d[j] = 0;
+    for (j=1; j<=12; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
+    for (j=1; j<=6; j=j+1) yAd[j] = 0;
+    yS = 0;
     for (j=1; j<=ZDL; j=j+1) zdl[j] = 0;
 end
 

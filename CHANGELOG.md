@@ -1,6 +1,16 @@
 Changelog
 =========
 
+CVBS decoder 0.6
+----------------
+
+### New
+- Sharpness (Off, 1-7): luma peaking, sharper pixel edges. 7-tap filter
+  with no gain at DC and at the Nyquist frequency (no noise boost).
+- Chroma delay (-4..+4 samples, ~37ns each): aligns the colour with the
+  luma edges.
+- Settings of 0.3-0.5 are kept (migrated).
+
 CVBS decoder 0.5.1
 ------------------
 

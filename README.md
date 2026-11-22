@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.5.1).**
+> **Status: test version (0.6).**
 
 
 Inputs
@@ -62,6 +62,8 @@ CVBS decoder menu
 | Brightness | ±31 | |
 | Luma notch | On, Off | Off: full bandwidth luma (dot crawl visible) |
 | Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing (cross-colour) at black / white edges, slightly softer colour edges. Default Medium |
+| Sharpness | Off, 1-7 | luma peaking (gain at ~5MHz 1 + 0.3 x n, none at DC and at the Nyquist frequency): sharper pixel edges, softened by the notch and by the sampling not locked to the source pixels. Default Off |
+| Chroma delay | -4..+4 | colour shifted against the luma, in samples (~37ns; + = colour later): aligns the colour with the edges when the source encoder delays one of the two. Default 0 |
 | Diagnostics | | `Bn` burst level, `Ln` blank level (ADC code), `Pn` highest ADC code in the picture (255: white clipped, lower the ADC gain), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
 | ADC gain | 0–15 | TVP7002 coarse gain (full scale shown in Vpp), default 2 |
 | ADC offset | ±31 | blank level = ADC code 128 + offset (default -31: ~97, shown as `L` in the diagnostics) |

@@ -125,7 +125,8 @@ def gen(args):
 def run(args):
     G, B, hs, vs, N, inc, pal = gen(args)
     cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
-    hc = hc_for(pal, args.sat, args.hue)
+    hc = hc_for(pal, args.sat, args.hue) | ((args.cdel + 4) << 10) | ((args.sharp & 3) << 14)
+    cfg |= (args.sharp >> 2) << 6
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
         f.write('%06x %08x %08x\n' % (cfg, hc, inc))
         for a, b, c, d in zip(G, B, hs, vs):
@@ -184,6 +185,8 @@ def main():
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
     ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
     ap.add_argument('--edge', type=int, default=0, help='chroma suppression at luma edges 0-3')
+    ap.add_argument('--cdel', type=int, default=0, help='chroma delay -4..+4')
+    ap.add_argument('--sharp', type=int, default=0, help='sharpness 0-7')
     ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')
     args = ap.parse_args()
@@ -205,10 +208,37 @@ def main():
     print('WORST %.1f' % worst)
     # luma stability of the white bar over the lines (bands)
     wl = [measure(R, G, B, starts, N, pal, ln)[0][1] for ln in range(30, len(starts) - 1)]
-    print('WL', ' '.join('%.0f' % v for v in wl))
-    bk = [measure(R, G, B, starts, N, pal, ln)[7][1] for ln in range(30, len(starts) - 1)]
-    print('BK', ' '.join('%.1f' % v for v in bk))
     print('WHITE G over lines: min %.1f max %.1f p-p %.1f' % (min(wl), max(wl), max(wl) - min(wl)))
+    # luma / chroma alignment at the bar edges (positive: chroma later)
+    ln = len(starts) - 3
+    s0 = starts[ln]
+    fs_us = N / 64.0 if pal else N / 63.556
+    act0 = (10.5 if pal else 9.4)
+    act1 = (64.0 if pal else 63.556) - 1.5
+    Rf, Gf, Bf = R.astype(float), G.astype(float), B.astype(float)
+    Yf = 0.299 * Rf + 0.587 * Gf + 0.114 * Bf
+    Uf, Vf = (Bf - Yf) * 0.492, (Rf - Yf) * 0.877
+    def cross(sig, a, b):
+        seg = sig[a:b]
+        lo, hi = seg[:10].mean(), seg[-10:].mean()
+        if abs(hi - lo) < 15:
+            return None
+        mid = (lo + hi) / 2
+        for k in range(1, len(seg)):
+            if (seg[k - 1] - mid) * (seg[k] - mid) <= 0 and seg[k] != seg[k - 1]:
+                return a + k - 1 + (mid - seg[k - 1]) / (seg[k] - seg[k - 1])
+        return None
+    dl = []
+    for i in range(1, 8):
+        c = s0 + int((act0 + i * (act1 - act0) / 8) * fs_us)
+        ty = cross(Yf, c - 40, c + 40)
+        tc = [t for t in (cross(Uf, c - 40, c + 40), cross(Vf, c - 40, c + 40)) if t is not None]
+        if ty is not None and tc:
+            dl.append(sum(tc) / len(tc) - ty)
+    if os.environ.get('YDUMP'):
+        c = s0 + int((act0 + 7 * (act1 - act0) / 8) * fs_us)
+        print('Y blue->black: ' + ' '.join('%.0f' % v for v in Yf[c - 12:c + 12]))
+    print('CHROMA-LUMA DELAY (samples): ' + ' '.join('%+.1f' % d for d in dl) + '  mean %+.2f' % (sum(dl) / len(dl)))
     if args.stripes:
         ln = len(starts) - 3
         s0 = starts[ln]
