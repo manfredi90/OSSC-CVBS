@@ -64,7 +64,7 @@ localparam ZDL = 64;            // chroma / luma delay after the Z stage: the
                                 // reference of a line is computed from its own
                                 // burst before its active video is demodulated
 localparam LAT = 40 + ZDL;      // inputs -> outputs (clocks)
-localparam GATE_LEN = 48;       // burst gate length (samples): bstart - 8 .. bstart + 39
+localparam GATE_LEN = 32;       // burst gate length (samples)
 localparam ZD = 22;             // h counter -> Z stage delay
 
 wire en       = cfg[0];
@@ -131,14 +131,7 @@ end
 // only when the filtered value is more than 0.75 code away (hysteresis): a
 // level toggling between two codes inside the field showed as flickering
 // horizontal bands.
-// burst gate: 48 samples (bstart is the start of the former 32-sample gate,
-// the window is centred on the same point)
-reg [8:0] gate_lo, gate_hi;
-always @(posedge clk) begin
-    gate_lo <= {1'b0, bstart} - 9'd8;
-    gate_hi <= {1'b0, bstart} + 9'd40;
-end
-wire gate_h = (h >= {3'h0, gate_lo}) && (h < {3'h0, gate_hi});
+wire gate_h = (h >= {4'h0, bstart}) && (h < {4'h0, bstart} + GATE_LEN);   // burst gate
 wire gate_bl = (h >= {4'h0, bstart} + 12'd3) && (h < {4'h0, bstart} + 12'd33);
 reg gate_bl_prev;
 reg [9:0] bx_a, bx_b;
@@ -334,10 +327,6 @@ reg vb;                             // current burst valid
 reg signed [47:0] t1;
 reg signed [47:0] dIm;
 reg [31:0] m;
-reg [23:0] mf;      // |r|^2 / 256 low-pass over lines (ACC)
-reg [17:0] g;       // amplitude correction (x2^16)
-wire signed [24:0] mf_diff = $signed({1'b0, m[31:8]}) - $signed({1'b0, mf});
-wire signed [24:0] mf_step = mf_diff >>> 3;
 reg [41:0] rem;
 reg [19:0] rec;
 reg [5:0] div_i;
@@ -352,8 +341,8 @@ reg alt_ok;
 
 wire [17:0] absZr = Zr[17] ? -Zr : Zr;
 wire [17:0] absZi = Zi[17] ? -Zi : Zi;
-localparam [18:0] VB_THOLD = 19'd1500;      // (48-sample gate: x1.5)
-localparam [31:0] KILL_THOLD = 32'd4718592;   // |r| < ~2172 (48-sample gate)
+localparam [18:0] VB_THOLD = 19'd1000;
+localparam [31:0] KILL_THOLD = 32'd2097152;   // |r| < ~1448
 
 // saturate a 48-bit value to 24 bits
 function signed [23:0] sat24;
@@ -476,14 +465,6 @@ always @(posedge clk) begin
                 div_i <= 6'd40;
             end
             13: begin
-                // ACC: the gain follows |r|^2 low-passed over lines (1/8),
-                // the noise of the burst amplitude of a single line no
-                // longer shows as line to line saturation changes. Large
-                // changes settle in a few lines (and g is limited).
-                if (mf == 24'h0)
-                    mf <= m[31:8];
-                else
-                    mf <= mf + mf_step[23:0];
                 if (m < KILL_THOLD) begin
                     kill <= 1'b1;
                     w_re <= 18'h0;
@@ -495,9 +476,9 @@ always @(posedge clk) begin
                 end
             end
             14: begin
-                // rec = 2^40 / mf, restoring division (one bit per clock)
-                if ({rem[40:0], (div_i == 6'd40)} >= {10'h0, mf, 8'h0}) begin
-                    rem <= {rem[40:0], (div_i == 6'd40)} - {10'h0, mf, 8'h0};
+                // rec = 2^40 / m, restoring division (one bit per clock)
+                if ({rem[40:0], (div_i == 6'd40)} >= {10'h0, m}) begin
+                    rem <= {rem[40:0], (div_i == 6'd40)} - {10'h0, m};
                     rec <= {rec[18:0], 1'b1};
                 end else begin
                     rem <= {rem[40:0], (div_i == 6'd40)};
@@ -520,8 +501,6 @@ always @(posedge clk) begin
             end
             18: begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
-                ma <= {1'b0, m[30:8]};          // m / mf (x2^32 / 2^8)
-                mb <= {4'h0, rec};
                 // frequency loop (the line to line rotation of r)
                 if (rpv & ~loop_off) begin
                     if (corr_next > CORR_MAX) begin
@@ -539,28 +518,14 @@ always @(posedge clk) begin
             19: begin
                 ai <= sat24(-(mres >>> 12));
             end
-            // amplitude correction: a = conj(r) / mf * (1.5 - 0.5 m/mf)
-            // ~ conj(r) / (|r| sqrt(mf)): the phase of this line, the gain
-            // of the low-passed amplitude (first order)
-            20: begin
-                if (|mres[47:33])                           // m/mf >= 2
-                    g <= 18'd32768;
-                else if (~|mres[47:31])                     // m/mf < 0.5
-                    g <= 18'd81920;
-                else
-                    g <= 18'd98304 - mres[34:17];
-            end
-            21: begin ma <= ar; mb <= {6'h0, g}; end
-            22: begin ma <= ai; mb <= {6'h0, g}; end
-            23: ar <= sat24(mres >>> 16);
             // w = a * hc (x1/256), used from now on: the delayed chroma is
             // still before the active video of this line
-            24: begin ai <= sat24(mres >>> 16); ma <= ar; mb <= hc_re; end
-            25: begin ma <= ai; mb <= hc_im; end
-            26: begin t1 <= mres; ma <= ar; mb <= hc_im; end
-            27: begin w_re <= sat18((t1 - mres) >>> 8); ma <= ai; mb <= hc_re; end
-            28: t1 <= mres;
-            29: begin
+            20: begin ma <= ar; mb <= hc_re; end
+            21: begin ma <= ai; mb <= hc_im; end
+            22: begin t1 <= mres; ma <= ar; mb <= hc_im; end
+            23: begin w_re <= sat18((t1 - mres) >>> 8); ma <= ai; mb <= hc_re; end
+            24: t1 <= mres;
+            25: begin
                 w_im <= sat18((t1 + mres) >>> 8);
                 kill <= 1'b0;
                 RPr <= Rr;
@@ -772,7 +737,7 @@ integer j;
 initial begin
     ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0;
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
-    w_re = 0; w_im = 0; kill = 1; Rr2 = 0; mf = 0; g = 18'd65536;
+    w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;

@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 0.7.1
+------------------
+
+### Reverted
+- The 0.7 colour reference changes (48-sample burst gate, colour gain
+  low-passed over lines): no visible effect on the hardware, the lines on
+  saturated colours come from something else. Logic freed (the FPGA was
+  at 100%). Burst level (B) back to the 0.6 scale.
+
 CVBS decoder 0.7
 ----------------
 

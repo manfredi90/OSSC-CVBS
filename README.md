@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.7).**
+> **Status: test version (0.7.1).**
 
 
 Inputs

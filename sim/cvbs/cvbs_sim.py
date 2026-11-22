@@ -27,7 +27,7 @@ def cfg_for(std, svideo=False, bstart=163, bright=0, nonotch=False, loop_off=Fal
 
 
 def hc_for(pal, sat=1.0, hue_deg=0.0, lg=51):
-    k = 116.0 if pal else 153.0
+    k = 77.3 if pal else 102.0
     re = int(round(k * sat * math.cos(math.radians(-hue_deg))))
     im = int(round(k * sat * math.sin(math.radians(-hue_deg))))
     return (re & 0x3ff) | ((im & 0x3ff) << 16) | ((lg - 32) << 26)

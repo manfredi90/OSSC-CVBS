@@ -45,8 +45,8 @@ uint8_t cv_mode;
 
 // chroma coefficient for 100% saturation (burst / chroma ratio of the
 // standard and the decoder scaling, see cvbs_decoder.v), x10
-#define HC_K_PAL_X10    1160    // x1.5 since 0.7 (48-sample burst gate)
-#define HC_K_NTSC_X10   1530
+#define HC_K_PAL_X10    773
+#define HC_K_NTSC_X10   1020
 
 // TVP7002 clamp width (the start is a setting: pixels after the hsync trailing
 // edge at ~27MHz, default 92: after the burst)
