@@ -31,6 +31,8 @@ typedef enum {
 #define CV_BRIGHT_RANGE     31
 #define CV_ADCOFS_RANGE     31
 #define CV_ADCOFS_DEFAULT   (SIGNED_NUMVAL_ZERO-31)     // blank at ~97
+#define CV_CLAMP_MIN        0
+#define CV_CLAMP_MAX        120
 #define CV_BGATE_MIN        120
 #define CV_BGATE_MAX        220
 

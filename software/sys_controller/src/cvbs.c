@@ -48,9 +48,8 @@ uint8_t cv_mode;
 #define HC_K_PAL_X10    773
 #define HC_K_NTSC_X10   1020
 
-// TVP7002 clamp after the burst: start (pixels after the hsync trailing edge
-// at ~27MHz) and width
-#define CV_CLAMP_START  92
+// TVP7002 clamp width (the start is a setting: pixels after the hsync trailing
+// edge at ~27MHz, default 92: after the burst)
 #define CV_CLAMP_WIDTH  12
 
 // decoder status (lt_status register)
@@ -105,7 +104,7 @@ void cvbs_tvp_setup(uint8_t h_synclen_px, uint16_t h_samplerate, uint32_t refclk
     // same clamp reference compensation as tvp_source_setup(): the reference
     // is the end of the MVS window, not the hsync trailing edge
     int clamp_ref_offset = h_synclen_px - (((30*h_samplerate)/refclks_per_line)+5)/10;
-    int clamp_pos = clamp_ref_offset + CV_CLAMP_START;
+    int clamp_pos = clamp_ref_offset + cc->cv_clamp;
 
     if (!cv_mode)
         return;
@@ -242,7 +241,8 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((cc->cv_notch_off != 0) << 4) |
                         ((cc->cv_loop_off != 0) << 5) |
                         ((uint32_t)cc->cv_bgate << 8) |
-                        (((uint32_t)bright & 0x3f) << 16)) : 0;
+                        (((uint32_t)bright & 0x3f) << 16) |
+                        ((uint32_t)(cc->cv_edge & 3) << 22)) : 0;
 }
 
 int cvbs_update() {

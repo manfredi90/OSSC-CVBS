@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.2).**
+> **Status: test version (0.3).**
 
 
 Inputs
@@ -60,10 +60,12 @@ CVBS decoder menu
 | Contrast | 50–160% | |
 | Brightness | ±31 | |
 | Luma notch | On, Off | Off: full bandwidth luma (dot crawl visible) |
+| Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing (cross-colour) at black / white edges, slightly softer colour edges. Default Medium |
 | Diagnostics | | `Bn` burst level, `Ln` blank level (ADC code), `Pn` highest ADC code in the picture (255: white clipped, lower the ADC gain), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
 | ADC gain | 0–15 | TVP7002 coarse gain (full scale shown in Vpp), default 2 |
 | ADC offset | ±31 | blank level = ADC code 128 + offset (default -31: ~97, shown as `L` in the diagnostics) |
 | Burst position | 120–220 | start of the burst gate, samples after the hsync leading edge |
+| Clamp position | 0–120 | TVP7002 clamp start, samples after the hsync trailing edge (default 92: after the burst) |
 | Subcarrier loop | On, Off | |
 | CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware |
 

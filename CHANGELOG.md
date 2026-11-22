@@ -1,6 +1,23 @@
 Changelog
 =========
 
+CVBS decoder 0.3
+----------------
+
+### Fixed
+- Color system Auto: switched between colour and B&W every second or so.
+  The colour killer is briefly on after the vsync (no burst), and the CPU
+  read the status right then; it is now sampled in the middle of the field.
+- Picture too dark, Contrast without effect: the FPGA used a fixed luma gain
+  (right for ADC gain 4) instead of the one computed by the CPU from the ADC
+  gain and Contrast.
+
+### New
+- Narrower chroma band-pass (two stages): less luma demodulated as colour.
+- "Edge color sup." (default Medium): chroma attenuated around sharp luma
+  edges, against the colour fringes at black / white edges.
+- "Clamp position": TVP7002 clamp start (for tests).
+
 CVBS decoder 0.2
 ----------------
 

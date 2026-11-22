@@ -18,19 +18,19 @@ BARS = [(.75, .75, .75), (.75, .75, 0), (0, .75, .75), (0, .75, 0),
         (.75, 0, .75), (.75, 0, 0), (0, 0, .75), (0, 0, 0)]
 
 
-def cfg_for(std, svideo=False, bstart=163, bright=0, nonotch=False, loop_off=False):
+def cfg_for(std, svideo=False, bstart=163, bright=0, nonotch=False, loop_off=False, edge=0):
     pal = std in ('pal', 'pal60', 'palm', 'paln')
     bp443 = FSC[std] > 4e6
     cfg = (1 | (svideo << 1) | (pal << 2) | (bp443 << 3) | (nonotch << 4) |
-           (loop_off << 5) | (bstart << 8) | ((bright & 0x3f) << 16))
+           (loop_off << 5) | (bstart << 8) | ((bright & 0x3f) << 16) | (edge << 22))
     return cfg, pal
 
 
-def hc_for(pal, sat=1.0, hue_deg=0.0):
+def hc_for(pal, sat=1.0, hue_deg=0.0, lg=51):
     k = 77.3 if pal else 102.0
     re = int(round(k * sat * math.cos(math.radians(-hue_deg))))
     im = int(round(k * sat * math.sin(math.radians(-hue_deg))))
-    return (re & 0x3ff) | ((im & 0x3ff) << 16)
+    return (re & 0x3ff) | ((im & 0x3ff) << 16) | ((lg - 32) << 26)
 
 
 def gen(args):
@@ -84,6 +84,10 @@ def gen(args):
         pos = (tt[am] - act0) / (act1 - act0)
         bar = np.minimum((pos * 8).astype(int), 7)
         rgb = np.array(BARS)[bar]
+        if args.stripes:
+            # black / white stripes, 1.5us wide (sharp luma edges)
+            k_ = ((tt[am] - act0) / 1.5e-6).astype(int) % 2
+            rgb = np.stack([k_ * 0.75] * 3, axis=1)
         Y = 0.299 * rgb[:, 0] + 0.587 * rgb[:, 1] + 0.114 * rgb[:, 2]
         U = 0.492 * (rgb[:, 2] - Y)
         V = 0.877 * (rgb[:, 0] - Y)
@@ -120,7 +124,7 @@ def gen(args):
 
 def run(args):
     G, B, hs, vs, N, inc, pal = gen(args)
-    cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off)
+    cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
     hc = hc_for(pal, args.sat, args.hue)
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
         f.write('%06x %08x %08x\n' % (cfg, hc, inc))
@@ -128,7 +132,7 @@ def run(args):
             f.write('%02x %02x %x %x\n' % (a, b, c, d))
     exe = os.path.join(HERE, 'tb.vvp')
     subprocess.run(['iverilog', '-g2005', '-o', exe, os.path.join(HERE, 'tb_cvbs.v'),
-                    os.path.join(ROOT, 'rtl', 'cvbs_decoder.v')], check=True)
+                    os.environ.get('CVBS_RTL', os.path.join(ROOT, 'rtl', 'cvbs_decoder.v'))], check=True)
     subprocess.run(['vvp', '-n', exe], check=True, cwd=ROOT, stdout=subprocess.DEVNULL)
     rows = [l.replace('x', '0').split() for l in open(os.path.join(ROOT, 'out.txt'))]
     os.replace(os.path.join(ROOT, 'out.txt'), os.path.join(HERE, 'out.txt'))
@@ -179,6 +183,8 @@ def main():
     ap.add_argument('--vblank', action='store_true', help='fields with 9 blanked lines (no burst) and vsync')
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
     ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
+    ap.add_argument('--edge', type=int, default=0, help='chroma suppression at luma edges 0-3')
+    ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')
     args = ap.parse_args()
     R, G, B, starts, st, N, pal = run(args)
@@ -197,6 +203,14 @@ def main():
         print('line %3d: ' % ln + ' '.join('%3.0f/%3.0f/%3.0f(%2.0f)' % mm for mm in m) + '  maxerr %.1f' % max(errs))
     print('expected: ' + ' '.join('%3d/%3d/%3d    ' % e for e in exp))
     print('WORST %.1f' % worst)
+    if args.stripes:
+        ln = len(starts) - 3
+        s0 = starts[ln]
+        a = s0 + int((10.5 if pal else 9.4) * N / 64.0) + 20
+        b = s0 + int(60 * N / 64.0)
+        r, g, bb = R[a:b].astype(int), G[a:b].astype(int), B[a:b].astype(int)
+        cc = np.maximum(np.abs(r - g), np.maximum(np.abs(r - bb), np.abs(g - bb)))
+        print('CROSS-COLOUR max %d mean %.1f' % (cc.max(), cc.mean()))
 
 
 if __name__ == '__main__':

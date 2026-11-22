@@ -42,7 +42,8 @@ module cvbs_decoder #(
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
     // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] frequency loop off,
     // [15:8] burst gate start (samples from the hsync leading edge),
-    // [21:16] brightness (signed, x2)
+    // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
+    // edges (0 off, 1-3)
     input [23:0] cfg,
     input [31:0] hc,            // [9:0] re, [25:16] im (signed)
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
@@ -59,9 +60,9 @@ module cvbs_decoder #(
 localparam ZDL = 64;            // chroma / luma delay after the Z stage: the
                                 // reference of a line is computed from its own
                                 // burst before its active video is demodulated
-localparam LAT = 26 + ZDL;      // inputs -> outputs (clocks)
+localparam LAT = 40 + ZDL;      // inputs -> outputs (clocks)
 localparam GATE_LEN = 32;       // burst gate length (samples)
-localparam ZD = 17;             // h counter -> Z stage delay
+localparam ZD = 22;             // h counter -> Z stage delay
 
 wire en       = cfg[0];
 wire svideo   = cfg[1];
@@ -70,9 +71,11 @@ wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
 wire loop_off = cfg[5];
 wire [7:0] bstart = cfg[15:8];
+wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
 wire signed [9:0] hc_re = hc[9:0];
 wire signed [9:0] hc_im = hc[25:16];
+wire [6:0] luma_gain = {1'b0, hc[31:26]} + 7'd32;   // x1/32 (32-95)
 
 // ---------------------------------------------------------------------------
 // side signals and bypass path
@@ -108,10 +111,10 @@ always @(posedge clk) begin
 end
 
 // x0 delayed (x0d[k] = x0 k clocks earlier)
-reg [7:0] x0d [1:21+ZDL];
+reg [7:0] x0d [1:26+ZDL];
 always @(posedge clk) begin
     x0d[1] <= x0;
-    for (i=2; i<=21+ZDL; i=i+1)
+    for (i=2; i<=26+ZDL; i=i+1)
         x0d[i] <= x0d[i-1];
 end
 
@@ -143,7 +146,7 @@ wire [7:0] blank = blank_f[11:4] + blank_f[3];
 
 // ---------------------------------------------------------------------------
 // band-pass: c_bp = 2*c(n-4) - c(n-4-k) - c(n-4+k), k = 3 (4.43) or 4 (3.58).
-// Gain ~4 at the subcarrier, 0 at DC.
+// Gain ~4 at the subcarrier, 0 at DC. Two stages.
 reg [7:0] cw [1:8];
 always @(posedge clk) begin
     cw[1] <= c0;
@@ -157,6 +160,20 @@ always @(posedge clk) begin
     else
         c_bp <= $signed({2'b0, cw[4], 1'b0}) - $signed({2'b0, c0}) - $signed({2'b0, cw[8]});
 end
+
+// second identical stage (gain 1 at the subcarrier): narrower band, less
+// luma (edges) demodulated as chroma
+reg signed [9:0] cb [1:8];
+always @(posedge clk) begin
+    cb[1] <= c_bp;
+    for (i=2; i<=8; i=i+1)
+        cb[i] <= cb[i-1];
+end
+wire signed [11:0] c_bp2_k3 = $signed({cb[4], 1'b0}) - cb[1] - cb[7];
+wire signed [11:0] c_bp2_k4 = $signed({cb[4], 1'b0}) - c_bp - cb[8];
+reg signed [9:0] c_bp2;
+always @(posedge clk)
+    c_bp2 <= bp443 ? (c_bp2_k3 >>> 2) : (c_bp2_k4 >>> 2);
 
 // ---------------------------------------------------------------------------
 // DDS and sin/cos ROM (10-bit signed, +-511)
@@ -175,8 +192,8 @@ wire signed [9:0] cos_q = sc_q[9:0];
 
 // ---------------------------------------------------------------------------
 // demodulation: p = c_bp * e^(-j phase) (scaled 1/256)
-wire signed [19:0] pI_full = c_bp * cos_q;
-wire signed [19:0] pQ_full = c_bp * sin_q;
+wire signed [19:0] pI_full = c_bp2 * cos_q;
+wire signed [19:0] pQ_full = c_bp2 * sin_q;
 reg signed [10:0] pI, pQ;
 // The box filters are running sums: an error (e.g. a clock glitch while the
 // TVP7002 PLL is reprogrammed) would stay forever. They are flushed in the
@@ -560,23 +577,59 @@ end
 reg signed [10:0] yA;
 always @(posedge clk) begin
     if (svideo | nonotch | kill)
-        yA <= $signed({3'b0, x0d[21+ZDL]}) - $signed({3'b0, blank});
+        yA <= $signed({3'b0, x0d[26+ZDL]}) - $signed({3'b0, blank});
     else
-        yA <= $signed({3'b0, x0d[21+ZDL]}) - $signed({3'b0, blank}) - rmod;
+        yA <= $signed({3'b0, x0d[26+ZDL]}) - $signed({3'b0, blank}) - rmod;
     UA <= kill ? 11'sd0 : U3;
     VA <= kill ? 11'sd0 : V3;
 end
 
+// stage E: chroma suppression at luma edges. A sharp luma edge has energy at
+// the subcarrier, which is demodulated as colour fringes (cross-colour, e.g.
+// blue / purple at black / white edges). The chroma is attenuated around the
+// edges: edge strength e = |Y(n) - Y(n-4)|, envelope decaying by 6 per
+// sample, chroma and luma delayed by 9 so that the attenuation also covers
+// the fringe before the edge.
+reg signed [10:0] yE_d [1:9];
+reg signed [10:0] uE_d [1:8];
+reg signed [10:0] vE_d [1:8];
+reg [10:0] e_env;
+reg [8:0] e_att;
+reg signed [10:0] yE, UE, VE;
+wire signed [11:0] e_diff = yA - yE_d[4];
+wire [10:0] e_abs = e_diff[11] ? -e_diff[10:0] : e_diff[10:0];
+wire [10:0] e_dec = (e_env > 11'd6) ? e_env - 11'd6 : 11'd0;
+wire [13:0] e_scaled = {3'b0, e_env} << edge_sup;   // x2 / x4 / x8
+wire signed [9:0] e_gain = 10'sd256 - $signed({1'b0, e_att});
+wire signed [20:0] uE_p = uE_d[8] * e_gain;
+wire signed [20:0] vE_p = vE_d[8] * e_gain;
+always @(posedge clk) begin
+    yE_d[1] <= yA;
+    uE_d[1] <= UA;
+    vE_d[1] <= VA;
+    for (i=2; i<=9; i=i+1)
+        yE_d[i] <= yE_d[i-1];
+    for (i=2; i<=8; i=i+1) begin
+        uE_d[i] <= uE_d[i-1];
+        vE_d[i] <= vE_d[i-1];
+    end
+    e_env <= (e_abs > e_dec) ? e_abs : e_dec;
+    e_att <= (edge_sup == 2'h0) ? 9'h0 : ((e_scaled > 14'd256) ? 9'd256 : e_scaled[8:0]);
+    yE <= yE_d[9];
+    UE <= uE_p >>> 8;
+    VE <= vE_p >>> 8;
+end
+
 // stage B: luma gain (white 160 -> 255), brightness, YUV -> RGB products
-wire signed [17:0] yB_p = yA * 7'sd51;
+wire signed [18:0] yB_p = yE * $signed({1'b0, luma_gain});
 reg signed [11:0] yB;
 reg signed [21:0] pRV, pGU, pGV, pBU;
 always @(posedge clk) begin
     yB <= (yB_p >>> 5) + {{5{bright[5]}}, bright, 1'b0};
-    pRV <= VA * 10'sd292;   // 1.140
-    pGU <= UA * 10'sd101;   // 0.395
-    pGV <= VA * 10'sd149;   // 0.581
-    pBU <= UA * 11'sd520;   // 2.032
+    pRV <= VE * 10'sd292;   // 1.140
+    pGU <= UE * 10'sd101;   // 0.395
+    pGV <= VE * 10'sd149;   // 0.581
+    pBU <= UE * 11'sd520;   // 2.032
 end
 
 // stage C: sums
@@ -613,6 +666,11 @@ end
 // ---------------------------------------------------------------------------
 // status: peak code in the active area of the last field, PAL alternation
 reg [7:0] peak, peak_l;
+// colour killer for the status: sampled in the middle of the field (the
+// killer is briefly on after the vsync, where there is no burst, and the CPU
+// reads the status right after the vsync)
+reg [8:0] st_line;
+reg kill_st;
 wire [17:0] absFr = Fr[18] ? -Fr[17:0] : Fr[17:0];
 wire [17:0] absFi = Fi[18] ? -Fi[17:0] : Fi[17:0];
 wire [18:0] fmag = (absFr > absFi) ? ({1'b0, absFr} + {2'b0, absFi[17:1]}) : ({1'b0, absFi} + {2'b0, absFr[17:1]});
@@ -623,7 +681,13 @@ always @(posedge clk) begin
     end else if (vs0 && (h > 12'd250) && (h < 12'd1650) && (x0d[1] > peak)) begin
         peak <= x0d[1];
     end
-    status <= {corr[21:17], corr_sat, alt_ok, kill, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
+    if (vs_fall)
+        st_line <= 9'h0;
+    else if ((hs0_prev & ~hs0) && (st_line != 9'h1ff))
+        st_line <= st_line + 1'b1;
+    if ((hs0_prev & ~hs0) && (st_line == 9'd120))
+        kill_st <= kill;
+    status <= {corr[21:17], corr_sat, alt_ok, kill_st, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
 end
 
 
@@ -635,7 +699,7 @@ initial begin
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
-    alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0;
+    alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
     h = 0; c_bp = 0; sc_q = 0; x0 = 0; c0 = 0; hs0 = 1; hs0_prev = 1; vs0 = 1; vs0_prev = 1;
@@ -643,7 +707,11 @@ initial begin
     for (j=1; j<=7; j=j+1) begin b6I_d[j] = 0; b6Q_d[j] = 0; end
     for (j=1; j<=8; j=j+1) begin b7I_d[j] = 0; b7Q_d[j] = 0; cw[j] = 0; end
     for (j=1; j<=13; j=j+1) scd[j] = 0;
-    for (j=1; j<=21+ZDL; j=j+1) x0d[j] = 0;
+    for (j=1; j<=26+ZDL; j=j+1) x0d[j] = 0;
+    for (j=1; j<=8; j=j+1) cb[j] = 0;
+    c_bp2 = 0; e_env = 0; e_att = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
+    for (j=1; j<=9; j=j+1) yE_d[j] = 0;
+    for (j=1; j<=8; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
     for (j=1; j<=ZDL; j=j+1) zdl[j] = 0;
 end
 

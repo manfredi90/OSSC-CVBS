@@ -29,7 +29,7 @@
 // CVBS firmware: own magic (the downscaler / HD firmware settings in the same
 // sector have another format and are not loaded)
 #define DS_SETTINGS_MAGIC   0x4F534356  // "OSCV"
-#define DS_SETTINGS_VERSION 2     // 2: 0.2 (ADC offset instead of CM offset, settings of 0.1 not loaded)
+#define DS_SETTINGS_VERSION 3     // 3: 0.3 (edge suppression, clamp position; older settings not loaded)
 
 typedef struct {
     uint32_t magic;
@@ -98,9 +98,10 @@ int ds_settings_load() {
         (tc.cv_contrast < CV_CONTRAST_MIN) || (tc.cv_contrast > CV_CONTRAST_MAX) ||
         (tc.cv_bright < SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE) || (tc.cv_bright > SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE) ||
         (tc.cv_adcgain > 15) || (tc.cv_bgate < CV_BGATE_MIN) || (tc.cv_bgate > CV_BGATE_MAX) ||
-        (tc.cv_adcofs < SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE) || (tc.cv_adcofs > SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE)) {
+        (tc.cv_adcofs < SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE) || (tc.cv_adcofs > SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE) ||
+        (tc.cv_edge > 3) || (tc.cv_clamp > CV_CLAMP_MAX)) {
         extern const avconfig_t tc_default;
-        memcpy(&tc.cv_std, &tc_default.cv_std, offsetof(avconfig_t, cv_adcofs) + 1 - offsetof(avconfig_t, cv_std));
+        memcpy(&tc.cv_std, &tc_default.cv_std, offsetof(avconfig_t, cv_clamp) + 1 - offsetof(avconfig_t, cv_std));
     }
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
