@@ -30,6 +30,7 @@
 #define LT_ACTIVE                   (1<<15)
 #define LT_ARMED                    (1<<14)
 #define LT_MODE_OFFS                12
+#define WD_BYPASS                   (1<<11)     // CVBS firmware: 15kHz watchdog off (Line2x test output)
 #define VSYNC_I_TYPE                (1<<10)
 #define PLL_BYPASS                  (1<<9)
 #define REMOTE_EVENT                (1<<8)

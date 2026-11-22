@@ -110,6 +110,7 @@ static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
+static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz" };
 
 static void sync_vth_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d mV", (v*1127)/100); }
 static void intclks_to_time_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u.%.2u us", (unsigned)(((1000000U*v)/(TVP_INTCLK_HZ/1000))/1000), (unsigned)((((1000000U*v)/(TVP_INTCLK_HZ/1000))%1000)/10)); }
@@ -282,6 +283,7 @@ MENU(menu_settings, P99_PROTECT({ \
 }))
 
 MENU(menu_downscaler, P99_PROTECT({ \
+    { "Output",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_line2x,    OPT_WRAP,   SETTING_ITEM(cv_out_desc) } } },
     { "Color system",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_std,       OPT_WRAP,   SETTING_ITEM(cv_std_desc) } } },
     { "Saturation",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sat,        OPT_NOWRAP, 0, CV_SAT_MAX, cv_pct5_disp } } },
     { "Hue",                                    OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_hue,        OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_HUE_RANGE, SIGNED_NUMVAL_ZERO+CV_HUE_RANGE, cv_deg_disp } } },

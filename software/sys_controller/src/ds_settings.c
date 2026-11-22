@@ -90,6 +90,8 @@ int ds_settings_load() {
         tc.ds_flicker = 0;
     // test pattern design: not kept, Gray at start
     tc.ds_tp_sel = 0;
+    // Line2x (31kHz) test output: never kept, 15kHz at every boot
+    tc.cv_line2x = 0;
     if (tc.ds_out_range > 2)
         tc.ds_out_range = 0;
     // decoder settings out of range: defaults

@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.3).**
+> **Status: test version (0.4).**
 
 
 Inputs
@@ -54,6 +54,7 @@ CVBS decoder menu
 
 | Item | Values | |
 |------|--------|---|
+| Output | 15kHz, Line2x 31kHz | **test option** for HDMI TVs: decoder inputs line doubled to 1440x480p / 1440x576p (31kHz). **Never kept: 15kHz at every boot.** The 15kHz watchdog is off only while a Line2x mode is output. Do not use with 15kHz monitors |
 | Color system | Auto, PAL, NTSC, PAL-60, NTSC 4.43, PAL-M, PAL-N | |
 | Saturation | 0–200% | |
 | Hue | ±30 deg | |

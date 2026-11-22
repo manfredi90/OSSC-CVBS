@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 0.4
+----------------
+
+### New
+- Test option "Output: Line2x 31kHz" for HDMI TVs: the decoder inputs are
+  line doubled (240p / 480i -> 1440x480p, 288p / 576i -> 1440x576p, ~54MHz,
+  pixels repeated 2x). Never kept: the output is 15kHz at every boot. The
+  15kHz watchdog is off only while a Line2x mode is output.
+
 CVBS decoder 0.3
 ----------------
 

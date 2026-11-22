@@ -1116,6 +1116,9 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         }
 
         target_lm = valid_lm[*group_ptr[mode_preset->group]];
+        // CVBS firmware test option: Line2x for the decoder inputs
+        if (cvbs_line2x(cc, mode_preset->group))
+            target_lm = valid_lm[1];
 
         if ((target_lm & mode_preset->flags) &&
             (vm_in->timings.interlaced == mode_preset->timings.interlaced))
@@ -1174,8 +1177,15 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     mindiff_lm &= mode_preset->flags;    //ensure L2 mode uniqueness
 
     // Set passthru flag for all passthru mode options
-    if (*group_ptr[mode_preset->group] == 0)
+    if ((*group_ptr[mode_preset->group] == 0) && !cvbs_line2x(cc, mode_preset->group))
         mindiff_lm = MODE_PT;
+
+    // CVBS decoder, Line2x: every sample at ~27MHz as in the passthrough,
+    // output at ~54MHz (1440x480p / 1440x576p, pixels repeated 2x)
+    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
+        vmode_hv_mult(vm_in, 2, 1);
+        vmode_hv_mult(vm_out, 2, 1);
+    }
 
     if (mindiff_lm >= MODE_L6_GEN_4_3)
         vm_conf->y_rpt = 5;
@@ -1438,6 +1448,11 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
 
     if (mindiff_lm == MODE_PT)
         ds_pt_position(cc, vm_out, vm_conf);
+
+    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
+        vm_out->vic = ((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60;
+        vm_conf->hdmitx_pixr_ifr = 1;
+    }
 
     if (vm_out->vic == HDMI_Unknown)
         vm_out->vic = cc->default_vic;

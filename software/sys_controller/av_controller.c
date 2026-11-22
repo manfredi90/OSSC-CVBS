@@ -531,7 +531,8 @@ status_t get_status(tvp_sync_input_t syncinput)
     // CVBS decoder settings: the ADC gain / offset need the TVP7002 setup
     // (mode reprogram), the rest only the decoder registers
     if (cv_mode && sync_active && valid_mode &&
-        ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp)))
+        ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp) ||
+         (tc.cv_line2x != cm.cc.cv_line2x)))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();
@@ -766,8 +767,8 @@ void show_safe_screen(const char *reason)
     ds_safe_screen = 1;
     cm.id = -1;
 
-    // test pattern generator + PLL reference = 27MHz
-    sys_ctrl &= ~VIDGEN_OFF;
+    // test pattern generator + PLL reference = 27MHz, 15kHz watchdog on
+    sys_ctrl &= ~(VIDGEN_OFF | WD_BYPASS);
     IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, sys_ctrl);
     usleep(10);
 
@@ -872,11 +873,22 @@ void program_mode()
         }
     }
 
-    // Downscaler firmware: never output anything but 15kHz
+    // Downscaler firmware: never output anything but 15kHz (CVBS firmware:
+    // except the Line2x test output, explicitly selected and not kept)
     {
         uint32_t out_hfreq = cm.pclk_o_hz / ((vm_conf.tx_pixelrep+1) * vmode_out.timings.h_total);
+        int l2 = cvbs_line2x(&cm.cc, vmode_in.group) && (vm_conf.y_rpt == 1);
+        uint32_t hmin = l2 ? 2*DS_HFREQ_MIN : DS_HFREQ_MIN;
+        uint32_t hmax = l2 ? 2*DS_HFREQ_MAX : DS_HFREQ_MAX;
         printf("Output line rate: %luHz\n", out_hfreq);
-        if ((out_hfreq < DS_HFREQ_MIN) || (out_hfreq > DS_HFREQ_MAX)) {
+        if (l2)
+            sys_ctrl |= WD_BYPASS;
+        else
+            sys_ctrl &= ~WD_BYPASS;
+        IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, sys_ctrl);
+        if ((out_hfreq < hmin) || (out_hfreq > hmax)) {
+            sys_ctrl &= ~WD_BYPASS;
+            IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, sys_ctrl);
             cm.id = -1;
             show_safe_screen("  Unsupported");
             return;

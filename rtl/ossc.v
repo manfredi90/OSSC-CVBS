@@ -64,6 +64,7 @@ module ossc (
 
 wire [31:0] sys_ctrl;
 wire lt_active = 1'b0;   // latency tester removed (downscaler build)
+wire wd_bypass = sys_ctrl[11];   // CVBS firmware test option: Line2x (31kHz) output
 wire tvp_vsync_type = sys_ctrl[10];
 wire pll_bypass = sys_ctrl[9];
 wire remote_event = sys_ctrl[8];
@@ -397,6 +398,7 @@ reg [11:0] wd_line_ctr;
 reg [3:0] wd_fast_cnt, wd_ok_cnt;
 reg wd_kill = 1'b1;     // start killed until the first 16 good lines
 reg wd_kill_sync1_reg, wd_kill_sync2_reg;
+reg [1:0] wd_bypass_sync;
 
 always @(posedge clk27) begin
     wd_hs_sync <= {wd_hs_sync[1:0], HSYNC_sc};
@@ -421,7 +423,10 @@ always @(posedge clk27) begin
 end
 
 always @(posedge pclk_out) begin
-    {wd_kill_sync1_reg, wd_kill_sync2_reg} <= {wd_kill, wd_kill_sync1_reg};
+    // the CPU sets wd_bypass only while a Line2x (31kHz) mode selected by
+    // the user is programmed (not saved: 15kHz at every boot)
+    wd_bypass_sync <= {wd_bypass_sync[0], wd_bypass};
+    {wd_kill_sync1_reg, wd_kill_sync2_reg} <= {wd_kill & ~wd_bypass_sync[1], wd_kill_sync1_reg};
 end
 
 // Output registers: 3 stages (select, range scaling product, output pins);

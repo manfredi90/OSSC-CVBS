@@ -89,6 +89,10 @@ int cvbs_group_ok(video_group group) {
     return (group == GROUP_240P) || (group == GROUP_288P) || (group == GROUP_480I) || (group == GROUP_576I);
 }
 
+int cvbs_line2x(avconfig_t *cc, video_group group) {
+    return cv_mode && cc->cv_line2x && cvbs_group_ok(group);
+}
+
 void cvbs_reset_auto() {
     auto_other = 0;
     auto_pal = 0;
