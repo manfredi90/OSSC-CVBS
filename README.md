@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: first test version (0.1).** Not tested on hardware yet.
+> **Status: test version (0.2).**
 
 
 Inputs
@@ -33,13 +33,15 @@ How it works
 ------------
 
 * The TVP7002 samples the line-locked input at ~27MHz (1716 samples per line
-  for 525 lines, 1728 for 625), with no colour space conversion, a gain that
-  leaves room for the sync, the burst and the chroma below blank and above
-  white, and the clamp after the burst.
+  for 525 lines, 1728 for 625), with no colour space conversion, the blank
+  level clamped at ADC code ~97 (mid-level clamp + coarse offset) and a gain
+  that leave room for the sync, the burst and the chroma below blank and
+  above white, and the clamp after the burst.
 * The FPGA decoder: chroma band-pass, quadrature demodulation with a DDS
   (increment computed from the measured line rate and the subcarrier
-  frequency), low-pass filters, burst-locked phase and automatic chroma gain
-  from the burst of every line (PAL switch from the burst alternation), a
+  frequency), low-pass filters, phase and automatic chroma gain from the
+  burst of the same line (the line-locked sampling clock jitters from line to
+  line; PAL switch from the burst alternation), a
   frequency loop for the source / OSSC crystal tolerances, colour killer,
   luma with an adaptive notch at the subcarrier, YUV → RGB.
 * Colour system **Auto**: 3.58 or 4.43MHz from the colour killer, PAL or NTSC
@@ -59,8 +61,8 @@ CVBS decoder menu
 | Brightness | ±31 | |
 | Luma notch | On, Off | Off: full bandwidth luma (dot crawl visible) |
 | Diagnostics | | `Bn` burst level, `Ln` blank level (ADC code), `Pn` highest ADC code in the picture (255: white clipped, lower the ADC gain), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
-| ADC gain | 0–15 | TVP7002 coarse gain (full scale shown in Vpp), default 3 |
-| ADC CM offset | On, Off | ~300mV offset: room below blank for the sync, burst and chroma |
+| ADC gain | 0–15 | TVP7002 coarse gain (full scale shown in Vpp), default 2 |
+| ADC offset | ±31 | blank level = ADC code 128 + offset (default -31: ~97, shown as `L` in the diagnostics) |
 | Burst position | 120–220 | start of the burst gate, samples after the hsync leading edge |
 | Subcarrier loop | On, Off | |
 | CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware |

@@ -63,7 +63,10 @@ def gen(args):
     rng = np.random.default_rng(1)
     for ln in range(args.lines):
         t0 = ln * t_line
-        t = t0 + tt
+        # line-locked clock jitter: the sampling instants of a line are
+        # shifted by a random amount (H-PLL phase noise)
+        jit = rng.normal(0, args.jitter_ns * 1e-9) if args.jitter_ns else 0.0
+        t = t0 + tt + jit
         ph = 2 * math.pi * fsc * t + args.phase0
         vsw = 1 if (not pal or (ln % 2 == 0)) else -1   # PAL: +V on even lines
         y = np.zeros_like(tt)
@@ -175,6 +178,7 @@ def main():
     ap.add_argument('--loop-off', action='store_true')
     ap.add_argument('--vblank', action='store_true', help='fields with 9 blanked lines (no burst) and vsync')
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
+    ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')
     args = ap.parse_args()
     R, G, B, starts, st, N, pal = run(args)

@@ -1,6 +1,25 @@
 Changelog
 =========
 
+CVBS decoder 0.2
+----------------
+
+### Fixed
+- Coloured horizontal lines: the chroma phase came from the burst of the
+  previous lines, and the line-locked sampling clock jitters from line to
+  line. Now every line is demodulated with the reference from its own burst
+  (the active video is delayed by 64 samples so that it is ready in time).
+- Blank level too low (ADC code ~19): the burst and the dark saturated
+  colours were clipped at the bottom of the ADC range. The Y input now uses
+  the mid-level clamp with a coarse offset (blank at ~97, menu "ADC offset",
+  replaces "ADC CM offset"); default ADC gain 2. Settings of 0.1 are not
+  loaded.
+
+CVBS decoder 0.1
+----------------
+
+- First test version: composite / S-Video, PAL and NTSC.
+
 v1.6.1
 ------
 

@@ -126,20 +126,26 @@ void cvbs_tvp_setup(uint8_t h_synclen_px, uint16_t h_samplerate, uint32_t refclk
     tvp_writereg(TVP_B_FOFFSET_MSB, 0x80);
     tvp_writereg(TVP_FOFFSET_LSB, 0x00);
 
-    // clamps: Y bottom level (blank), Pb/Pr mid level (S-Video chroma)
-    tvp_writereg(TVP_SOGTHOLD, (tvp_readreg(TVP_SOGTHOLD) & 0xF8) | 0x5);
-    // ~300mV common mode offset: sync, burst and chroma below blank stay in range
-    if (cc->cv_cmoffs_off)
-        tvp_writereg(TVP_FCLAMPCTRL, tvp_readreg(TVP_FCLAMPCTRL) & 0x7F);
-    else
-        tvp_writereg(TVP_FCLAMPCTRL, tvp_readreg(TVP_FCLAMPCTRL) | 0x80);
+    // clamps: all mid level. Y: blank at ADC code 128 + coarse offset (default
+    // -31: ~97), room below blank for the sync, the burst and the chroma
+    // (bottom level clamping put the blank too low: the burst clipped).
+    // Pb (S-Video chroma): centered at 128.
+    tvp_writereg(TVP_SOGTHOLD, (tvp_readreg(TVP_SOGTHOLD) & 0xF8) | 0x7);
+    tvp_writereg(TVP_FCLAMPCTRL, tvp_readreg(TVP_FCLAMPCTRL) & 0x7F);    // no CM offset (bottom clamp only)
+    {
+        int ofs = (int)cc->cv_adcofs - SIGNED_NUMVAL_ZERO;   // 8-bit codes = 4 counts (coarse offset step)
+        uint8_t reg = (ofs < 0) ? (0x20 | (uint8_t)(-ofs)) : (uint8_t)ofs;
+        tvp_writereg(TVP_G_COFFSET, reg & 0x3f);
+        tvp_writereg(TVP_B_COFFSET, 0x00);
+        tvp_writereg(TVP_R_COFFSET, 0x00);
+    }
 
     // clamp after the burst, no ALC (the decoder measures the blank level)
     tvp_writereg(TVP_CLAMPSTART, (alt_u8)clamp_pos);
     tvp_writereg(TVP_CLAMPWIDTH, CV_CLAMP_WIDTH);
     tvp_writereg(TVP_ALCEN, 0x00);
 
-    printf("CVBS: %s, ADC gain %u, clamp pos %d\n", (cv_mode == 2) ? "S-Video" : "composite", (unsigned)cg, clamp_pos);
+    printf("CVBS: %s, ADC gain %u, offset %d, clamp pos %d\n", (cv_mode == 2) ? "S-Video" : "composite", (unsigned)cg, (int)cc->cv_adcofs - SIGNED_NUMVAL_ZERO, clamp_pos);
 }
 
 void cvbs_set_input(uint16_t samples_per_line, uint32_t totlines, uint8_t interlaced, uint32_t pcnt_field) {

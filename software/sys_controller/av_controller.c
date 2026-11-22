@@ -531,13 +531,13 @@ status_t get_status(tvp_sync_input_t syncinput)
     // CVBS decoder settings: the ADC gain / offset need the TVP7002 setup
     // (mode reprogram), the rest only the decoder registers
     if (cv_mode && sync_active && valid_mode &&
-        ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_cmoffs_off != cm.cc.cv_cmoffs_off)))
+        ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs)))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();
 
     {
-        int cv_changed = memcmp(&tc.cv_std, &cm.cc.cv_std, offsetof(avconfig_t, cv_cmoffs_off) + 1 - offsetof(avconfig_t, cv_std));
+        int cv_changed = memcmp(&tc.cv_std, &cm.cc.cv_std, offsetof(avconfig_t, cv_adcofs) + 1 - offsetof(avconfig_t, cv_std));
         int ds_csync_changed = (tc.ds_csync != cm.cc.ds_csync);
         int ds_range_changed = (tc.ds_out_range != cm.cc.ds_out_range);
         int ds_tp_changed = (tc.ds_tp_sel != cm.cc.ds_tp_sel);

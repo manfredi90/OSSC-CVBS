@@ -185,7 +185,7 @@ typedef struct {
     alt_u8 ds_unused3;      // was: 480p / VGA sampling phase (v0.17)
     alt_u8 ds_tp_sel;       // test pattern: 0 = gray, 1 = grid, 2 = monoscope, 3 = RGB (not kept: 0 at start; was: v1.1.2 test field order)
 
-    /* CVBS decoder settings (cv_std .. cv_cmoffs_off are compared as a block) */
+    /* CVBS decoder settings (cv_std .. cv_adcofs are compared as a block) */
     alt_u8 cv_std;          // colour system: cv_std_t
     alt_u8 cv_sat;          // saturation, 5% steps (20 = 100%)
     alt_u8 cv_hue;          // hue, degrees (SIGNED_NUMVAL_ZERO = 0)
@@ -195,7 +195,7 @@ typedef struct {
     alt_u8 cv_bgate;        // burst gate start (samples from the hsync leading edge)
     alt_u8 cv_notch_off;    // 0 = luma notch on
     alt_u8 cv_loop_off;     // 0 = subcarrier frequency loop on
-    alt_u8 cv_cmoffs_off;   // 0 = ~300mV ADC common mode offset on (room below blank)
+    alt_u8 cv_adcofs;       // Y blank level: mid-level clamp (ADC code 128) + coarse offset, x1 code (SIGNED_NUMVAL_ZERO = 0)
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

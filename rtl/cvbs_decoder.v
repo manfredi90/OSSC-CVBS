@@ -12,19 +12,21 @@
 // (increment from the CPU, from the measured line rate and the nominal
 // subcarrier frequency), low-pass (cascaded box filters 6/7/8), then per line:
 //  - burst vector Zb (sum of the demodulated chroma in the burst gate)
-//  - reference r = Zb(n) + Zb(n-1): the PAL +-45 degree swing cancels, so r
-//    points along the -U axis for both PAL and NTSC
 //  - PAL switch from the sign of Im(Zb(n) * conj(Zb(n-1))) (consecutive PAL
 //    bursts are 90 degrees apart)
-//  - r is low-pass filtered over lines; w = hc * conj(r) / |r|^2 (hc from the
-//    CPU: saturation, hue and the standard's burst/chroma ratio), so that
-//    U + jV comes from Z * w: burst-locked phase and automatic chroma gain
+//  - reference r of the line from its own burst, rotated onto the -U axis
+//    (PAL: +-45 degrees): the line-locked sampling clock jitters from line to
+//    line, so the phase of the previous lines is not good enough
+//  - w = hc * conj(r) / |r|^2 (hc from the CPU: saturation, hue and the
+//    standard's burst/chroma ratio), so that U + jV comes from Z * w:
+//    burst-locked phase and automatic chroma gain
 //  - a frequency loop trims the DDS increment so that r does not rotate from
 //    line to line (source subcarrier / OSSC crystal tolerance)
 // Luma: composite minus the remodulated chroma (an adaptive notch at the
 // subcarrier, removed when the colour killer is active).
 //
-// The new w is used from the next line; the PAL switch from the current one.
+// The active video is demodulated ZDL clocks after the Z stage, so that w is
+// ready for the line whose burst it comes from.
 //
 
 module cvbs_decoder #(
@@ -54,7 +56,10 @@ module cvbs_decoder #(
     output reg [31:0] status
 );
 
-localparam LAT = 26;            // inputs -> outputs (clocks)
+localparam ZDL = 64;            // chroma / luma delay after the Z stage: the
+                                // reference of a line is computed from its own
+                                // burst before its active video is demodulated
+localparam LAT = 26 + ZDL;      // inputs -> outputs (clocks)
 localparam GATE_LEN = 32;       // burst gate length (samples)
 localparam ZD = 17;             // h counter -> Z stage delay
 
@@ -103,10 +108,10 @@ always @(posedge clk) begin
 end
 
 // x0 delayed (x0d[k] = x0 k clocks earlier)
-reg [7:0] x0d [1:21];
+reg [7:0] x0d [1:21+ZDL];
 always @(posedge clk) begin
     x0d[1] <= x0;
-    for (i=2; i<=21; i=i+1)
+    for (i=2; i<=21+ZDL; i=i+1)
         x0d[i] <= x0d[i-1];
 end
 
@@ -193,8 +198,8 @@ always @(posedge clk) begin
     for (i=2; i<=13; i=i+1)
         scd[i] <= scd[i-1];
 end
-wire signed [9:0] sin_z = scd[13][19:10];
-wire signed [9:0] cos_z = scd[13][9:0];
+wire signed [9:0] sin_z0 = scd[13][19:10];
+wire signed [9:0] cos_z0 = scd[13][9:0];
 
 // low-pass: box filters 6, 7, 8 (gain 336), running sums
 reg signed [10:0] pI_d [1:6];
@@ -232,8 +237,20 @@ always @(posedge clk) begin
     b8I <= flush_b8 ? 20'sd0 : b8I + b7I - b7I_d[8];
     b8Q <= flush_b8 ? 20'sd0 : b8Q + b7Q - b7Q_d[8];
 end
-wire signed [15:0] zI = b8I[19:4];
-wire signed [15:0] zQ = b8Q[19:4];
+wire signed [15:0] zI0 = b8I[19:4];  // Z stage (burst measurement)
+wire signed [15:0] zQ0 = b8Q[19:4];
+
+// Z, sin/cos delayed by ZDL for the demodulation of the active video
+reg [51:0] zdl [1:ZDL];
+always @(posedge clk) begin
+    zdl[1] <= {zI0, zQ0, scd[13]};
+    for (i=2; i<=ZDL; i=i+1)
+        zdl[i] <= zdl[i-1];
+end
+wire signed [15:0] zI = zdl[ZDL][51:36];
+wire signed [15:0] zQ = zdl[ZDL][35:20];
+wire signed [9:0] sin_z = zdl[ZDL][19:10];
+wire signed [9:0] cos_z = zdl[ZDL][9:0];
 
 // ---------------------------------------------------------------------------
 // burst gate at the Z stage, burst accumulation
@@ -248,8 +265,8 @@ always @(posedge clk) begin
     gate_z_prev <= gate_z;
     fsm_start <= 1'b0;
     if (gate_z) begin
-        accI <= accI + zI;
-        accQ <= accQ + zQ;
+        accI <= accI + zI0;
+        accQ <= accQ + zQ0;
     end else if (gate_z_prev) begin
         fsm_start <= 1'b1;
     end
@@ -279,8 +296,8 @@ reg [41:0] rem;
 reg [19:0] rec;
 reg [5:0] div_i;
 reg signed [23:0] ar, ai;
-reg signed [17:0] w_re_n, w_im_n, w_re, w_im;
-reg kill_n, kill;
+reg signed [17:0] w_re, w_im;
+reg kill;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
 reg signed [23:0] dq;
 reg corr_sat;
@@ -308,6 +325,9 @@ endfunction
 localparam signed [21:0] CORR_MAX = 22'sd2000000;
 wire signed [25:0] corr_next = corr + dq + (dq >>> 1);
 reg [3:0] nob_cnt;      // consecutive lines without a valid burst
+reg Rr2;                // NTSC: reference = 2Z (second step)
+wire meas_w = ((t1 - mres) < 0);    // step 4: Im(Z * conj(P)) < 0
+wire s_new = pal ? ((vb & pv) ? meas_w : ~s_cur) : 1'b1;
 
 // vsync leading edge (field counters)
 wire vs_fall = vs0_prev & ~vs0;
@@ -333,79 +353,91 @@ always @(posedge clk) begin
             3: t1 <= mres;          // Zi*Pr
             4: begin
                 // Im(Z * conj(P)) = Zi*Pr - Zr*Pi; < 0: +V line (PAL)
-                s_meas <= ((t1 - mres) < 0);
+                s_meas <= meas_w;
                 if (vb & pv) begin
                     if (s_meas_pv) begin
-                        if (((t1 - mres) < 0) != s_meas_prev)
+                        if (meas_w != s_meas_prev)
                             alt_cnt <= (alt_cnt != 10'h3ff) ? alt_cnt + 1'b1 : alt_cnt;
                         else
                             bad_cnt <= (bad_cnt != 10'h3ff) ? bad_cnt + 1'b1 : bad_cnt;
                     end
-                    s_meas_prev <= ((t1 - mres) < 0);
+                    s_meas_prev <= meas_w;
                     s_meas_pv <= 1'b1;
-                    s_cur <= pal ? ((t1 - mres) < 0) : 1'b1;
                 end else begin
                     s_meas_pv <= 1'b0;
-                    s_cur <= pal ? ~s_cur : 1'b1;
                 end
-                if (vb & pv) begin
-                    Rr <= Zr + Pr;
-                    Ri <= Zi + Pi;
+                s_cur <= s_new;
+                if (vb) begin
+                    // reference of this line from its own burst, rotated
+                    // onto the -U axis (PAL: +-45 degrees); same magnitude
+                    // as Z(n) + Z(n-1) (NTSC: 2Z, PAL: sqrt(2)Z)
+                    if (!pal) begin
+                        Rr <= {Zr[17], Zr};
+                        Ri <= {Zi[17], Zi};
+                        Rr2 <= 1'b1;
+                    end else if (s_new) begin
+                        Rr <= Zr - Zi;      // Z * (1 + j)
+                        Ri <= Zr + Zi;
+                        Rr2 <= 1'b0;
+                    end else begin
+                        Rr <= Zr + Zi;      // Z * (1 - j)
+                        Ri <= Zi - Zr;
+                        Rr2 <= 1'b0;
+                    end
+                    Pr <= Zr;
+                    Pi <= Zi;
+                    pv <= 1'b1;
+                    nob_cnt <= 4'h0;
                 end else begin
-                    // no usable pair: keep the current state; colour off
+                    // no burst: keep the current reference; colour off
                     // after 8 lines without a burst (not for the few
                     // lines of the vertical blanking)
-                    if (!vb) begin
-                        if (nob_cnt != 4'hf)
-                            nob_cnt <= nob_cnt + 1'b1;
-                        if (nob_cnt >= 4'd7)
-                            kill_n <= 1'b1;
-                    end
-                    if (vb) begin
-                        Pr <= Zr;
-                        Pi <= Zi;
-                        pv <= 1'b1;
-                    end else begin
-                        pv <= 1'b0;
-                    end
+                    if (nob_cnt != 4'hf)
+                        nob_cnt <= nob_cnt + 1'b1;
+                    if (nob_cnt >= 4'd7)
+                        kill <= 1'b1;
+                    pv <= 1'b0;
                     st <= 7'd0;
                 end
             end
-            5: begin ma <= Ri; mb <= RPr; nob_cnt <= 4'h0; end
-            6: begin ma <= Rr; mb <= RPi; end
-            7: begin
+            5: begin
+                if (Rr2) begin      // NTSC: 2Z
+                    Rr <= Rr <<< 1;
+                    Ri <= Ri <<< 1;
+                end
+            end
+            6: begin ma <= Ri; mb <= RPr; end
+            7: begin ma <= Rr; mb <= RPi; end
+            8: begin
                 t1 <= mres;         // Ri*RPr
-                // r low-pass over lines (1/4)
+                // burst level for the status: r low-pass over lines (1/4)
                 Fr <= Fr + ((Rr - Fr) >>> 2);
                 Fi <= Fi + ((Ri - Fi) >>> 2);
             end
-            8: begin
+            9: begin
                 dIm <= t1 - mres;   // Im(r * conj(rp))
-                ma <= Fr; mb <= Fr;
+                ma <= Rr; mb <= Rr;
             end
-            9: begin ma <= Fi; mb <= Fi; end
-            10: t1 <= mres;
-            11: begin
+            10: begin ma <= Ri; mb <= Ri; end
+            11: t1 <= mres;
+            12: begin
                 m <= (t1 + mres) > 48'sh7fffffff ? 32'h7fffffff : t1[31:0] + mres[31:0];
                 rem <= 42'h0;
                 rec <= 20'h0;
                 div_i <= 6'd40;
             end
-            12: begin
-                kill_n <= (m < KILL_THOLD);
+            13: begin
                 if (m < KILL_THOLD) begin
-                    w_re_n <= 18'h0;
-                    w_im_n <= 18'h0;
-                    Pr <= Zr;
-                    Pi <= Zi;
-                    pv <= 1'b1;
+                    kill <= 1'b1;
+                    w_re <= 18'h0;
+                    w_im <= 18'h0;
                     RPr <= Rr;
                     RPi <= Ri;
                     rpv <= 1'b1;
                     st <= 7'd0;
                 end
             end
-            13: begin
+            14: begin
                 // rec = 2^40 / m, restoring division (one bit per clock)
                 if ({rem[40:0], (div_i == 6'd40)} >= {10'h0, m}) begin
                     rem <= {rem[40:0], (div_i == 6'd40)} - {10'h0, m};
@@ -419,19 +451,19 @@ always @(posedge clk) begin
                     st <= st;
                 end
             end
-            14: begin
+            15: begin
                 // dq = Im(r*conj(rp)) / |r|^2 (x2^16, ~radians per line)
                 ma <= sat24(dIm >>> 8);
                 mb <= {4'h0, rec};
             end
-            15: begin ma <= Fr; mb <= {4'h0, rec}; end
-            16: begin
-                dq <= sat24(mres >>> 16);
-                ma <= Fi; mb <= {4'h0, rec};
-            end
+            16: begin ma <= Rr; mb <= {4'h0, rec}; end
             17: begin
-                ar <= sat24(mres >>> 12);       // conj(F) * rec
-                // frequency loop
+                dq <= sat24(mres >>> 16);
+                ma <= Ri; mb <= {4'h0, rec};
+            end
+            18: begin
+                ar <= sat24(mres >>> 12);       // conj(r) * rec
+                // frequency loop (the line to line rotation of r)
                 if (rpv & ~loop_off) begin
                     if (corr_next > CORR_MAX) begin
                         corr <= CORR_MAX;
@@ -445,20 +477,19 @@ always @(posedge clk) begin
                     end
                 end
             end
-            18: begin
+            19: begin
                 ai <= sat24(-(mres >>> 12));
             end
-            // w = a * hc (x1/256)
-            19: begin ma <= ar; mb <= hc_re; end
-            20: begin ma <= ai; mb <= hc_im; end
-            21: begin t1 <= mres; ma <= ar; mb <= hc_im; end
-            22: begin w_re_n <= sat18((t1 - mres) >>> 8); ma <= ai; mb <= hc_re; end
-            23: t1 <= mres;
-            24: begin
-                w_im_n <= sat18((t1 + mres) >>> 8);
-                Pr <= Zr;
-                Pi <= Zi;
-                pv <= 1'b1;
+            // w = a * hc (x1/256), used from now on: the delayed chroma is
+            // still before the active video of this line
+            20: begin ma <= ar; mb <= hc_re; end
+            21: begin ma <= ai; mb <= hc_im; end
+            22: begin t1 <= mres; ma <= ar; mb <= hc_im; end
+            23: begin w_re <= sat18((t1 - mres) >>> 8); ma <= ai; mb <= hc_re; end
+            24: t1 <= mres;
+            25: begin
+                w_im <= sat18((t1 + mres) >>> 8);
+                kill <= 1'b0;
                 RPr <= Rr;
                 RPi <= Ri;
                 rpv <= 1'b1;
@@ -468,12 +499,6 @@ always @(posedge clk) begin
         endcase
     end
 
-    // new reference from the next line on (burst gate start)
-    if (gate_z & ~gate_z_prev) begin
-        w_re <= w_re_n;
-        w_im <= w_im_n;
-        kill <= kill_n;
-    end
 end
 
 function signed [17:0] sat18;
@@ -535,9 +560,9 @@ end
 reg signed [10:0] yA;
 always @(posedge clk) begin
     if (svideo | nonotch | kill)
-        yA <= $signed({3'b0, x0d[21]}) - $signed({3'b0, blank});
+        yA <= $signed({3'b0, x0d[21+ZDL]}) - $signed({3'b0, blank});
     else
-        yA <= $signed({3'b0, x0d[21]}) - $signed({3'b0, blank}) - rmod;
+        yA <= $signed({3'b0, x0d[21+ZDL]}) - $signed({3'b0, blank}) - rmod;
     UA <= kill ? 11'sd0 : U3;
     VA <= kill ? 11'sd0 : V3;
 end
@@ -608,7 +633,7 @@ integer j;
 initial begin
     ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0;
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
-    w_re = 0; w_im = 0; w_re_n = 0; w_im_n = 0; kill = 1; kill_n = 1;
+    w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0;
     bl_acc = 0; bl_line = 0; accI = 0; accQ = 0; gate_zd = 0;
@@ -618,7 +643,8 @@ initial begin
     for (j=1; j<=7; j=j+1) begin b6I_d[j] = 0; b6Q_d[j] = 0; end
     for (j=1; j<=8; j=j+1) begin b7I_d[j] = 0; b7Q_d[j] = 0; cw[j] = 0; end
     for (j=1; j<=13; j=j+1) scd[j] = 0;
-    for (j=1; j<=21; j=j+1) x0d[j] = 0;
+    for (j=1; j<=21+ZDL; j=j+1) x0d[j] = 0;
+    for (j=1; j<=ZDL; j=j+1) zdl[j] = 0;
 end
 
 endmodule
