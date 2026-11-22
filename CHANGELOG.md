@@ -1,6 +1,21 @@
 Changelog
 =========
 
+CVBS decoder 0.7
+----------------
+
+### Fixed
+- Edge color sup. caused dark bands at the edges between colours with very
+  different luma (e.g. white -> blue), which no Chroma delay value could
+  fix. It is now always off with S-Video (no cross-colour there).
+- Faint horizontal lines on saturated colours (e.g. cyan): the colour
+  reference of each line came from a 32-sample burst measurement, whose
+  noise changed the saturation / hue line by line. The burst is measured
+  over 48 samples (same centre, Burst position unchanged), and the colour
+  gain follows the burst amplitude low-passed over lines; the phase is still
+  taken from each line (TVP7002 clock jitter).
+- Diagnostics: the burst level (B) reads ~1.5x higher (longer gate).
+
 CVBS decoder 0.6
 ----------------
 

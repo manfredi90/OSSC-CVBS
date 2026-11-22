@@ -27,7 +27,7 @@ def cfg_for(std, svideo=False, bstart=163, bright=0, nonotch=False, loop_off=Fal
 
 
 def hc_for(pal, sat=1.0, hue_deg=0.0, lg=51):
-    k = 77.3 if pal else 102.0
+    k = 116.0 if pal else 153.0
     re = int(round(k * sat * math.cos(math.radians(-hue_deg))))
     im = int(round(k * sat * math.sin(math.radians(-hue_deg))))
     return (re & 0x3ff) | ((im & 0x3ff) << 16) | ((lg - 32) << 26)
@@ -208,6 +208,8 @@ def main():
     print('WORST %.1f' % worst)
     # luma stability of the white bar over the lines (bands)
     wl = [measure(R, G, B, starts, N, pal, ln)[0][1] for ln in range(30, len(starts) - 1)]
+    cy = np.array([measure(R, G, B, starts, N, pal, ln)[2][:3] for ln in range(30, len(starts) - 1)])
+    print('CYAN line-to-line: std R %.2f G %.2f B %.2f  p-p B %.1f' % (cy[:, 0].std(), cy[:, 1].std(), cy[:, 2].std(), np.ptp(cy[:, 2])))
     print('WHITE G over lines: min %.1f max %.1f p-p %.1f' % (min(wl), max(wl), max(wl) - min(wl)))
     # luma / chroma alignment at the bar edges (positive: chroma later)
     ln = len(starts) - 3
