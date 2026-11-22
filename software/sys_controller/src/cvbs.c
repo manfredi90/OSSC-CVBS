@@ -194,7 +194,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     cv_std_t std = cur_std();
     int pal = (std == CV_STD_PAL) || (std == CV_STD_PAL60) || (std == CV_STD_PALM) || (std == CV_STD_PALN);
     uint64_t fsc_x64, fs_x64;
-    int32_t c, s, k, re, im, lg, white_x10, hue, bright, cd;
+    int32_t c, s, k, re, im, lg, white_x10, hue, bright;
     int sat = cc->cv_sat * 5;
 
     switch (std) {
@@ -235,13 +235,8 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     else if (lg > 95)
         lg = 95;
 
-    cd = (int)cc->cv_cdelay - SIGNED_NUMVAL_ZERO;
-    if (cd < -CV_CDELAY_RANGE)
-        cd = -CV_CDELAY_RANGE;
-    else if (cd > CV_CDELAY_RANGE)
-        cd = CV_CDELAY_RANGE;
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
-          ((uint32_t)(cd + 4) << 10) | ((uint32_t)(cc->cv_sharp & 3) << 14);
+          ((uint32_t)(cc->cv_sharp & 3) << 14);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     *flags = cv_mode ? (1 |

@@ -46,9 +46,8 @@ module cvbs_decoder #(
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
-    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [13:10] chroma
-    // delay + 4 (0-8: -4..+4 samples, + = chroma later), [15:14] sharpness
-    // bits 1:0 (bit 2 = cfg[6])
+    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [15:14]
+    // sharpness bits 1:0 (bit 2 = cfg[6])
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -64,7 +63,7 @@ module cvbs_decoder #(
 localparam ZDL = 64;            // chroma / luma delay after the Z stage: the
                                 // reference of a line is computed from its own
                                 // burst before its active video is demodulated
-localparam LAT = 44 + ZDL;      // inputs -> outputs (clocks)
+localparam LAT = 40 + ZDL;      // inputs -> outputs (clocks)
 localparam GATE_LEN = 48;       // burst gate length (samples): bstart - 8 .. bstart + 39
 localparam ZD = 22;             // h counter -> Z stage delay
 
@@ -80,7 +79,6 @@ wire signed [5:0] bright = cfg[21:16];
 wire signed [9:0] hc_re = hc[9:0];
 wire signed [9:0] hc_im = hc[25:16];
 wire [6:0] luma_gain = {1'b0, hc[31:26]} + 7'd32;   // x1/32 (32-95)
-wire [3:0] cdel = hc[13:10];        // chroma delay + 4
 wire [2:0] sharp = {cfg[6], hc[15:14]};
 
 // ---------------------------------------------------------------------------
@@ -135,7 +133,12 @@ end
 // horizontal bands.
 // burst gate: 48 samples (bstart is the start of the former 32-sample gate,
 // the window is centred on the same point)
-wire gate_h = (h + 12'd8 >= {4'h0, bstart}) && (h + 12'd8 < {4'h0, bstart} + GATE_LEN);
+reg [8:0] gate_lo, gate_hi;
+always @(posedge clk) begin
+    gate_lo <= {1'b0, bstart} - 9'd8;
+    gate_hi <= {1'b0, bstart} + 9'd40;
+end
+wire gate_h = (h >= {3'h0, gate_lo}) && (h < {3'h0, gate_hi});
 wire gate_bl = (h >= {4'h0, bstart} + 12'd3) && (h < {4'h0, bstart} + 12'd33);
 reg gate_bl_prev;
 reg [9:0] bx_a, bx_b;
@@ -331,10 +334,10 @@ reg vb;                             // current burst valid
 reg signed [47:0] t1;
 reg signed [47:0] dIm;
 reg [31:0] m;
-reg [31:0] mf;      // |r|^2 low-pass over lines (ACC)
+reg [23:0] mf;      // |r|^2 / 256 low-pass over lines (ACC)
 reg [17:0] g;       // amplitude correction (x2^16)
-wire signed [32:0] mf_diff = $signed({1'b0, m}) - $signed({1'b0, mf});
-wire signed [32:0] mf_step = mf_diff >>> 3;
+wire signed [24:0] mf_diff = $signed({1'b0, m[31:8]}) - $signed({1'b0, mf});
+wire signed [24:0] mf_step = mf_diff >>> 3;
 reg [41:0] rem;
 reg [19:0] rec;
 reg [5:0] div_i;
@@ -476,11 +479,11 @@ always @(posedge clk) begin
                 // ACC: the gain follows |r|^2 low-passed over lines (1/8),
                 // the noise of the burst amplitude of a single line no
                 // longer shows as line to line saturation changes. Large
-                // changes (new source): follow at once.
-                if ((mf == 32'h0) || ((m >> 2) > mf) || (m < (mf >> 2)))
-                    mf <= m;
+                // changes settle in a few lines (and g is limited).
+                if (mf == 24'h0)
+                    mf <= m[31:8];
                 else
-                    mf <= mf + mf_step[31:0];
+                    mf <= mf + mf_step[23:0];
                 if (m < KILL_THOLD) begin
                     kill <= 1'b1;
                     w_re <= 18'h0;
@@ -493,8 +496,8 @@ always @(posedge clk) begin
             end
             14: begin
                 // rec = 2^40 / mf, restoring division (one bit per clock)
-                if ({rem[40:0], (div_i == 6'd40)} >= {10'h0, mf}) begin
-                    rem <= {rem[40:0], (div_i == 6'd40)} - {10'h0, mf};
+                if ({rem[40:0], (div_i == 6'd40)} >= {10'h0, mf, 8'h0}) begin
+                    rem <= {rem[40:0], (div_i == 6'd40)} - {10'h0, mf, 8'h0};
                     rec <= {rec[18:0], 1'b1};
                 end else begin
                     rem <= {rem[40:0], (div_i == 6'd40)};
@@ -540,9 +543,9 @@ always @(posedge clk) begin
             // ~ conj(r) / (|r| sqrt(mf)): the phase of this line, the gain
             // of the low-passed amplitude (first order)
             20: begin
-                if (mres[47:16] > 32'd131072)               // m/mf > 2
+                if (|mres[47:33])                           // m/mf >= 2
                     g <= 18'd32768;
-                else if (mres[47:16] < 32'd32768)           // m/mf < 0.5
+                else if (~|mres[47:31])                     // m/mf < 0.5
                     g <= 18'd81920;
                 else
                     g <= 18'd98304 - mres[34:17];
@@ -659,49 +662,35 @@ end
 // the subcarrier, which is demodulated as colour fringes (cross-colour, e.g.
 // blue / purple at black / white edges). The chroma is attenuated around the
 // edges: edge strength e = |Y(n) - Y(n-4)|, envelope decaying by 6 per
-// sample, chroma delayed by 12 (luma: 4 in stage S, then 8 + 1) so that the
-// attenuation also covers the fringe before the edge. Chroma delay: the luma
-// is taken from tap 9 - d of its delay line (d = -4..+4).
-reg signed [10:0] yE_d [1:13];
-reg signed [10:0] uE_d [1:12];
-reg signed [10:0] vE_d [1:12];
+// sample, chroma delayed by 8 (luma: 4 in stage S, then 5 + 1) so that the
+// attenuation also covers the fringe before the edge. Off with S-Video (no
+// cross-colour; dark bands at edges between colours of different luma).
+reg signed [10:0] yE_d [1:5];
+reg signed [10:0] uE_d [1:8];
+reg signed [10:0] vE_d [1:8];
 reg [10:0] e_env;
 reg [8:0] e_att;
 reg signed [10:0] yE, UE, VE;
-wire signed [11:0] e_diff = yS - yE_d[4];
+wire signed [11:0] e_diff = yA - yAd[4];
 wire [10:0] e_abs = e_diff[11] ? -e_diff[10:0] : e_diff[10:0];
 wire [10:0] e_dec = (e_env > 11'd6) ? e_env - 11'd6 : 11'd0;
 wire [13:0] e_scaled = {3'b0, e_env} << edge_sup;   // x2 / x4 / x8
 wire signed [9:0] e_gain = 10'sd256 - $signed({1'b0, e_att});
-wire signed [20:0] uE_p = uE_d[12] * e_gain;
-wire signed [20:0] vE_p = vE_d[12] * e_gain;
-reg signed [10:0] yE_sel;
-always @(*) begin
-    case (cdel)
-    4'd0: yE_sel = yE_d[13];
-    4'd1: yE_sel = yE_d[12];
-    4'd2: yE_sel = yE_d[11];
-    4'd3: yE_sel = yE_d[10];
-    4'd5: yE_sel = yE_d[8];
-    4'd6: yE_sel = yE_d[7];
-    4'd7: yE_sel = yE_d[6];
-    4'd8: yE_sel = yE_d[5];
-    default: yE_sel = yE_d[9];
-    endcase
-end
+wire signed [20:0] uE_p = uE_d[8] * e_gain;
+wire signed [20:0] vE_p = vE_d[8] * e_gain;
 always @(posedge clk) begin
     yE_d[1] <= yS;
     uE_d[1] <= UA;
     vE_d[1] <= VA;
-    for (i=2; i<=13; i=i+1)
+    for (i=2; i<=5; i=i+1)
         yE_d[i] <= yE_d[i-1];
-    for (i=2; i<=12; i=i+1) begin
+    for (i=2; i<=8; i=i+1) begin
         uE_d[i] <= uE_d[i-1];
         vE_d[i] <= vE_d[i-1];
     end
     e_env <= (e_abs > e_dec) ? e_abs : e_dec;
     e_att <= ((edge_sup == 2'h0) | svideo) ? 9'h0 : ((e_scaled > 14'd256) ? 9'd256 : e_scaled[8:0]);
-    yE <= yE_sel;
+    yE <= yE_d[5];
     UE <= uE_p >>> 8;
     VE <= vE_p >>> 8;
 end
@@ -796,8 +785,8 @@ initial begin
     for (j=1; j<=26+ZDL; j=j+1) x0d[j] = 0;
     for (j=1; j<=8; j=j+1) cb[j] = 0;
     c_bp2 = 0; e_env = 0; e_att = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
-    for (j=1; j<=13; j=j+1) yE_d[j] = 0;
-    for (j=1; j<=12; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
+    for (j=1; j<=5; j=j+1) yE_d[j] = 0;
+    for (j=1; j<=8; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
     for (j=1; j<=6; j=j+1) yAd[j] = 0;
     yS = 0;
     for (j=1; j<=ZDL; j=j+1) zdl[j] = 0;

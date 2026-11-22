@@ -16,6 +16,11 @@ CVBS decoder 0.7
   taken from each line (TVP7002 clock jitter).
 - Diagnostics: the burst level (B) reads ~1.5x higher (longer gate).
 
+### Removed
+- Chroma delay (0.6): the colour offsets it was meant for came from Edge
+  color sup., and the default alignment is already right; the logic was
+  needed for the changes above (the FPGA is full).
+
 CVBS decoder 0.6
 ----------------
 

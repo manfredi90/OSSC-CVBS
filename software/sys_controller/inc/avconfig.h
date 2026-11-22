@@ -201,7 +201,7 @@ typedef struct {
     alt_u8 cv_line2x;       // test option: 1 = Line2x output (31kHz, HDMI TVs), never kept (0 at every boot)
     /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
     alt_u8 cv_sharp;        // luma sharpness 0-7 (0 = off)
-    alt_u8 cv_cdelay;       // chroma delay, samples (SIGNED_NUMVAL_ZERO = 0, +-CV_CDELAY_RANGE)
+    alt_u8 cv_cdelay;       // unused (0.6 chroma delay, removed in 0.7: the FPGA had no room)
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);
