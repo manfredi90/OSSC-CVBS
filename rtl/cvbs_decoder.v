@@ -344,12 +344,11 @@ always @(posedge clk)
     mres <= ma * mb;
 
 reg signed [17:0] Zr, Zi, Pr, Pi;   // current / previous valid burst
-reg signed [18:0] Rr, Ri, RPr, RPi; // r = Z + P, previous r
+reg signed [18:0] Rr, Ri;           // reference of the line
 reg signed [18:0] Fr, Fi;           // low-pass filtered r
-reg pv, rpv;                        // P / RP valid
+reg pv;                             // P valid
 reg vb;                             // current burst valid
 reg signed [47:0] t1;
-reg signed [47:0] dIm;
 reg [31:0] m;
 reg [41:0] rem;
 reg [19:0] rec;
@@ -365,7 +364,6 @@ wire signed [17:0] wa_re_s = wa_re[29:12];
 wire signed [17:0] wa_im_s = wa_im[29:12];
 reg kill;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
-reg signed [23:0] dq;
 reg [9:0] alt_cnt, bad_cnt;
 reg alt_ok;
 
@@ -480,16 +478,13 @@ always @(posedge clk) begin
                     Ri <= Ri <<< 1;
                 end
             end
-            6: begin ma <= Ri; mb <= RPr; end
-            7: begin ma <= Rr; mb <= RPi; end
+            6, 7: ;  // (were the frequency loop products)
             8: begin
-                t1 <= mres;         // Ri*RPr
                 // burst level for the status: r low-pass over lines (1/4)
                 Fr <= Fr + ((Rr - Fr) >>> 2);
                 Fi <= Fi + ((Ri - Fi) >>> 2);
             end
             9: begin
-                dIm <= t1 - mres;   // Im(r * conj(rp))
                 ma <= Rr; mb <= Rr;
             end
             10: begin ma <= Ri; mb <= Ri; end
@@ -511,9 +506,6 @@ always @(posedge clk) begin
                     st_im <= 22'sd0;
                     wi0_re <= {w_re[17], w_re, 12'h0};
                     wi0_im <= {w_im[17], w_im, 12'h0};
-                    RPr <= Rr;
-                    RPi <= Ri;
-                    rpv <= 1'b1;
                     st <= 7'd0;
                 end
             end
@@ -531,14 +523,9 @@ always @(posedge clk) begin
                     st <= st;
                 end
             end
-            15: begin
-                // dq = Im(r*conj(rp)) / |r|^2 (x2^16, ~radians per line)
-                ma <= sat24(dIm >>> 8);
-                mb <= {4'h0, rec};
-            end
+            15: ;  // (was the frequency loop)
             16: begin ma <= Rr; mb <= {4'h0, rec}; end
             17: begin
-                dq <= sat24(mres >>> 16);
                 ma <= Ri; mb <= {4'h0, rec};
             end
             18: begin
@@ -556,9 +543,6 @@ always @(posedge clk) begin
             25: begin
                 w_im <= sat18((t1 + mres) >>> 8);
                 kill <= 1'b0;
-                RPr <= Rr;
-                RPi <= Ri;
-                rpv <= 1'b1;
             end
             // ramp of the previous line's reference towards this one:
             // step = (w - wp) / 1716 (x2^12: x611/2^8), start value at
@@ -829,8 +813,8 @@ end
 // power-up values (also for simulation: the running sums need a defined start)
 integer j;
 initial begin
-    ph = 0; st = 0; pv = 0; rpv = 0; vb = 0;
-    Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
+    ph = 0; st = 0; pv = 0; vb = 0;
+    Fr = 0; Fi = 0; Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0; dg_sU = 0; dg_sV = 0; dg_rd = 0;
     for (j=0; j<256; j=j+1) dg_mem[j] = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
