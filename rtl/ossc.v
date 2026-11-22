@@ -529,7 +529,9 @@ sys sys_inst(
     .i2c_opencores_0_export_spi_miso_pad_i  (1'b0),
     .pio_0_sys_ctrl_out_export              (sys_ctrl),
     .pio_1_controls_in_export               (controls),
-    .sc_config_0_sc_if_fe_status_i          ({ds_fperiod_lo, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
+    // read: tied off (logic for the decoder)
+    .sc_config_0_sc_if_fe_status_i          ({10'h0, 8'h0, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),

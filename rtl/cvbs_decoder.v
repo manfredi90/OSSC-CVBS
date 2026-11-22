@@ -664,18 +664,18 @@ end
 // diagnostic view: U / V minus their average over the lines (per group of 8
 // samples, low-pass 1/8 over lines), x8, on mid grey. A steady colour shows
 // as flat grey whatever it is; line to line colour changes show as stripes.
-(* ramstyle = "M9K" *) reg [35:0] dg_mem [0:255];
-reg [35:0] dg_rd;
+(* ramstyle = "M9K" *) reg [27:0] dg_mem [0:255];
+reg [27:0] dg_rd;
 reg signed [13:0] dg_sU, dg_sV;
 wire [7:0] dg_bin = h[10:3];
-wire signed [17:0] dg_aU = dg_rd[35:18];
-wire signed [17:0] dg_aV = dg_rd[17:0];
+wire signed [13:0] dg_aU = dg_rd[27:14];     // average x8
+wire signed [13:0] dg_aV = dg_rd[13:0];
 wire signed [13:0] dg_sU_n = dg_sU + UE;
 wire signed [13:0] dg_sV_n = dg_sV + VE;
-wire signed [17:0] dg_nU = dg_aU + (($signed({{4{dg_sU_n[13]}}, dg_sU_n}) - dg_aU) >>> 3);
-wire signed [17:0] dg_nV = dg_aV + (($signed({{4{dg_sV_n[13]}}, dg_sV_n}) - dg_aV) >>> 3);
-wire signed [17:0] dg_dU = $signed({{4{UE[10]}}, UE, 3'b0}) - dg_aU;
-wire signed [17:0] dg_dV = $signed({{4{VE[10]}}, VE, 3'b0}) - dg_aV;
+wire signed [13:0] dg_nU = dg_aU + ((dg_sU_n - dg_aU) >>> 3);
+wire signed [13:0] dg_nV = dg_aV + ((dg_sV_n - dg_aV) >>> 3);
+wire signed [13:0] dg_dU = {UE, 3'b0} - dg_aU;     // deviation x8
+wire signed [13:0] dg_dV = {VE, 3'b0} - dg_aV;
 always @(posedge clk) begin
     dg_rd <= dg_mem[dg_bin];
     if (h[2:0] == 3'd7) begin
@@ -687,8 +687,11 @@ always @(posedge clk) begin
         dg_sV <= dg_sV_n;
     end
 end
-wire signed [10:0] UEx = diag ? sat11({{17{dg_dU[17]}}, dg_dU}) : UE;
-wire signed [10:0] VEx = diag ? sat11({{17{dg_dV[17]}}, dg_dV}) : VE;
+// x8 deviation limited to +-511 (output +-1.1 to +-2 x 511: clipped anyway)
+wire signed [10:0] dg_U = (dg_dU[13:9] == 5'b00000 || dg_dU[13:9] == 5'b11111) ? dg_dU[10:0] : (dg_dU[13] ? -11'sd512 : 11'sd511);
+wire signed [10:0] dg_V = (dg_dV[13:9] == 5'b00000 || dg_dV[13:9] == 5'b11111) ? dg_dV[10:0] : (dg_dV[13] ? -11'sd512 : 11'sd511);
+wire signed [10:0] UEx = diag ? dg_U : UE;
+wire signed [10:0] VEx = diag ? dg_V : VE;
 
 // stage B: luma gain (white 160 -> 255), brightness, YUV -> RGB products
 wire signed [18:0] yB_p = yE * $signed({1'b0, luma_gain});
