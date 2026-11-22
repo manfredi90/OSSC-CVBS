@@ -129,7 +129,6 @@ static void ds_width_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d%%"
 static void signed_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void cv_pct5_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*5); }
 static void cv_pct2_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*2); }
-static void cv_sharp_disp(alt_u8 v) { if (v) sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", (unsigned)v); else strncpy(menu_row2, "Off", LCD_ROW_LEN+1); }
 static void cv_deg_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d deg", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void cv_gain_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u (%u.%02uVpp)", (unsigned)v, (unsigned)(1000/(5+v))/100, (unsigned)((1000/(5+v))%100)); }
 static void lt_disp(alt_u8 v) { strncpy(menu_row2, lt_desc[v], LCD_ROW_LEN+1); }
@@ -295,13 +294,12 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
     { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
     { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
-    { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
     { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
     { "ADC gain",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcgain,    OPT_NOWRAP, 0, 15, cv_gain_disp } } },
     { "ADC offset",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcofs,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE, SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE, signed_disp } } },
     { "Burst position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bgate,      OPT_NOWRAP, CV_BGATE_MIN, CV_BGATE_MAX, value_disp } } },
     { "Clamp position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_clamp,      OPT_NOWRAP, CV_CLAMP_MIN, CV_CLAMP_MAX, value_disp } } },
-    { "Subcarrier loop",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_loop_off,  OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
+    { "Ref. interp.",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_loop_off,  OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
     { "Sample clock",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_xtal,      OPT_WRAP,   SETTING_ITEM(cv_xtal_desc) } } },
     { "Diag. view",                             OPT_AVCONFIG_SELECTION, { .sel = { &cv_diagview,     OPT_WRAP,   SETTING_ITEM(cv_diag_desc) } } },
     { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },

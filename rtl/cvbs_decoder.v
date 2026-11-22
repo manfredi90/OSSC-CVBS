@@ -25,8 +25,8 @@
 // Luma: composite minus the remodulated chroma (an adaptive notch at the
 // subcarrier, removed when the colour killer is active).
 //
-// The active video is demodulated ZDL clocks after the Z stage, so that w is
-// ready for the line whose burst it comes from.
+// The active video is demodulated one line later (line memories), with the
+// reference interpolated between the bursts of its line and of the next one.
 //
 
 module cvbs_decoder #(
@@ -40,14 +40,14 @@ module cvbs_decoder #(
     input VS_i,                 // active low
     input [SIDE_W-1:0] side_i,  // other signals delayed with the video
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
-    // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] frequency loop off,
-    // [6] sharpness bit 2, [7] diagnostic view (chroma deviation x8),
+    // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] reference not
+    // interpolated along the line (test),
+    // [7] diagnostic view (chroma deviation x8),
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
-    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [15:14]
-    // sharpness bits 1:0 (bit 2 = cfg[6])
+    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -56,14 +56,18 @@ module cvbs_decoder #(
     output [SIDE_W-1:0] side_o,
     // [7:0] burst level, [15:8] blank level, [23:16] peak code (last field),
     // [24] colour killer, [25] PAL alternation seen, [26] frequency loop at
-    // its limit, [31:27] frequency correction (signed, inc/16384)
+    // (0), [31:27] (0)
     output reg [31:0] status
 );
 
-localparam ZDL = 64;            // chroma / luma delay after the Z stage: the
-                                // reference of a line is computed from its own
-                                // burst before its active video is demodulated
-localparam LAT = 40 + ZDL;      // inputs -> outputs (clocks)
+// The active video is delayed by one line (line memories after the Z stage):
+// when a line is demodulated, the bursts of that line and of the next one are
+// both known, and the colour reference is interpolated between them along the
+// line. The line-locked sampling clock (TVP7002 H-PLL) changes its frequency
+// slightly at every hsync, so the subcarrier phase drifts along the line by a
+// different amount on each line; the reference follows that drift. The
+// picture comes out one line lower (the syncs are not delayed).
+localparam LAT = 41;            // inputs -> outputs (clocks)
 localparam GATE_LEN = 32;       // burst gate length (samples)
 localparam ZD = 22;             // h counter -> Z stage delay
 
@@ -72,7 +76,7 @@ wire svideo   = cfg[1];
 wire pal      = cfg[2];
 wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
-wire loop_off = cfg[5];
+wire interp_off = cfg[5];      // test: reference not interpolated along the line
 wire diag     = cfg[7];
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
@@ -80,7 +84,6 @@ wire signed [5:0] bright = cfg[21:16];
 wire signed [9:0] hc_re = hc[9:0];
 wire signed [9:0] hc_im = hc[25:16];
 wire [6:0] luma_gain = {1'b0, hc[31:26]} + 7'd32;   // x1/32 (32-95)
-wire [2:0] sharp = {cfg[6], hc[15:14]};
 
 // ---------------------------------------------------------------------------
 // side signals and bypass path
@@ -116,10 +119,10 @@ always @(posedge clk) begin
 end
 
 // x0 delayed (x0d[k] = x0 k clocks earlier)
-reg [7:0] x0d [1:26+ZDL];
+reg [7:0] x0d [1:26];
 always @(posedge clk) begin
     x0d[1] <= x0;
-    for (i=2; i<=26+ZDL; i=i+1)
+    for (i=2; i<=26; i=i+1)
         x0d[i] <= x0d[i-1];
 end
 
@@ -197,8 +200,8 @@ always @(posedge clk)
 // ---------------------------------------------------------------------------
 // DDS and sin/cos ROM (10-bit signed, +-511)
 reg [31:0] ph;
-reg signed [21:0] corr;
-wire [31:0] inc_eff = inc + {{10{corr[21]}}, corr};
+wire [31:0] inc_eff = inc;      // no frequency loop: the interpolated
+                                // reference follows the line to line rotation
 reg [19:0] sincos_rom [0:1023];
 initial $readmemh("rtl/cvbs_sincos.hex", sincos_rom);
 reg [19:0] sc_q;
@@ -276,17 +279,37 @@ end
 wire signed [15:0] zI0 = b8I[19:4];  // Z stage (burst measurement)
 wire signed [15:0] zQ0 = b8Q[19:4];
 
-// Z, sin/cos delayed by ZDL for the demodulation of the active video
-reg [51:0] zdl [1:ZDL];
+// Z stage for the luma notch (remodulation) of the line being received
+wire signed [15:0] zI = zI0;
+wire signed [15:0] zQ = zQ0;
+wire signed [9:0] sin_z = sin_z0;
+wire signed [9:0] cos_z = cos_z0;
+
+// line memory of the chroma (Z, one sample in 4, 512 x 32): written at the Z
+// stage, read one line later at the same h, linearly interpolated
+// (lo, lo, (lo+hi)/2, (lo+hi)/2 within each group of 4)
+(* ramstyle = "M9K" *) reg [31:0] cl_mem [0:511];
+reg [31:0] cl_q;
+reg signed [15:0] cl_loI, cl_loQ, cl_hiI, cl_hiQ;
+reg signed [15:0] zIo, zQo;         // Z of the previous line
+wire [8:0] cl_ra = h[10:2] + 9'd1;
+wire signed [16:0] cl_mI = cl_loI + cl_hiI;
+wire signed [16:0] cl_mQ = cl_loQ + cl_hiQ;
+reg [1:0] h_f;
 always @(posedge clk) begin
-    zdl[1] <= {zI0, zQ0, scd[13]};
-    for (i=2; i<=ZDL; i=i+1)
-        zdl[i] <= zdl[i-1];
+    cl_q <= cl_mem[cl_ra];
+    if (h[1:0] == 2'd0)
+        cl_mem[h[10:2]] <= {zI0, zQ0};
+    h_f <= h[1:0];
+    if (h_f == 2'd0) begin
+        cl_loI <= cl_hiI;
+        cl_loQ <= cl_hiQ;
+        cl_hiI <= cl_q[31:16];
+        cl_hiQ <= cl_q[15:0];
+    end
+    zIo <= (h_f == 2'd0) ? cl_hiI : (h_f[1] ? cl_mI[16:1] : cl_loI);
+    zQo <= (h_f == 2'd0) ? cl_hiQ : (h_f[1] ? cl_mQ[16:1] : cl_loQ);
 end
-wire signed [15:0] zI = zdl[ZDL][51:36];
-wire signed [15:0] zQ = zdl[ZDL][35:20];
-wire signed [9:0] sin_z = zdl[ZDL][19:10];
-wire signed [9:0] cos_z = zdl[ZDL][9:0];
 
 // ---------------------------------------------------------------------------
 // burst gate at the Z stage, burst accumulation
@@ -333,10 +356,16 @@ reg [19:0] rec;
 reg [5:0] div_i;
 reg signed [23:0] ar, ai;
 reg signed [17:0] w_re, w_im;
+reg signed [17:0] wp_re, wp_im;     // reference of the previous line
+reg signed [21:0] st_re, st_im;     // reference step per sample (x2^12)
+reg signed [30:0] wi0_re, wi0_im;   // interpolated reference at h = bstart + 140
+reg signed [30:0] wa_re, wa_im;     // interpolated reference (x2^12)
+reg s_prev;                         // PAL switch of the previous line
+wire signed [17:0] wa_re_s = wa_re[29:12];
+wire signed [17:0] wa_im_s = wa_im[29:12];
 reg kill;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
 reg signed [23:0] dq;
-reg corr_sat;
 reg [9:0] alt_cnt, bad_cnt;
 reg alt_ok;
 
@@ -358,8 +387,6 @@ function signed [23:0] sat24;
     end
 endfunction
 
-localparam signed [21:0] CORR_MAX = 22'sd2000000;
-wire signed [25:0] corr_next = corr + dq + (dq >>> 1);
 reg [3:0] nob_cnt;      // consecutive lines without a valid burst
 reg Rr2;                // NTSC: reference = 2Z (second step)
 wire meas_w = ((t1 - mres) < 0);    // step 4: Im(Z * conj(P)) < 0
@@ -405,6 +432,7 @@ always @(posedge clk) begin
                 end else begin
                     s_meas_pv <= 1'b0;
                 end
+                s_prev <= s_cur;
                 s_cur <= s_new;
                 if (vb) begin
                     // reference of this line from its own burst, rotated
@@ -437,6 +465,13 @@ always @(posedge clk) begin
                         kill <= 1'b1;
                     pv <= 1'b0;
                     st <= 7'd0;
+                    // the previous line keeps its reference (no ramp)
+                    wp_re <= w_re;
+                    wp_im <= w_im;
+                    st_re <= 22'sd0;
+                    st_im <= 22'sd0;
+                    wi0_re <= {w_re[17], w_re, 12'h0};
+                    wi0_im <= {w_im[17], w_im, 12'h0};
                 end
             end
             5: begin
@@ -470,6 +505,12 @@ always @(posedge clk) begin
                     kill <= 1'b1;
                     w_re <= 18'h0;
                     w_im <= 18'h0;
+                    wp_re <= w_re;
+                    wp_im <= w_im;
+                    st_re <= 22'sd0;
+                    st_im <= 22'sd0;
+                    wi0_re <= {w_re[17], w_re, 12'h0};
+                    wi0_im <= {w_im[17], w_im, 12'h0};
                     RPr <= Rr;
                     RPi <= Ri;
                     rpv <= 1'b1;
@@ -502,26 +543,12 @@ always @(posedge clk) begin
             end
             18: begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
-                // frequency loop (the line to line rotation of r)
-                if (rpv & ~loop_off) begin
-                    if (corr_next > CORR_MAX) begin
-                        corr <= CORR_MAX;
-                        corr_sat <= 1'b1;
-                    end else if (corr_next < -CORR_MAX) begin
-                        corr <= -CORR_MAX;
-                        corr_sat <= 1'b1;
-                    end else begin
-                        corr <= corr_next[21:0];
-                        corr_sat <= 1'b0;
-                    end
-                end
             end
             19: begin
                 ai <= sat24(-(mres >>> 12));
             end
-            // w = a * hc (x1/256), used from now on: the delayed chroma is
-            // still before the active video of this line
-            20: begin ma <= ar; mb <= hc_re; end
+            // w = a * hc (x1/256)
+            20: begin ma <= ar; mb <= hc_re; wp_re <= w_re; wp_im <= w_im; end
             21: begin ma <= ai; mb <= hc_im; end
             22: begin t1 <= mres; ma <= ar; mb <= hc_im; end
             23: begin w_re <= sat18((t1 - mres) >>> 8); ma <= ai; mb <= hc_re; end
@@ -532,6 +559,17 @@ always @(posedge clk) begin
                 RPr <= Rr;
                 RPi <= Ri;
                 rpv <= 1'b1;
+            end
+            // ramp of the previous line's reference towards this one:
+            // step = (w - wp) / 1716 (x2^12: x611/2^8), start value at
+            // h = bstart + 140 (124 samples after the burst centre)
+            26: begin ma <= {{6{w_re[17]}}, w_re} - {{6{wp_re[17]}}, wp_re}; mb <= 24'sd611; end
+            27: begin ma <= {{6{w_im[17]}}, w_im} - {{6{wp_im[17]}}, wp_im}; mb <= 24'sd611; end
+            28: st_re <= interp_off ? 22'sd0 : mres[29:8];
+            29: st_im <= interp_off ? 22'sd0 : mres[29:8];
+            30: begin
+                wi0_re <= {wp_re[17], wp_re, 12'h0} + ({{9{st_re[21]}}, st_re} <<< 7) - ({{9{st_re[21]}}, st_re} <<< 2);
+                wi0_im <= {wp_im[17], wp_im, 12'h0} + ({{9{st_im[21]}}, st_im} <<< 7) - ({{9{st_im[21]}}, st_im} <<< 2);
                 st <= 7'd0;
             end
             default: st <= 7'd0;
@@ -582,46 +620,69 @@ always @(posedge clk) begin
     rm_s <= rm1 - rm2;
     rmod <= rm_p >>> 21;        // x49 / 2^21 = 1/42798
 
-    // U + jV from Z * w (1/2^20); U = -Re, V = -s*Im
-    q1 <= zI * w_re;
-    q2 <= zQ * w_im;
-    q3 <= zI * w_im;
-    q4 <= zQ * w_re;
+    // U + jV of the previous line from its Z and the interpolated reference
+    // (1/2^20); U = -Re, V = -s*Im
+    q1 <= zIo * wa_re_s;
+    q2 <= zQo * wa_im_s;
+    q3 <= zIo * wa_im_s;
+    q4 <= zQo * wa_re_s;
     zre <= q1 - q2;
     zim <= q3 + q4;
-    s_d <= s_cur;
+    s_d <= s_prev;
     U3 <= sat11(-(zre >>> 20));
     V3 <= s_d ? sat11(-(zim >>> 20)) : sat11(zim >>> 20);
 end
 
-// ---------------------------------------------------------------------------
-// stage A: luma, chroma off when killed
-reg signed [10:0] yA;
+// interpolated reference of the previous line: continues the ramp from the
+// line before, then from h = bstart + 140 (the ramp of this line is known)
+// starts again from the computed value
+wire [11:0] h_wi0 = {4'h0, bstart} + 12'd140;
 always @(posedge clk) begin
-    if (svideo | nonotch | kill)
-        yA <= $signed({3'b0, x0d[26+ZDL]}) - $signed({3'b0, blank});
-    else
-        yA <= $signed({3'b0, x0d[26+ZDL]}) - $signed({3'b0, blank}) - rmod;
-    UA <= kill ? 11'sd0 : U3;
-    VA <= kill ? 11'sd0 : V3;
+    if (h == h_wi0) begin
+        wa_re <= wi0_re;
+        wa_im <= wi0_im;
+    end else begin
+        wa_re <= wa_re + {{9{st_re[21]}}, st_re};
+        wa_im <= wa_im + {{9{st_im[21]}}, st_im};
+    end
 end
 
-// stage S: sharpness (peaking). The luma of a composite signal is low-passed
-// by the notch, and the sampling is not locked to the pixels of the source:
-// edges are soft. y' = y + k/32 * hp, hp = [-1 -2 1 4 1 -2 -1] * y: zero gain
-// at DC and at the Nyquist frequency (no noise boost), peak ~9.5 at 5MHz,
-// 5 at 2.7MHz (k = 0-7). 4 clocks (yS = yA delayed 4 when k = 0).
+// ---------------------------------------------------------------------------
+// stage A: luma of the line being received (notch: minus the remodulated
+// chroma, not when killed), stored in the luma line memory (2048 x 8, offset
+// +32, -32..223); out: luma of the previous line, with its chroma
+reg signed [10:0] yAn;
+(* ramstyle = "M9K" *) reg [7:0] yl_mem [0:2047];
+reg [7:0] yl_q;
+reg signed [10:0] yAo;
+wire signed [11:0] yAn_o = yAn + 12'sd32;
+wire [7:0] yAn8 = yAn_o[11] ? 8'd0 : ((yAn_o > 12'sd255) ? 8'd255 : yAn_o[7:0]);
+reg [10:0] h_d1;
+always @(posedge clk) begin
+    if (svideo | nonotch | kill)
+        yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank});
+    else
+        yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank}) - rmod;
+    h_d1 <= h[10:0];
+    yl_q <= yl_mem[h[10:0]];
+    yl_mem[h_d1] <= yAn8;
+    yAo <= $signed({3'b0, yl_q}) - 11'sd32;
+end
+reg signed [10:0] yA;
+always @(posedge clk) begin
+    yA <= yAo;
+    UA <= U3;
+    VA <= V3;
+end
+
+// stage S: luma delayed by 4 (alignment with the chroma of stage E)
 reg signed [10:0] yAd [1:6];
 reg signed [10:0] yS;
-wire signed [13:0] s_hp = $signed({yAd[3], 2'b0}) + yAd[2] + yAd[4]
-                        - $signed({yAd[1], 1'b0}) - $signed({yAd[5], 1'b0}) - yA - yAd[6];
-wire signed [17:0] s_p = s_hp * $signed({1'b0, sharp});
-wire signed [13:0] s_sum = yAd[3] + (s_p >>> 5);
 always @(posedge clk) begin
     yAd[1] <= yA;
     for (i=2; i<=6; i=i+1)
         yAd[i] <= yAd[i-1];
-    yS <= sat11(s_sum);
+    yS <= yAd[3];
 end
 
 // stage E: chroma suppression at luma edges. A sharp luma edge has energy at
@@ -760,7 +821,7 @@ always @(posedge clk) begin
         st_line <= st_line + 1'b1;
     if ((hs0_prev & ~hs0) && (st_line == 9'd120))
         kill_st <= kill;
-    status <= {corr[21:17], corr_sat, alt_ok, kill_st, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
+    status <= {5'h0, 1'b0, alt_ok, kill_st, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
 end
 
 
@@ -768,11 +829,13 @@ end
 // power-up values (also for simulation: the running sums need a defined start)
 integer j;
 initial begin
-    ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0;
+    ph = 0; st = 0; pv = 0; rpv = 0; vb = 0;
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0; dg_sU = 0; dg_sV = 0; dg_rd = 0;
     for (j=0; j<256; j=j+1) dg_mem[j] = 0;
-    s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
+    s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
+    wp_re = 0; wp_im = 0; st_re = 0; st_im = 0; wi0_re = 0; wi0_im = 0; wa_re = 0; wa_im = 0;
+    cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
@@ -781,14 +844,13 @@ initial begin
     for (j=1; j<=7; j=j+1) begin b6I_d[j] = 0; b6Q_d[j] = 0; end
     for (j=1; j<=8; j=j+1) begin b7I_d[j] = 0; b7Q_d[j] = 0; cw[j] = 0; end
     for (j=1; j<=13; j=j+1) scd[j] = 0;
-    for (j=1; j<=26+ZDL; j=j+1) x0d[j] = 0;
+    for (j=1; j<=26; j=j+1) x0d[j] = 0;
     for (j=1; j<=8; j=j+1) cb[j] = 0;
     c_bp2 = 0; e_env = 0; e_att = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
     for (j=1; j<=5; j=j+1) yE_d[j] = 0;
     for (j=1; j<=8; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
     for (j=1; j<=6; j=j+1) yAd[j] = 0;
     yS = 0;
-    for (j=1; j<=ZDL; j=j+1) zdl[j] = 0;
 end
 
 endmodule

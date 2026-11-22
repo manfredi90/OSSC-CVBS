@@ -1,6 +1,30 @@
 Changelog
 =========
 
+CVBS decoder 0.12
+-----------------
+
+### Fixed
+- Horizontal colour streaks (saturation / hue changing from line to line,
+  most visible on saturated colours). Measured with captures: the colour
+  phase drifted along each line by ~2 degrees rms, a different amount on
+  every line - the TVP7002 H-PLL sampling clock changes its frequency at
+  every hsync. The active video is now demodulated one line later (line
+  memories), and the colour reference is interpolated along the line
+  between the burst of that line and the burst of the next one, following
+  the drift (simulation: 1.6 -> 0.3 degrees). The picture comes out one line
+  lower.
+- Burst position default 165 (less line to line saturation noise than 180
+  on the MiSTer + AD723).
+
+### Changed
+- CVBS decoder > Ref. interp. (On / Off, test) replaces Subcarrier loop:
+  the interpolated reference also follows the slow rotation that the
+  frequency loop corrected (the loop made no difference in the captures).
+
+### Removed
+- Sharpness (room for the line memories).
+
 CVBS decoder 0.11
 -----------------
 

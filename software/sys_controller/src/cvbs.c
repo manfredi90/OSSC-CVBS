@@ -248,8 +248,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     else if (lg > 95)
         lg = 95;
 
-    *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
-          ((uint32_t)(cc->cv_sharp & 3) << 14);
+    *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     cv_diagview_applied = cv_diagview;
@@ -259,7 +258,6 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off != 0) << 4) |
                         ((cc->cv_loop_off != 0) << 5) |
-                        (((cc->cv_sharp >> 2) & 1) << 6) |
                         ((uint32_t)(cv_diagview != 0) << 7) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |

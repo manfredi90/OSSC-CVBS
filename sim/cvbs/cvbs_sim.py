@@ -66,27 +66,42 @@ def gen(args):
         # line-locked clock jitter: the sampling instants of a line are
         # shifted by a random amount (H-PLL phase noise)
         jit = rng.normal(0, args.jitter_ns * 1e-9) if args.jitter_ns else 0.0
-        t = t0 + tt + jit
+        # H-PLL: the sampling clock is continuous; each line lasts N clocks,
+        # whose period changes at every hsync (VCO frequency error eps, from
+        # the phase detector correction plus noise). The line starts where the
+        # previous one ended (timing error e), the loop pulls e back slowly.
+        if args.vco_ppm:
+            if ln == 0:
+                pll_e = 0.0
+            else:
+                pll_e += t_line * pll_eps
+            pll_eps = -args.pll_gain * pll_e / t_line + rng.normal(0, args.vco_ppm * 1e-6)
+            eps = pll_eps
+            t0 = ln * t_line + pll_e
+        else:
+            eps = 0.0
+        ta = tt * (1 + eps)
+        t = t0 + ta + jit
         ph = 2 * math.pi * fsc * t + args.phase0
         vsw = 1 if (not pal or (ln % 2 == 0)) else -1   # PAL: +V on even lines
         y = np.zeros_like(tt)
         c = np.zeros_like(tt)
-        y[tt < sync_w] = -0.3
+        y[ta < sync_w] = -0.3
         fl = 312 if lines625 else 262
         vbl = args.vblank and (ln % fl) < 9
-        bm = (tt >= b_start) & (tt < b_start + b_cyc / fsc) & (not vbl) & (not args.bw)
+        bm = (ta >= b_start) & (ta < b_start + b_cyc / fsc) & (not vbl) & (not args.bw)
         if pal:
             # amplitude a_burst, phase 135 / 225 degrees
             c[bm] = a_burst * (-np.sin(ph[bm]) + vsw * np.cos(ph[bm])) / math.sqrt(2)
         else:
             c[bm] = -a_burst * np.sin(ph[bm])
-        am = (tt >= act0) & (tt < act1) & (not vbl)
-        pos = (tt[am] - act0) / (act1 - act0)
+        am = (ta >= act0) & (ta < act1) & (not vbl)
+        pos = (ta[am] - act0) / (act1 - act0)
         bar = np.minimum((pos * 8).astype(int), 7)
         rgb = np.array(BARS)[bar]
         if args.stripes:
             # black / white stripes, 1.5us wide (sharp luma edges)
-            k_ = ((tt[am] - act0) / 1.5e-6).astype(int) % 2
+            k_ = ((ta[am] - act0) / 1.5e-6).astype(int) % 2
             rgb = np.stack([k_ * 0.75] * 3, axis=1)
         Y = 0.299 * rgb[:, 0] + 0.587 * rgb[:, 1] + 0.114 * rgb[:, 2]
         U = 0.492 * (rgb[:, 2] - Y)
@@ -184,6 +199,8 @@ def main():
     ap.add_argument('--loop-off', action='store_true')
     ap.add_argument('--vblank', action='store_true', help='fields with 9 blanked lines (no burst) and vsync')
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
+    ap.add_argument('--pll-gain', type=float, default=0.2, help='H-PLL phase correction per line')
+    ap.add_argument('--vco-ppm', type=float, default=0.0, help='per-line sampling clock frequency error (ppm rms)')
     ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
     ap.add_argument('--edge', type=int, default=0, help='chroma suppression at luma edges 0-3')
     ap.add_argument('--diag', action='store_true', help='diagnostic view')
@@ -210,6 +227,29 @@ def main():
     print('WORST %.1f' % worst)
     # luma stability of the white bar over the lines (bands)
     wl = [measure(R, G, B, starts, N, pal, ln)[0][1] for ln in range(30, len(starts) - 1)]
+    # per-line colour error of the bars (as in the capture analysis): hue /
+    # saturation of each bar against its mean over the lines
+    if not args.diag:
+        Ls = list(range(30, len(starts) - 1))
+        if args.vblank:
+            fl = 312 if pal else 262
+            Ls = [l for l in Ls if (l % fl) >= 20]
+        cm = []
+        for ln in Ls:
+            m = measure(R, G, B, starts, N, pal, ln)
+            row = []
+            for k in range(1, 7):
+                r_, g_, b_ = m[k][:3]
+                yy = 0.299 * r_ + 0.587 * g_ + 0.114 * b_
+                row.append(0.492 * (b_ - yy) + 1j * 0.877 * (r_ - yy))
+            cm.append(row)
+        cm = np.array(cm)
+        q = cm / cm.mean(axis=0)
+        ph = np.degrees(np.angle(q))
+        xs = np.arange(6) - 2.5
+        sl = (ph * xs).sum(1) / (xs ** 2).sum()
+        print('BAR ERR per line: phase %.2f deg  amp %.2f %%  (phase slope across bars %.2f deg/bar)' % (
+            np.sqrt((ph ** 2).mean()), 100 * np.sqrt(((np.abs(q) - 1) ** 2).mean()), np.sqrt((sl ** 2).mean())))
     cy = np.array([measure(R, G, B, starts, N, pal, ln)[2][:3] for ln in range(30, len(starts) - 1)])
     print('CYAN line-to-line: std R %.2f G %.2f B %.2f  p-p B %.1f' % (cy[:, 0].std(), cy[:, 1].std(), cy[:, 2].std(), np.ptp(cy[:, 2])))
     print('WHITE G over lines: min %.1f max %.1f p-p %.1f' % (min(wl), max(wl), max(wl) - min(wl)))
