@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.8).**
+> **Status: test version (0.9).**
 
 
 Inputs
@@ -66,10 +66,10 @@ CVBS decoder menu
 | Diagnostics | | `Bn` burst level, `Ln` blank level (ADC code), `Pn` highest ADC code in the picture (255: white clipped, lower the ADC gain), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
 | ADC gain | 0–15 | TVP7002 coarse gain (full scale shown in Vpp), default 2 |
 | ADC offset | ±31 | blank level = ADC code 128 + offset (default -31: ~97, shown as `L` in the diagnostics) |
-| Burst position | 120–220 | start of the burst gate, samples after the hsync leading edge |
+| Burst position | 120–220 | start of the burst gate, samples after the hsync leading edge (default 180) |
 | Clamp position | 0–120 | TVP7002 clamp start, samples after the hsync trailing edge (default 92: after the burst) |
 | Subcarrier loop | On, Off | |
-| Ref. filter | Off, 1/2, 1/4, 1/8 | colour reference (burst of each line) low-passed over lines: less line to line colour noise; colour lines can return at strong settings with a jittery clock. Default Off |
+| Sample clock | Line-locked, 27MHz xtal | ADC clock: TVP7002 H-PLL locked to the hsync (default), or the OSSC 27MHz crystal (steady colour phase along the line, edges not locked to the source lines). Test option |
 | CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware |
 
 The LCD shows the mode and the colour system on the first row and the

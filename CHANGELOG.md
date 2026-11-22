@@ -1,6 +1,22 @@
 Changelog
 =========
 
+CVBS decoder 0.9
+----------------
+
+### New
+- Sample clock (test): Line-locked (TVP7002 H-PLL, as before) or 27MHz xtal
+  (the OSSC 27MHz reference on the TVP7002 EXT_CLK input as ADC clock). The
+  H-PLL clock jitters against the colour subcarrier inside the line
+  (streaks of lower saturation on saturated colours); the crystal does not.
+  Not locked to the source lines: edges may move by up to one sample.
+- Burst position default 180 (the burst level peaks there on the tested
+  sources).
+
+### Removed
+- Ref. filter (0.8): low-passing the reference made the streaks worse (the
+  line to line phase jumps are real).
+
 CVBS decoder 0.8
 ----------------
 

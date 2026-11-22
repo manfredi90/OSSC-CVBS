@@ -532,7 +532,7 @@ status_t get_status(tvp_sync_input_t syncinput)
     // (mode reprogram), the rest only the decoder registers
     if (cv_mode && sync_active && valid_mode &&
         ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp) ||
-         (tc.cv_line2x != cm.cc.cv_line2x)))
+         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal)))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();

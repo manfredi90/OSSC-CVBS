@@ -110,6 +110,10 @@ void cvbs_tvp_setup(uint8_t h_synclen_px, uint16_t h_samplerate, uint32_t refclk
     int clamp_ref_offset = h_synclen_px - (((30*h_samplerate)/refclks_per_line)+5)/10;
     int clamp_pos = clamp_ref_offset + cc->cv_clamp;
 
+    // sample clock: H-PLL (line-locked) or the 27MHz crystal on EXT_CLK (no
+    // H-PLL jitter: the colour subcarrier phase stays steady along the line)
+    tvp_set_ext_pclk(cv_mode && cc->cv_xtal);
+
     if (!cv_mode)
         return;
 
@@ -148,7 +152,7 @@ void cvbs_tvp_setup(uint8_t h_synclen_px, uint16_t h_samplerate, uint32_t refclk
     tvp_writereg(TVP_CLAMPWIDTH, CV_CLAMP_WIDTH);
     tvp_writereg(TVP_ALCEN, 0x00);
 
-    printf("CVBS: %s, ADC gain %u, offset %d, clamp pos %d\n", (cv_mode == 2) ? "S-Video" : "composite", (unsigned)cg, (int)cc->cv_adcofs - SIGNED_NUMVAL_ZERO, clamp_pos);
+    printf("CVBS: %s, ADC gain %u, offset %d, clamp pos %d, %s clock\n", (cv_mode == 2) ? "S-Video" : "composite", (unsigned)cg, (int)cc->cv_adcofs - SIGNED_NUMVAL_ZERO, clamp_pos, cc->cv_xtal ? "27MHz xtal" : "H-PLL");
 }
 
 void cvbs_set_input(uint16_t samples_per_line, uint32_t totlines, uint8_t interlaced, uint32_t pcnt_field) {
@@ -212,8 +216,12 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
         break;
     }
 
-    // sample rate x64 from the measured field period (27MHz clocks)
-    if (in_pcnt && in_totlines && in_samples) {
+    // sample rate x64: the crystal (27MHz xtal sample clock), else from the
+    // measured field period (27MHz clocks)
+    if (cc->cv_xtal) {
+        fs_x64 = (uint64_t)TVP_EXTCLK_HZ * 64;
+        *inc = (uint32_t)((fsc_x64 << 32) / fs_x64);
+    } else if (in_pcnt && in_totlines && in_samples) {
         fs_x64 = ((uint64_t)TVP_EXTCLK_HZ * 64 * in_samples * in_totlines) / ((uint64_t)in_pcnt * (in_ilace ? 2 : 1));
         *inc = (uint32_t)((fsc_x64 << 32) / fs_x64);
     } else {
@@ -236,7 +244,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
         lg = 95;
 
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
-          ((uint32_t)(cc->cv_reffilt & 3) << 10) | ((uint32_t)(cc->cv_sharp & 3) << 14);
+          ((uint32_t)(cc->cv_sharp & 3) << 14);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     *flags = cv_mode ? (1 |

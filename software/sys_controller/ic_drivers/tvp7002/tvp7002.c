@@ -364,6 +364,12 @@ void tvp_set_clp_lpf(alt_u8 val)
     printf("CLP LPF value set to 0x%x\n", val);
 }
 
+// ADC sample clock: H-PLL (0) or the 27MHz reference on EXT_CLK (1)
+void tvp_set_ext_pclk(alt_u8 enable)
+{
+    tvp_sel_clk(REFCLK_EXT27, enable);
+}
+
 void tvp_set_hpll_phase(alt_u8 val)
 {
     alt_u8 status = tvp_readreg(TVP_HPLLPHASE) & 0x07;

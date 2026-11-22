@@ -176,7 +176,7 @@ def main():
     ap.add_argument('--burst-scale', type=float, default=1.0)
     ap.add_argument('--chroma-scale', type=float, default=1.0)
     ap.add_argument('--phase0', type=float, default=0.3)
-    ap.add_argument('--bstart', type=int, default=163)
+    ap.add_argument("--bstart", type=int, default=163)
     ap.add_argument('--sat', type=float, default=1.0)
     ap.add_argument('--hue', type=float, default=0.0)
     ap.add_argument('--nonotch', action='store_true')

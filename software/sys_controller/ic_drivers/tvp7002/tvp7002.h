@@ -112,6 +112,8 @@ void tvp_set_clp_lpf(alt_u8 val);
 
 void tvp_set_hpll_phase(alt_u8 val);
 
+void tvp_set_ext_pclk(alt_u8 enable);
+
 void tvp_set_sog_thold(alt_u8 val);
 
 void tvp_set_alcfilt(alt_u8 nsv, alt_u8 nsh);
