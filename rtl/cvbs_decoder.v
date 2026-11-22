@@ -41,7 +41,7 @@ module cvbs_decoder #(
     input [SIDE_W-1:0] side_i,  // other signals delayed with the video
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
     // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] frequency loop off,
-    // [6] sharpness bit 2,
+    // [6] sharpness bit 2, [7] diagnostic view (chroma deviation x8),
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
@@ -73,6 +73,7 @@ wire pal      = cfg[2];
 wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
 wire loop_off = cfg[5];
+wire diag     = cfg[7];
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
@@ -660,16 +661,45 @@ always @(posedge clk) begin
     VE <= vE_p >>> 8;
 end
 
+// diagnostic view: U / V minus their average over the lines (per group of 8
+// samples, low-pass 1/8 over lines), x8, on mid grey. A steady colour shows
+// as flat grey whatever it is; line to line colour changes show as stripes.
+(* ramstyle = "M9K" *) reg [35:0] dg_mem [0:255];
+reg [35:0] dg_rd;
+reg signed [13:0] dg_sU, dg_sV;
+wire [7:0] dg_bin = h[10:3];
+wire signed [17:0] dg_aU = dg_rd[35:18];
+wire signed [17:0] dg_aV = dg_rd[17:0];
+wire signed [13:0] dg_sU_n = dg_sU + UE;
+wire signed [13:0] dg_sV_n = dg_sV + VE;
+wire signed [17:0] dg_nU = dg_aU + (($signed({{4{dg_sU_n[13]}}, dg_sU_n}) - dg_aU) >>> 3);
+wire signed [17:0] dg_nV = dg_aV + (($signed({{4{dg_sV_n[13]}}, dg_sV_n}) - dg_aV) >>> 3);
+wire signed [17:0] dg_dU = $signed({{4{UE[10]}}, UE, 3'b0}) - dg_aU;
+wire signed [17:0] dg_dV = $signed({{4{VE[10]}}, VE, 3'b0}) - dg_aV;
+always @(posedge clk) begin
+    dg_rd <= dg_mem[dg_bin];
+    if (h[2:0] == 3'd7) begin
+        dg_mem[dg_bin] <= {dg_nU, dg_nV};
+        dg_sU <= 14'sd0;
+        dg_sV <= 14'sd0;
+    end else begin
+        dg_sU <= dg_sU_n;
+        dg_sV <= dg_sV_n;
+    end
+end
+wire signed [10:0] UEx = diag ? sat11({{17{dg_dU[17]}}, dg_dU}) : UE;
+wire signed [10:0] VEx = diag ? sat11({{17{dg_dV[17]}}, dg_dV}) : VE;
+
 // stage B: luma gain (white 160 -> 255), brightness, YUV -> RGB products
 wire signed [18:0] yB_p = yE * $signed({1'b0, luma_gain});
 reg signed [11:0] yB;
 reg signed [21:0] pRV, pGU, pGV, pBU;
 always @(posedge clk) begin
-    yB <= (yB_p >>> 5) + {{5{bright[5]}}, bright, 1'b0};
-    pRV <= VE * 10'sd292;   // 1.140
-    pGU <= UE * 10'sd101;   // 0.395
-    pGV <= VE * 10'sd149;   // 0.581
-    pBU <= UE * 11'sd520;   // 2.032
+    yB <= diag ? 12'sd128 : (yB_p >>> 5) + {{5{bright[5]}}, bright, 1'b0};
+    pRV <= VEx * 10'sd292;   // 1.140
+    pGU <= UEx * 10'sd101;   // 0.395
+    pGV <= VEx * 10'sd149;   // 0.581
+    pBU <= UEx * 11'sd520;   // 2.032
 end
 
 // stage C: sums
@@ -737,7 +767,8 @@ integer j;
 initial begin
     ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0;
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
-    w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
+    w_re = 0; w_im = 0; kill = 1; Rr2 = 0; dg_sU = 0; dg_sV = 0; dg_rd = 0;
+    for (j=0; j<256; j=j+1) dg_mem[j] = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;

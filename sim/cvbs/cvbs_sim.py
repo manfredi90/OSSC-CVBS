@@ -127,6 +127,7 @@ def run(args):
     cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
     hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 3) << 10) | ((args.sharp & 3) << 14)
     cfg |= (args.sharp >> 2) << 6
+    cfg |= (1 << 7) if args.diag else 0
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
         f.write('%06x %08x %08x\n' % (cfg, hc, inc))
         for a, b, c, d in zip(G, B, hs, vs):
@@ -185,6 +186,7 @@ def main():
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
     ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
     ap.add_argument('--edge', type=int, default=0, help='chroma suppression at luma edges 0-3')
+    ap.add_argument('--diag', action='store_true', help='diagnostic view')
     ap.add_argument('--reffilt', type=int, default=0, help='reference filter over lines 0-3')
     ap.add_argument('--sharp', type=int, default=0, help='sharpness 0-7')
     ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
@@ -240,7 +242,8 @@ def main():
     if os.environ.get('YDUMP'):
         c = s0 + int((act0 + 7 * (act1 - act0) / 8) * fs_us)
         print('Y blue->black: ' + ' '.join('%.0f' % v for v in Yf[c - 12:c + 12]))
-    print('CHROMA-LUMA DELAY (samples): ' + ' '.join('%+.1f' % d for d in dl) + '  mean %+.2f' % (sum(dl) / len(dl)))
+    if dl:
+        print('CHROMA-LUMA DELAY (samples): ' + ' '.join('%+.1f' % d for d in dl) + '  mean %+.2f' % (sum(dl) / len(dl)))
     if args.stripes:
         ln = len(starts) - 3
         s0 = starts[ln]

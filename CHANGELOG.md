@@ -1,6 +1,16 @@
 Changelog
 =========
 
+CVBS decoder 0.11
+-----------------
+
+### New
+- Diag. view (CVBS decoder menu, not kept): "Color dev. x8" replaces the
+  picture with the colour deviation from its own average over the lines
+  (per group of 8 samples), amplified 8x on mid grey. A steady colour is
+  flat grey, whatever the colour; line to line colour changes show as
+  stripes. For tests and captures.
+
 CVBS decoder 0.10
 -----------------
 

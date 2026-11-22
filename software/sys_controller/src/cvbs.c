@@ -193,6 +193,11 @@ static void cos_sin_q16(int deg, int32_t *c, int32_t *s) {
     *s = (int32_t)(x - x3/6);
 }
 
+// diagnostic view (not kept): colour deviation from its average over the
+// lines, x8 on grey
+alt_u8 cv_diagview;
+alt_u8 cv_diagview_applied;
+
 void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     avconfig_t *cc = &cm.cc;
     cv_std_t std = cur_std();
@@ -247,6 +252,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
           ((uint32_t)(cc->cv_sharp & 3) << 14);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
+    cv_diagview_applied = cv_diagview;
     *flags = cv_mode ? (1 |
                         ((cv_mode == 2) << 1) |
                         (pal << 2) |
@@ -254,6 +260,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((cc->cv_notch_off != 0) << 4) |
                         ((cc->cv_loop_off != 0) << 5) |
                         (((cc->cv_sharp >> 2) & 1) << 6) |
+                        ((uint32_t)(cv_diagview != 0) << 7) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |
                         ((uint32_t)(cc->cv_edge & 3) << 22)) : 0;
