@@ -139,7 +139,8 @@ int ds_settings_load() {
     else if (tc.ds_720p_ar > 3)
         tc.ds_720p_ar = 0;
     memcpy(&ts, &blob.ts, sizeof(settings_t));
-    ts.phase_hotkey_enable = 0;
+    if (ts.phase_hotkey_enable > 1)
+        ts.phase_hotkey_enable = 0;
     memcpy(rc_keymap, blob.rc_keymap, sizeof(blob.rc_keymap));
     printf("DS settings loaded\n");
 

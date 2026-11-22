@@ -280,6 +280,7 @@ MENU(menu_settings, P99_PROTECT({ \
     { "OSD",                                    OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_enable,   OPT_WRAP,   SETTING_ITEM(osd_enable_desc) } } },
     { "OSD status disp.",                       OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_status_timeout,   OPT_WRAP,   SETTING_ITEM(osd_status_desc) } } },
     { "OSD cursor color",                       OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_highlight_color,   OPT_WRAP,   SETTING_ITEM(osd_color_desc) } } },
+    { LNG("Phase hotkey","ﾌｪｰｽﾞﾎｯﾄｷｰ"),          OPT_AVCONFIG_SELECTION, { .sel = { &ts.phase_hotkey_enable,  OPT_WRAP, SETTING_ITEM(off_on_desc) } } },
     { "<Save settings >",                       OPT_FUNC_CALL,          { .fun = { ds_settings_save, NULL } } },
     { "<Reset settings>",                       OPT_FUNC_CALL,          { .fun = { ds_settings_reset, NULL } } },
 }))
@@ -301,6 +302,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Clamp position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_clamp,      OPT_NOWRAP, CV_CLAMP_MIN, CV_CLAMP_MAX, value_disp } } },
     { "Subcarrier loop",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_loop_off,  OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
     { "Sample clock",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_xtal,      OPT_WRAP,   SETTING_ITEM(cv_xtal_desc) } } },
+    { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },
     { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },
     { "H. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_hpos,       OPT_NOWRAP, DS_HPOS_MIN, DS_HPOS_MAX, signed_disp } } },

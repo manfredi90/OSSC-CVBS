@@ -1,6 +1,17 @@
 Changelog
 =========
 
+CVBS decoder 0.10
+-----------------
+
+### New
+- CVBS decoder > Adv. timing (from the stock firmware): per mode (pick it
+  with left / right on the item) samples per line, sampling phase, timings.
+  The colour streaks depend on the sampling phase (with the 27MHz xtal clock
+  they come and go as the phase drifts). Not kept across power cycles yet.
+- Settings opt. > Phase hotkey (stock firmware): the remote phase +/- keys
+  change the sampling phase of the current mode.
+
 CVBS decoder 0.9
 ----------------
 
