@@ -291,7 +291,7 @@ function signed [23:0] sat24;
         if (v > 48'sd8388607)
             sat24 = 24'sd8388607;
         else if (v < -48'sd8388608)
-            sat24 = -24'sd8388608;
+            sat24 = 24'sh800000;
         else
             sat24 = v[23:0];
     end
@@ -301,7 +301,15 @@ localparam signed [21:0] CORR_MAX = 22'sd2000000;
 wire signed [25:0] corr_next = corr + dq + (dq >>> 1);
 reg [3:0] nob_cnt;      // consecutive lines without a valid burst
 
+// vsync leading edge (field counters)
+wire vs_fall = vs0_prev & ~vs0;
+
 always @(posedge clk) begin
+    if (vs_fall) begin
+        alt_ok <= (alt_cnt > 10'd64) && (bad_cnt < (alt_cnt >> 3));
+        alt_cnt <= 10'h0;
+        bad_cnt <= 10'h0;
+    end
     if (fsm_start) begin
         Zr <= accI >>> 5;
         Zi <= accQ >>> 5;
@@ -466,7 +474,7 @@ function signed [17:0] sat18;
         if (v > 48'sd131071)
             sat18 = 18'sd131071;
         else if (v < -48'sd131072)
-            sat18 = -18'sd131072;
+            sat18 = 18'sh20000;
         else
             sat18 = v[17:0];
     end
@@ -489,7 +497,7 @@ function signed [10:0] sat11;
         if (v > 35'sd1023)
             sat11 = 11'sd1023;
         else if (v < -35'sd1024)
-            sat11 = -11'sd1024;
+            sat11 = 11'sh400;
         else
             sat11 = v[10:0];
     end
@@ -576,12 +584,9 @@ wire [17:0] absFr = Fr[18] ? -Fr[17:0] : Fr[17:0];
 wire [17:0] absFi = Fi[18] ? -Fi[17:0] : Fi[17:0];
 wire [18:0] fmag = (absFr > absFi) ? ({1'b0, absFr} + {2'b0, absFi[17:1]}) : ({1'b0, absFi} + {2'b0, absFr[17:1]});
 always @(posedge clk) begin
-    if (vs0_prev & ~vs0) begin
+    if (vs_fall) begin
         peak_l <= peak;
         peak <= 8'h0;
-        alt_ok <= (alt_cnt > 10'd64) && (bad_cnt < (alt_cnt >> 3));
-        alt_cnt <= 10'h0;
-        bad_cnt <= 10'h0;
     end else if (vs0 && (h > 12'd250) && (h < 12'd1650) && (x0d[1] > peak)) begin
         peak <= x0d[1];
     end

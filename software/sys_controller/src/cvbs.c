@@ -68,7 +68,7 @@ static uint32_t in_totlines, in_pcnt;
 static uint8_t in_ilace;
 
 // automatic detection state
-static uint8_t auto_443;        // 4.43MHz subcarrier
+static uint8_t auto_other;      // 0: usual subcarrier for the line count (625: 4.43MHz, 525: 3.58MHz), 1: the other one
 static uint8_t auto_pal;        // PAL (525 lines)
 static uint32_t auto_ts, auto_kill_since, auto_alt_since;
 static uint8_t auto_alt_last;
@@ -91,7 +91,7 @@ int cvbs_group_ok(video_group group) {
 }
 
 void cvbs_reset_auto() {
-    auto_443 = 0;
+    auto_other = 0;
     auto_pal = 0;
     auto_ts = alt_timestamp();
     auto_kill_since = 0;
@@ -159,8 +159,8 @@ static cv_std_t cur_std() {
     if (std != CV_STD_AUTO)
         return std;
     if (lines625())
-        return auto_443 ? CV_STD_PAL : CV_STD_PALN;
-    if (auto_443)
+        return auto_other ? CV_STD_PALN : CV_STD_PAL;
+    if (auto_other)
         return auto_pal ? CV_STD_PAL60 : CV_STD_NTSC443;
     return auto_pal ? CV_STD_PALM : CV_STD_NTSC;
 }
@@ -258,13 +258,13 @@ int cvbs_update() {
         if (!auto_kill_since)
             auto_kill_since = now;
         else if (now - auto_kill_since > tps) {
-            auto_443 = !auto_443;
+            auto_other = !auto_other;
             auto_pal = 0;
             auto_kill_since = 0;
             auto_alt_since = 0;
             auto_ts = now;
             changed = 1;
-            printf("CVBS auto: trying %s\n", auto_443 ? "4.43MHz" : "3.58MHz");
+            printf("CVBS auto: trying %s\n", cvbs_std_name());
         }
         return changed;
     }
