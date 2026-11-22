@@ -1,6 +1,13 @@
 Changelog
 =========
 
+CVBS decoder 0.5.1
+------------------
+
+### Fixed
+- Output Line2x 31kHz: "OUT OF RANGE!" after half a second. The CPU checked
+  the raw watchdog status, also while the watchdog is bypassed for Line2x.
+
 CVBS decoder 0.5
 ----------------
 

@@ -1591,8 +1591,10 @@ int main(int argc, char **argv, char **envp)
             update_sc_config();
 
         // Hardware 15kHz watchdog tripped and stays tripped: fall back to the
-        // safe screen (should never happen unless a mode is wrong)
-        if (sc->fe_status.wd_kill && !ds_safe_screen) {
+        // safe screen (should never happen unless a mode is wrong). The status
+        // bit is the raw watchdog: ignored while the Line2x test output is on
+        // (WD_BYPASS, the FPGA does not blank the output then)
+        if (sc->fe_status.wd_kill && !(sys_ctrl & WD_BYPASS) && !ds_safe_screen) {
             if (++wd_kill_ctr >= 30) {
                 wd_kill_ctr = 0;
                 show_safe_screen(" OUT OF RANGE!");
