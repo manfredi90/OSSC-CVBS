@@ -130,8 +130,8 @@ int ds_settings_load() {
     }
     if (tc.cv_sharp > CV_SHARP_MAX)
         tc.cv_sharp = 0;
-    if ((tc.cv_cdelay < SIGNED_NUMVAL_ZERO-CV_CDELAY_RANGE) || (tc.cv_cdelay > SIGNED_NUMVAL_ZERO+CV_CDELAY_RANGE))
-        tc.cv_cdelay = SIGNED_NUMVAL_ZERO;
+    if (tc.cv_reffilt > CV_REFFILT_MAX)
+        tc.cv_reffilt = 0;
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
     if (tc.ds_720p_ar == 3)       // 1.2.2-1.2.3 "Wide (216p)": now "Wide"

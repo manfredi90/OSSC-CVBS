@@ -1,6 +1,16 @@
 Changelog
 =========
 
+CVBS decoder 0.8
+----------------
+
+### New
+- Ref. filter (Off, 1/2, 1/4, 1/8): the colour reference measured on the
+  burst of each line is low-passed over lines. Less line to line
+  saturation / hue noise (horizontal streaks on saturated colours); with
+  a jittery source clock, colour lines can come back at the stronger
+  settings. Test option, default Off.
+
 CVBS decoder 0.7.1
 ------------------
 

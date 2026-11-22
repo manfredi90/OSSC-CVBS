@@ -47,7 +47,8 @@ module cvbs_decoder #(
     // edges (0 off, 1-3)
     input [23:0] cfg,
     // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [15:14]
-    // sharpness bits 1:0 (bit 2 = cfg[6])
+    // sharpness bits 1:0 (bit 2 = cfg[6]), [11:10] reference filter over
+    // lines (0 off, 1-3: 1/2, 1/4, 1/8)
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -322,6 +323,12 @@ always @(posedge clk)
 reg signed [17:0] Zr, Zi, Pr, Pi;   // current / previous valid burst
 reg signed [18:0] Rr, Ri, RPr, RPi; // r = Z + P, previous r
 reg signed [18:0] Fr, Fi;           // low-pass filtered r
+reg signed [18:0] Sr, Si;           // reference used for the demodulation
+wire [1:0] rflt = hc[11:10];        // reference filter over lines: off, 1/2, 1/4, 1/8
+wire signed [19:0] sdr = Rr - Sr;
+wire signed [19:0] sdi = Ri - Si;
+wire signed [19:0] sdr_s = sdr >>> rflt;
+wire signed [19:0] sdi_s = sdi >>> rflt;
 reg pv, rpv;                        // P / RP valid
 reg vb;                             // current burst valid
 reg signed [47:0] t1;
@@ -444,7 +451,18 @@ always @(posedge clk) begin
                     Ri <= Ri <<< 1;
                 end
             end
-            6: begin ma <= Ri; mb <= RPr; end
+            6: begin
+                ma <= Ri; mb <= RPr;
+                // reference filter: r low-passed over lines (test: per-line
+                // measurement noise against the line to line clock jitter)
+                if (rflt == 2'd0) begin
+                    Sr <= Rr;
+                    Si <= Ri;
+                end else begin
+                    Sr <= Sr + sdr_s[18:0];
+                    Si <= Si + sdi_s[18:0];
+                end
+            end
             7: begin ma <= Rr; mb <= RPi; end
             8: begin
                 t1 <= mres;         // Ri*RPr
@@ -454,9 +472,9 @@ always @(posedge clk) begin
             end
             9: begin
                 dIm <= t1 - mres;   // Im(r * conj(rp))
-                ma <= Rr; mb <= Rr;
+                ma <= Sr; mb <= Sr;
             end
-            10: begin ma <= Ri; mb <= Ri; end
+            10: begin ma <= Si; mb <= Si; end
             11: t1 <= mres;
             12: begin
                 m <= (t1 + mres) > 48'sh7fffffff ? 32'h7fffffff : t1[31:0] + mres[31:0];
@@ -494,10 +512,10 @@ always @(posedge clk) begin
                 ma <= sat24(dIm >>> 8);
                 mb <= {4'h0, rec};
             end
-            16: begin ma <= Rr; mb <= {4'h0, rec}; end
+            16: begin ma <= Sr; mb <= {4'h0, rec}; end
             17: begin
                 dq <= sat24(mres >>> 16);
-                ma <= Ri; mb <= {4'h0, rec};
+                ma <= Si; mb <= {4'h0, rec};
             end
             18: begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
@@ -737,7 +755,7 @@ integer j;
 initial begin
     ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0;
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; RPr = 0; RPi = 0; Rr = 0; Ri = 0;
-    w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
+    w_re = 0; w_im = 0; kill = 1; Rr2 = 0; Sr = 0; Si = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; corr_sat = 0; nob_cnt = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;

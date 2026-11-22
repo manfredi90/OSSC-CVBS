@@ -125,7 +125,7 @@ def gen(args):
 def run(args):
     G, B, hs, vs, N, inc, pal = gen(args)
     cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
-    hc = hc_for(pal, args.sat, args.hue) | ((args.cdel + 4) << 10) | ((args.sharp & 3) << 14)
+    hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 3) << 10) | ((args.sharp & 3) << 14)
     cfg |= (args.sharp >> 2) << 6
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
         f.write('%06x %08x %08x\n' % (cfg, hc, inc))
@@ -185,7 +185,7 @@ def main():
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
     ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
     ap.add_argument('--edge', type=int, default=0, help='chroma suppression at luma edges 0-3')
-    ap.add_argument('--cdel', type=int, default=0, help='chroma delay -4..+4')
+    ap.add_argument('--reffilt', type=int, default=0, help='reference filter over lines 0-3')
     ap.add_argument('--sharp', type=int, default=0, help='sharpness 0-7')
     ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')

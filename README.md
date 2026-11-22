@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.7.1).**
+> **Status: test version (0.8).**
 
 
 Inputs
@@ -69,6 +69,7 @@ CVBS decoder menu
 | Burst position | 120–220 | start of the burst gate, samples after the hsync leading edge |
 | Clamp position | 0–120 | TVP7002 clamp start, samples after the hsync trailing edge (default 92: after the burst) |
 | Subcarrier loop | On, Off | |
+| Ref. filter | Off, 1/2, 1/4, 1/8 | colour reference (burst of each line) low-passed over lines: less line to line colour noise; colour lines can return at strong settings with a jittery clock. Default Off |
 | CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware |
 
 The LCD shows the mode and the colour system on the first row and the

@@ -236,7 +236,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
         lg = 95;
 
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
-          ((uint32_t)(cc->cv_sharp & 3) << 14);
+          ((uint32_t)(cc->cv_reffilt & 3) << 10) | ((uint32_t)(cc->cv_sharp & 3) << 14);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     *flags = cv_mode ? (1 |
