@@ -1,6 +1,26 @@
 Changelog
 =========
 
+CVBS decoder 0.17
+-----------------
+
+### Fixed
+- 27MHz xtal clock: MiSTer menu black on the Line2x output, last line cut
+  short on the Mega Drive. The cause was the output timing, not the sync:
+  with the crystal a line is not a whole number of clocks and the output
+  clock is not locked to the source, so the free-running output frame
+  drifted against the input (periodic jumps when the drift went past the
+  resync window: no lock on the monitor; line buffer read late at the
+  bottom). Line lengths of the frontend and of the output now follow the
+  measured line period, and the output is resynced at every input frame.
+- 27MHz xtal clock: slow horizontal waviness. The line start quantisation
+  drifts slowly through the sample on sources close to 1716 clocks per line
+  (MiSTer), and the line re-timing reference (average edge over 64 lines)
+  followed it: now averaged over ~4000 lines.
+
+### Removed
+- Vsync re-alignment of 0.16 (the vsync position was fine: Sync diag.).
+
 CVBS decoder 0.16
 -----------------
 

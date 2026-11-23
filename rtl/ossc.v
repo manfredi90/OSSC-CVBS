@@ -233,26 +233,9 @@ always @(posedge TVP_PCLK_i) begin
     TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
 end
 
-// VS re-aligned to the line (same mode): without the H-PLL the TVP7002
-// vsync output comes anywhere in the line, and the frontend takes a vsync
-// edge in the middle half of the line as the start of an even field (frame
-// started at mid-line: last line cut short, no picture on the MiSTer menu).
-// An edge in the middle half moves to the half line, any other to the next
-// line start (interlaced sources keep their half-line offset).
-reg fw_vs, fw_vs_in_prev, fw_vs_pend, fw_vs_half;
-wire [11:0] fw_half = {1'b0, fw_len[11:1]};
-wire fw_vs_chg = (TVP_VS_sync2_reg != fw_vs_in_prev);
-always @(posedge TVP_PCLK_i) begin
+reg fw_vs_in_prev;
+always @(posedge TVP_PCLK_i)
     fw_vs_in_prev <= TVP_VS_sync2_reg;
-    if (fw_vs_chg) begin
-        fw_vs_pend <= 1'b1;
-        fw_vs_half <= (fw_cnt >= {2'b0, fw_len[11:2]}) && (fw_cnt < fw_half + {2'b0, fw_len[11:2]});
-    end else if (fw_vs_pend && (fw_cnt == (fw_vs_half ? fw_half : 12'd0))) begin
-        // (fw_cnt == 0: same clock as the TVP_HS falling edge)
-        fw_vs_pend <= 1'b0;
-        fw_vs <= fw_vs_in_prev;
-    end
-end
 // diagnostics: raw vsync position in the line, hsync edges ignored per field
 reg [11:0] fw_vspos;
 reg [4:0] fw_rej_cnt, fw_rej;
@@ -264,7 +247,6 @@ always @(posedge TVP_PCLK_i) begin
     end else if (fw_edge & ~fw_accept & (fw_rej_cnt != 5'h1f))
         fw_rej_cnt <= fw_rej_cnt + 1'b1;
 end
-wire TVP_VS_fe = fw_en ? fw_vs : TVP_VS_sync2_reg;
 
 // TVP7002 RGB digitizer
 always @(posedge TVP_PCLK_i) begin
@@ -303,7 +285,7 @@ tvp7002_frontend u_tvp_frontend (
     .G_i(TVP_G),
     .B_i(TVP_B),
     .HS_i(TVP_HS),
-    .VS_i(TVP_VS_fe),
+    .VS_i(TVP_VS_sync2_reg),
     .HSYNC_i(TVP_HSYNC_sync2_reg),
     .VSYNC_i(TVP_VSYNC_sync2_reg),
     .DE_i(1'b0),
@@ -691,6 +673,7 @@ scanconverter #(
     .lb_slots(ds_lb_slots),
     .lb_rgb(ds_lb_rgb),
     .ds_hofs(ds_hofs),
+    .resync_always(fw_en),
     .ext_sync_mode(1'b0),
     .ext_frame_change_i(1'b0),
     .ext_R_i(8'h00),
