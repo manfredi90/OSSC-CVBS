@@ -15,6 +15,9 @@ CVBS decoder 0.26
   Sync diag. in that state: F0 S0 (no frame starts): the own vsync (0.24)
   took its broad pulse threshold from the flywheel line length (below the
   hsync width): now fixed lengths (300 clocks, 1.25 lines).
+- Xtal vsync default back to TVP7002: with the own vsync Sync diag. read F0
+  S0 (no frame starts) even with a good picture. Own kept as a test option;
+  Sync diag. W = sync pulse width (27MHz clocks) to check its threshold.
 
 ### Removed
 - The repeated setup of 0.25 (no effect).

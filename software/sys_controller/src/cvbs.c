@@ -200,8 +200,8 @@ static void cos_sin_q16(int deg, int32_t *c, int32_t *s) {
 // measured period, rounded up, never below the preset), 1 resync only, 2 off
 alt_u8 cv_diagview;
 alt_u8 cv_diagview_applied;
-// test option (not kept), 27MHz xtal clock: vsync from the composite sync
-// (0, own) or from the TVP7002 (1)
+// test option (not kept), 27MHz xtal clock: vsync from the TVP7002 (0) or
+// from the composite sync (1, own)
 alt_u8 cv_vssrc;
 alt_u8 cv_vssrc_applied;
 
@@ -263,7 +263,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
         rf = (cc->cv_reffilt == 2);
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
           ((uint32_t)(rf & 1) << 10);
-    *hc |= ((uint32_t)(cv_vssrc != 0) << 11);
+    *hc |= ((uint32_t)(cv_vssrc == 0) << 11);   // FPGA: hc[11] = TVP7002 vsync
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     cv_diagview_applied = cv_diagview;
@@ -349,8 +349,9 @@ int cvbs_sync_diag() {
     fs2.data = sc->fe_status.data;
     // per second (over 1/4 s): input frames, output resyncs
     // V: lines from the own vsync to the TVP7002 vsync (x8)
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "F%u S%u V%u", (unsigned)(((fs2.frame_cnt - fs.frame_cnt) & 15) * 4),
-              (unsigned)(((fs2.resync_cnt - fs.resync_cnt) & 255) * 4), (unsigned)fs2.vd_off8 * 8);
+    // W: sync pulse width (SOG, 27MHz clocks)
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "F%u S%u V%u W%u", (unsigned)(((fs2.frame_cnt - fs.frame_cnt) & 15) * 4),
+              (unsigned)(((fs2.resync_cnt - fs.resync_cnt) & 255) * 4), (unsigned)fs2.vd_off8 * 8, (unsigned)sc->fe_status2.hsync_width);
     return 1;
 }
 
