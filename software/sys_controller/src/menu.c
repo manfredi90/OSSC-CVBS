@@ -113,7 +113,7 @@ static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
 static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
-static const char* const cv_xsync_desc[] = { "Off", "Resync", "Line len.", "Both" };
+static const char* const cv_xsync_desc[] = { "Both", "Resync", "Line len.", "Off" };
 
 static void sync_vth_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d mV", (v*1127)/100); }
 static void intclks_to_time_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u.%.2u us", (unsigned)(((1000000U*v)/(TVP_INTCLK_HZ/1000))/1000), (unsigned)((((1000000U*v)/(TVP_INTCLK_HZ/1000))%1000)/10)); }

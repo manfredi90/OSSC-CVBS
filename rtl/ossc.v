@@ -233,15 +233,37 @@ always @(posedge TVP_PCLK_i) begin
     TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
 end
 
-reg fw_vs_in_prev;
-always @(posedge TVP_PCLK_i)
+// VS debounce (same mode): the TVP7002 vsync output can toggle more than
+// once in the vertical interval without the H-PLL (extra frame starts). A
+// new level is taken after it has been steady for a whole line.
+reg fw_vs_in_prev, fw_vs;
+reg [11:0] fw_vs_cnt;
+reg [3:0] fw_vs_chg_cnt, fw_vs_chg;
+always @(posedge TVP_PCLK_i) begin
     fw_vs_in_prev <= TVP_VS_sync2_reg;
+    if (TVP_VS_sync2_reg == fw_vs)
+        fw_vs_cnt <= 12'd0;
+    else if (fw_vs_cnt >= fw_len) begin
+        fw_vs <= TVP_VS_sync2_reg;
+        fw_vs_cnt <= 12'd0;
+        if (~TVP_VS_sync2_reg) begin
+            fw_vs_chg <= fw_vs_chg_cnt;
+            fw_vs_chg_cnt <= 4'd0;
+        end
+    end else
+        fw_vs_cnt <= fw_vs_cnt + 1'b1;
+    if ((TVP_VS_sync2_reg != fw_vs_in_prev) && (fw_vs_chg_cnt != 4'hf) && ~(fw_vs_cnt >= fw_len))
+        fw_vs_chg_cnt <= fw_vs_chg_cnt + 1'b1;
+end
+wire TVP_VS_fe = fw_en ? fw_vs : TVP_VS_sync2_reg;
 // diagnostics: raw vsync position in the line, hsync edges ignored per field
 reg [11:0] fw_vspos;
 reg [4:0] fw_rej_cnt, fw_rej;
 always @(posedge TVP_PCLK_i) begin
     if (fw_vs_in_prev & ~TVP_VS_sync2_reg) begin
         fw_vspos <= fw_cnt;
+    end
+    if (fw_en & (fw_vs_cnt >= fw_len) & ~TVP_VS_sync2_reg) begin
         fw_rej <= fw_rej_cnt;
         fw_rej_cnt <= 5'd0;
     end else if (fw_edge & ~fw_accept & (fw_rej_cnt != 5'h1f))
@@ -285,7 +307,7 @@ tvp7002_frontend u_tvp_frontend (
     .G_i(TVP_G),
     .B_i(TVP_B),
     .HS_i(TVP_HS),
-    .VS_i(TVP_VS_sync2_reg),
+    .VS_i(TVP_VS_fe),
     .HSYNC_i(TVP_HSYNC_sync2_reg),
     .VSYNC_i(TVP_VSYNC_sync2_reg),
     .DE_i(1'b0),
@@ -589,7 +611,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({fw_rej, fw_locked, fw_vspos, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({fw_rej, fw_locked, fw_vs_chg, fw_vspos[11:4], wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),

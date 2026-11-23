@@ -1,14 +1,22 @@
 Changelog
 =========
 
-CVBS decoder 0.18
+CVBS decoder 0.19
 -----------------
 
-### Changed
-- The two output timing changes of 0.17 (garbled picture with the 27MHz
-  xtal clock) are now a test option, CVBS decoder > Xtal out sync (Off,
-  Resync, Line len., Both; not kept, default Off = as 0.16): resync the
-  output at every input frame, line lengths from the measured period.
+### Fixed
+- 27MHz xtal clock: picture garbled on the MiSTer menu with 0.17 (the cores
+  were fine with H+V sync, and much steadier). The TVP7002 vsync output can
+  toggle more than once in the vertical interval without the H-PLL, and
+  0.17 resynced the output at every vsync edge. The vsync is now debounced
+  (a new level is taken after one whole line).
+
+### New
+- CVBS decoder > Xtal out sync (Both, Resync, Line len., Off; test, not
+  kept, default Both): the two output timing changes of 0.17, resync at
+  every input frame and line lengths from the measured period.
+- Sync diag.: V = raw vsync position (clocks), R = hsync edges ignored, E =
+  extra raw vsync changes per frame, L = flywheel locked.
 
 CVBS decoder 0.17
 -----------------

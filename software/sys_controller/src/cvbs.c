@@ -195,8 +195,9 @@ static void cos_sin_q16(int deg, int32_t *c, int32_t *s) {
 
 // diagnostic view (not kept): colour deviation from its average over the
 // lines, x8 on grey
-// test option (not kept), 27MHz xtal clock output timing: bit 0 resync the
-// output at every input frame, bit 1 line lengths from the measured period
+// test option (not kept, default both), 27MHz xtal clock output timing:
+// 0 both, 1 resync the output at every input frame, 2 line lengths from the
+// measured period, 3 off
 alt_u8 cv_diagview;
 alt_u8 cv_diagview_applied;
 
@@ -267,7 +268,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off != 0) << 4) |
                         ((cc->cv_xtal != 0) << 5) |
-                        ((uint32_t)((cc->cv_xtal != 0) && (cv_diagview & 1)) << 7) |
+                        ((uint32_t)((cc->cv_xtal != 0) && (cv_diagview <= 1)) << 7) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |
@@ -336,8 +337,8 @@ int cvbs_sync_diag() {
         return 1;
     }
     fs.data = sc->fe_status.data;
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "V%u/%u R%u %c", (unsigned)fs.fw_vspos, (unsigned)cm.clkcnt,
-              (unsigned)fs.fw_rej, fs.fw_locked ? 'L' : '-');
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "V%u R%u E%u %c", (unsigned)fs.fw_vspos*16,
+              (unsigned)fs.fw_rej, (unsigned)fs.fw_vs_chg, fs.fw_locked ? 'L' : '-');
     return 1;
 }
 
