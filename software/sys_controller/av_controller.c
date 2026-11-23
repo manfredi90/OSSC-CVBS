@@ -858,15 +858,19 @@ void program_mode()
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
-    if (cv_mode && cm.cc.cv_xtal && (cv_diagview <= 1) && cm.totlines) {
+    if (cv_mode && cm.cc.cv_xtal && (cv_diagview == 0) && cm.totlines) {
         uint64_t lp_x256 = ((uint64_t)cm.pcnt_field << 8) / (cm.totlines >> !cm.progressive);
         uint64_t den = (uint64_t)pll_h_total << 8;
-        // line lock: rounded down (the FPGA lengthens lines to follow the
-        // input); else rounded up (output lines never shorter than the input
-        // ones, the output would read lines before they are written)
-        uint64_t rnd = (cv_diagview == 0) ? 0 : den - 1;
-        vmode_in.timings.h_total = (uint16_t)(((uint64_t)vmode_in.timings.h_total * lp_x256 + rnd) / den);
-        vmode_out.timings.h_total = (uint16_t)(((uint64_t)vmode_out.timings.h_total * lp_x256 + rnd) / den);
+        // rounded up (output lines never shorter than the input ones: the
+        // output would read lines before they are written) and never below
+        // the preset (tests of 0.20 / 0.21: SNES ~1714 clocks per line, no
+        // picture with a shorter output line, fine with the preset)
+        uint16_t hi = (uint16_t)(((uint64_t)vmode_in.timings.h_total * lp_x256 + den - 1) / den);
+        uint16_t ho = (uint16_t)(((uint64_t)vmode_out.timings.h_total * lp_x256 + den - 1) / den);
+        if (hi > vmode_in.timings.h_total)
+            vmode_in.timings.h_total = hi;
+        if (ho > vmode_out.timings.h_total)
+            vmode_out.timings.h_total = ho;
         printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp_x256 >> 8), (unsigned long)(((lp_x256 & 0xff) * 100) >> 8),
                (unsigned)vmode_in.timings.h_total, (unsigned)vmode_out.timings.h_total);
     }

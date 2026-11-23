@@ -1,6 +1,20 @@
 Changelog
 =========
 
+CVBS decoder 0.22
+-----------------
+
+### Changed
+- 27MHz xtal clock, Xtal out sync (Auto, Resync, Off; test, not kept):
+  Auto = resync at every input frame + output line length from the measured
+  line period, rounded up and never below the preset. Tests of 0.20 / 0.21
+  on the monitor: Mega Drive and MiSTer menu fine with the longer line
+  (Both), SNES fine only with the preset length (Resync): Auto does each.
+
+### Removed
+- Line lock of 0.21: no picture on any source (output line lengths changing
+  from line to line, presumably not accepted by the monitor).
+
 CVBS decoder 0.21
 -----------------
 
