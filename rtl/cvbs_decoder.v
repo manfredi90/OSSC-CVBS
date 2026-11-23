@@ -215,7 +215,7 @@ always @(posedge clk) begin
     if (hs0_prev & ~hs0)
         d_line <= ~line_align ? 10'sd0 :
                   (se_d > 17'sd511) ? 10'sd511 :
-                  (se_d < -17'sd512) ? -10'sd512 : se_d[9:0];
+                  (se_d < -17'sd512) ? 10'h200 : se_d[9:0];
 end
 // read positions: h + 2 + d (luma), h + 2 + round(d) (chroma)
 wire signed [10:0] d_r11 = d_line + 11'sd128;
@@ -445,7 +445,6 @@ always @(posedge clk)
 
 reg signed [17:0] Zr, Zi, Pr, Pi;   // current / previous valid burst
 reg signed [18:0] Rr, Ri;           // reference of the line
-reg signed [18:0] Fr, Fi;           // low-pass filtered r
 reg pv;                             // P valid
 reg vb;                             // current burst valid
 reg signed [47:0] t1;
@@ -458,7 +457,7 @@ reg signed [17:0] w_re, w_im;
 reg s_prev;                         // PAL switch of the previous line
 reg signed [18:0] RPr, RPi;         // r of the previous line
 reg rpv;
-reg signed [47:0] dIm;
+reg signed [39:0] dIm;              // |Ri*RPr| < 2^37
 reg signed [23:0] dq;
 reg signed [18:0] Sr, Si;           // reference used: r low-passed over lines
 wire signed [19:0] sdr = Rr - Sr;
@@ -590,9 +589,6 @@ always @(posedge clk) begin
             7: begin ma <= Rr; mb <= RPi; end
             8: begin
                 t1 <= mres;         // Ri*RPr
-                // burst level for the status: r low-pass over lines (1/4)
-                Fr <= Fr + ((Rr - Fr) >>> 2);
-                Fi <= Fi + ((Ri - Fi) >>> 2);
             end
             9: begin
                 dIm <= t1 - mres;   // Im(r * conj(rp))
@@ -633,7 +629,7 @@ always @(posedge clk) begin
             end
             15: begin
                 // dq = Im(r*conj(rp)) / |r|^2 (x2^16, ~radians per line)
-                ma <= sat24(dIm >>> 8);
+                ma <= sat24($signed(dIm >>> 8));
                 mb <= {4'h0, rec};
             end
             16: begin ma <= Sr; mb <= {4'h0, rec}; end
@@ -896,8 +892,9 @@ reg [7:0] peak, peak_l;
 // reads the status right after the vsync)
 reg [8:0] st_line;
 reg kill_st;
-wire [17:0] absFr = Fr[18] ? -Fr[17:0] : Fr[17:0];
-wire [17:0] absFi = Fi[18] ? -Fi[17:0] : Fi[17:0];
+// burst level: the reference (low-passed over lines when the filter is on)
+wire [17:0] absFr = Sr[18] ? -Sr[17:0] : Sr[17:0];
+wire [17:0] absFi = Si[18] ? -Si[17:0] : Si[17:0];
 wire [18:0] fmag = (absFr > absFi) ? ({1'b0, absFr} + {2'b0, absFi[17:1]}) : ({1'b0, absFi} + {2'b0, absFr[17:1]});
 always @(posedge clk) begin
     if (vs_fall) begin
@@ -921,7 +918,7 @@ end
 integer j;
 initial begin
     ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; dIm = 0; dq = 0; Sr = 0; Si = 0;
-    Fr = 0; Fi = 0; Pr = 0; Pi = 0; Rr = 0; Ri = 0;
+    Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0; dg_sU = 0; dg_sV = 0; dg_rd = 0;
     for (j=0; j<256; j=j+1) dg_mem[j] = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
