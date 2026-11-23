@@ -343,8 +343,8 @@ int cvbs_sync_diag() {
     while ((alt_timestamp() - t0) < tps/4) ;
     fs2.data = sc->fe_status.data;
     // per second (over 1/4 s): input frames, output resyncs
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "F%u S%u R%u %c", (unsigned)(((fs2.frame_cnt - fs.frame_cnt) & 15) * 4),
-              (unsigned)(((fs2.resync_cnt - fs.resync_cnt) & 255) * 4), (unsigned)fs2.fw_rej, fs2.fw_locked ? 'L' : '-');
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "F%u S%u %c", (unsigned)(((fs2.frame_cnt - fs.frame_cnt) & 15) * 4),
+              (unsigned)(((fs2.resync_cnt - fs.resync_cnt) & 255) * 4), fs2.fw_locked ? 'L' : '-');
     return 1;
 }
 

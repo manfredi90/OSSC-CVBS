@@ -16,6 +16,10 @@ CVBS decoder 0.21
 - Xtal out sync: Line lock, Both (line length rounded up + resync), Resync,
   Off. Line len. alone removed (periodic jumps by design).
 
+### Removed
+- Unverified changes, for room: vsync debounce (0.19), no frequency loop /
+  reference filter update in the vertical interval (0.15), R in Sync diag.
+
 CVBS decoder 0.20
 -----------------
 
