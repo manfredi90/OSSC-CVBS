@@ -251,7 +251,7 @@ def main():
         s0_ = starts[ln]; row = []
         for i in (1, 3, 5, 7):
             c = s0_ + int((act0_ + i * (act1_ - act0_) / 8) * fs_us)
-            seg = Yall[c - 12:c + 12].astype(float)
+            seg = Yall[c - 24:c + 24].astype(float)
             lo, hi = seg[:6].mean(), seg[-6:].mean()
             if abs(hi - lo) < 15: continue
             mid = (lo + hi) / 2

@@ -221,7 +221,9 @@ end
 wire signed [10:0] d_r11 = d_line + 11'sd128;
 wire signed [2:0] d_rnd = d_r11 >>> 8;
 wire [11:0] h_cr = h + 12'd2 + {{9{d_rnd[2]}}, d_rnd};
-wire [11:0] h_yr = h + 12'd3 + {{10{d_line[9]}}, d_line[9:8]};
+// (luma 8 samples ahead of the chroma: the edge detection of stage E looks
+// ahead, no chroma delay line)
+wire [11:0] h_yr = h + 12'd11 + {{10{d_line[9]}}, d_line[9:8]};
 
 // ---------------------------------------------------------------------------
 // blank level: x0 is first filtered by a 6-sample box (about one subcarrier
@@ -464,7 +466,6 @@ wire signed [19:0] sdr = Rr - Sr;
 wire signed [19:0] sdi = Ri - Si;
 wire signed [19:0] sdr_s = sdr >>> rflt;
 wire signed [19:0] sdi_s = sdi >>> rflt;
-localparam signed [21:0] CORR_MAX = 22'sd2000000;
 wire signed [25:0] corr_next = corr + (dq >>> 1);
 reg kill;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
@@ -641,10 +642,8 @@ always @(posedge clk) begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
                 // frequency loop (the line to line rotation of r)
                 if (rpv) begin
-                    if (corr_next > CORR_MAX)
-                        corr <= CORR_MAX;
-                    else if (corr_next < -CORR_MAX)
-                        corr <= -CORR_MAX;
+                    if (corr_next[25:21] != {5{corr_next[25]}})
+                        corr <= corr_next[25] ? 22'h200000 : 22'h1fffff;
                     else
                         corr <= corr_next[21:0];
                 end
@@ -739,9 +738,9 @@ wire signed [11:0] yAn_o = yAn + 12'sd32;
 wire [7:0] yAn8 = yAn_o[11] ? 8'd0 : ((yAn_o > 12'sd255) ? 8'd255 : yAn_o[7:0]);
 reg [10:0] h_d1;
 reg [7:0] yl_qp;
-reg [7:0] d_f;
+reg [3:0] d_f;
 wire signed [8:0] yl_dd = $signed({1'b0, yl_q}) - $signed({1'b0, yl_qp});
-wire signed [17:0] yl_ip = yl_dd * $signed({1'b0, d_f});
+wire signed [13:0] yl_ip = yl_dd * $signed({1'b0, d_f});
 always @(posedge clk) begin
     if (svideo | nonotch | kill)
         yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank});
@@ -751,9 +750,9 @@ always @(posedge clk) begin
     yl_q <= yl_mem[h_yr[10:0]];
     yl_mem[h_d1] <= yAn8;
     yl_qp <= yl_q;
-    d_f <= d_line[7:0];
+    d_f <= d_line[7:4];     // 1/16 sample
     // between the two samples read last (fraction of d)
-    yAo <= $signed({3'b0, yl_qp}) + (yl_ip >>> 8) - 11'sd32;
+    yAo <= $signed({3'b0, yl_qp}) + (yl_ip >>> 4) - 11'sd32;
 end
 reg signed [10:0] yA;
 always @(posedge clk) begin
@@ -780,8 +779,6 @@ end
 // attenuation also covers the fringe before the edge. Off with S-Video (no
 // cross-colour; dark bands at edges between colours of different luma).
 reg signed [10:0] yE_d [1:5];
-reg signed [10:0] uE_d [1:8];
-reg signed [10:0] vE_d [1:8];
 reg [10:0] e_env;
 reg [8:0] e_att;
 reg signed [10:0] yE, UE, VE;
@@ -790,18 +787,12 @@ wire [10:0] e_abs = e_diff[11] ? -e_diff[10:0] : e_diff[10:0];
 wire [10:0] e_dec = (e_env > 11'd6) ? e_env - 11'd6 : 11'd0;
 wire [13:0] e_scaled = {3'b0, e_env} << edge_sup;   // x2 / x4 / x8
 wire signed [9:0] e_gain = 10'sd256 - $signed({1'b0, e_att});
-wire signed [20:0] uE_p = uE_d[8] * e_gain;
-wire signed [20:0] vE_p = vE_d[8] * e_gain;
+wire signed [20:0] uE_p = UA * e_gain;
+wire signed [20:0] vE_p = VA * e_gain;
 always @(posedge clk) begin
     yE_d[1] <= yS;
-    uE_d[1] <= UA;
-    vE_d[1] <= VA;
     for (i=2; i<=5; i=i+1)
         yE_d[i] <= yE_d[i-1];
-    for (i=2; i<=8; i=i+1) begin
-        uE_d[i] <= uE_d[i-1];
-        vE_d[i] <= vE_d[i-1];
-    end
     e_env <= (e_abs > e_dec) ? e_abs : e_dec;
     e_att <= ((edge_sup == 2'h0) | svideo) ? 9'h0 : ((e_scaled > 14'd256) ? 9'd256 : e_scaled[8:0]);
     yE <= yE_d[5];
@@ -937,8 +928,11 @@ initial begin
     for (j=1; j<=8; j=j+1) cb[j] = 0;
     c_bp2 = 0; e_env = 0; e_att = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
     for (j=1; j<=5; j=j+1) yE_d[j] = 0;
-    for (j=1; j<=8; j=j+1) begin uE_d[j] = 0; vE_d[j] = 0; end
+
     for (j=1; j<=6; j=j+1) yAd[j] = 0;
+    // synthesis translate_off
+    for (j=0; j<2048; j=j+1) yl_mem[j] = 8'd32;
+    // synthesis translate_on
     yS = 0;
 end
 
