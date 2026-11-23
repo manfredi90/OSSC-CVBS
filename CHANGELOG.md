@@ -15,19 +15,20 @@ clock, picture timed on the sync of every line.
   edge over 16 samples) and the luma is read from the line memory at that
   fractional position (chroma: nearest sample). Simulation: 11 -> ~4ns
   (S-Video, with noise). Only with the xtal clock.
-- CVBS decoder > Ref. filter (Auto, Off, 1/2, 1/4, 1/8): the colour
-  reference is low-passed over the lines (less line to line hue /
-  saturation noise from the burst measurement). Auto: 1/8 with the xtal
-  clock, Off line-locked (there the reference moves from line to line).
+- CVBS decoder > Ref. filter (Auto, Off, On): the colour reference is
+  low-passed over the lines (1/8: less line to line hue / saturation noise
+  from the burst measurement). Auto: On with the xtal clock, Off
+  line-locked (there the reference moves from line to line).
 
 ### Changed
 - Sample clock default: 27MHz xtal (saved settings keep their value).
-- Frequency loop back (gain 1/2): the DDS follows the subcarrier of the
-  source, so with the crystal the burst phase is steady from line to line.
+- Frequency loop back (sign-only, fast acquisition): the DDS follows the
+  subcarrier of the source, so with the crystal the burst phase is steady
+  from line to line.
 
 ### Removed
 - Ref. interp. and Interp. gain (reference ramp along the line, for the
-  line-locked clock): room for the re-timing.
+  line-locked clock), Diag. view: room for the re-timing.
 
 CVBS decoder 0.13
 -----------------

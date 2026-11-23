@@ -200,7 +200,7 @@ typedef struct {
     alt_u8 cv_clamp;        // TVP7002 clamp start, pixels after the hsync trailing edge
     alt_u8 cv_line2x;       // test option: 1 = Line2x output (31kHz, HDMI TVs), never kept (0 at every boot)
     /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
-    alt_u8 cv_reffilt;      // colour reference low-pass over lines: 0 auto (1/8 with the xtal clock, else off), 1 off, 2-4 = 1/2, 1/4, 1/8 (0.14; was ramp gain, sharpness)
+    alt_u8 cv_reffilt;      // colour reference low-pass over lines: 0 auto (on with the xtal clock, else off), 1 off, 2 on (1/8) (0.14; was ramp gain, sharpness)
     alt_u8 cv_xtal;         // sample clock: 0 = TVP7002 H-PLL (line-locked), 1 = 27MHz crystal (EXT_CLK) (was 0.6 chroma delay, 0.8 ref. filter)
 } __attribute__((packed)) avconfig_t;
 

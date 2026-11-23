@@ -40,15 +40,14 @@ module cvbs_decoder #(
     input VS_i,                 // active low
     input [SIDE_W-1:0] side_i,  // other signals delayed with the video
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
-    // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] reference not
-    // interpolated along the line (test),
-    // [7] diagnostic view (chroma deviation x8),
+    // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] free,
+    // [6] luma re-timed on the sync edge (27MHz crystal clock), [7] free,
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
-    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [11:10]
-    // reference low-pass over lines (off, 1/2, 1/4, 1/8)
+    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [10]
+    // reference low-pass over lines (1/8)
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -78,8 +77,7 @@ wire pal      = cfg[2];
 wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
 wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal clock)
-wire [1:0] rflt = hc[11:10];    // reference low-pass over lines: off, 1/2, 1/4, 1/8
-wire diag     = cfg[7];
+wire rflt = hc[10];             // reference low-pass over lines (1/8)
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
@@ -134,7 +132,7 @@ end
 // at the crossing of the level half way between sync tip and blank, then
 // timed by the area over 16 samples around it: with a band-limited edge the
 // number of samples at blank level L = sum(x - tip) / (blank - tip) does not
-// depend on the edge shape. E = k - L; d = E - average E (1/256 sample),
+// depend on the edge shape. E = k - L; d = E - average E (1/16 sample),
 // applied to the luma read from the line memory (rounded for the chroma)
 reg [12:0] se_tip;
 reg [8:0] se_thr2;          // tip + blank (2x threshold)
@@ -142,24 +140,24 @@ reg [12:0] se_ms;           // sum of the last 16 samples
 reg se_arm, se_found;
 reg [7:0] se_k;
 reg [3:0] se_wait;
-reg [20:0] se_n;            // dividend, shifted out MSB first
+reg [16:0] se_n;            // dividend, shifted out MSB first
 reg [8:0] se_rem;
 reg [7:0] se_den;
-reg [13:0] se_q;            // L x 256
+reg [9:0] se_q;             // L x 16
 reg [4:0] se_cnt;
-reg [21:0] se_acc;          // average edge x 2^6
+reg [17:0] se_acc;          // average edge x 2^6
 reg se_init;
-reg signed [16:0] se_d;     // edge - average (1/256 sample)
-reg signed [9:0] d_line;    // for the line read from the memories
+reg signed [12:0] se_d;     // edge - average (1/16 sample)
+reg signed [5:0] d_line;    // for the line read from the memories
 wire [8:0] x0_2 = {x0, 1'b0};
 wire [8:0] x0d_2 = {x0d[1], 1'b0};
 wire [7:0] se_tp = se_tip[12:5];
 wire signed [13:0] se_num = $signed({1'b0, se_ms}) - $signed({2'b0, se_tp, 4'h0});
 wire [7:0] se_dn0 = blank - se_tp;
-wire [15:0] se_e = {se_k, 8'h0} + 16'd8192 - {2'b0, se_q};
-wire [15:0] se_avg = se_acc[21:6];
-wire signed [16:0] se_dn = $signed({1'b0, se_e}) - $signed({1'b0, se_avg});
-wire [9:0] se_rem2 = {se_rem, se_n[20]};
+wire [11:0] se_e = {se_k, 4'h0} + 12'd512 - {2'b0, se_q};
+wire [11:0] se_avg = se_acc[17:6];
+wire signed [12:0] se_dn = $signed({1'b0, se_e}) - $signed({1'b0, se_avg});
+wire [9:0] se_rem2 = {se_rem, se_n[16]};
 always @(posedge clk) begin
     se_ms <= se_ms + x0 - x0d[16];
     if (h == 12'd32)
@@ -180,50 +178,50 @@ always @(posedge clk) begin
     if (se_wait != 4'd0) begin
         se_wait <= se_wait - 1'b1;
         if (se_wait == 4'd1) begin
-            se_n <= {(se_num[13] ? 13'h0 : se_num[12:0]), 8'h0};
+            se_n <= {(se_num[13] ? 13'h0 : se_num[12:0]), 4'h0};
             se_den <= se_dn0;
             se_rem <= 9'h0;
-            se_cnt <= (se_dn0 >= 8'd8 && se_dn0 < 8'd200) ? 5'd21 : 5'd0;
+            se_cnt <= (se_dn0 >= 8'd8 && se_dn0 < 8'd200) ? 5'd17 : 5'd0;
         end
     end
     if (se_cnt != 5'd0) begin
         // restoring division, one quotient bit per clock
         se_cnt <= se_cnt - 1'b1;
-        se_n <= {se_n[19:0], 1'b0};
+        se_n <= {se_n[15:0], 1'b0};
         if (se_rem2 >= {2'b0, se_den}) begin
             se_rem <= se_rem2 - {2'b0, se_den};
-            se_q <= {se_q[12:0], 1'b1};
+            se_q <= {se_q[8:0], 1'b1};
         end else begin
             se_rem <= se_rem2[8:0];
-            se_q <= {se_q[12:0], 1'b0};
+            se_q <= {se_q[8:0], 1'b0};
         end
         if (se_cnt == 5'd1)
             se_found <= 1'b1;
     end
     if (se_found && (h == 12'd300)) begin
-        if (se_init || se_dn > 17'sd2048 || se_dn < -17'sd2048) begin
+        if (se_init || se_dn > 13'sd128 || se_dn < -13'sd128) begin
             // first line, or edge moved (other mode): restart the average
             se_acc <= {se_e, 6'h0};
             se_init <= 1'b0;
-            se_d <= 17'sd0;
+            se_d <= 13'sd0;
         end else begin
-            se_acc <= se_acc + {{5{se_dn[16]}}, se_dn};
+            se_acc <= se_acc + {{5{se_dn[12]}}, se_dn};
             se_d <= se_dn;
         end
     end else if (h == 12'd300)
-        se_d <= 17'sd0;
+        se_d <= 13'sd0;
     if (hs0_prev & ~hs0)
-        d_line <= ~line_align ? 10'sd0 :
-                  (se_d > 17'sd511) ? 10'sd511 :
-                  (se_d < -17'sd512) ? 10'h200 : se_d[9:0];
+        d_line <= ~line_align ? 6'sd0 :
+                  (se_d > 13'sd31) ? 6'sd31 :
+                  (se_d < -13'sd32) ? 6'h20 : se_d[5:0];
 end
 // read positions: h + 2 + d (luma), h + 2 + round(d) (chroma)
-wire signed [10:0] d_r11 = d_line + 11'sd128;
-wire signed [2:0] d_rnd = d_r11 >>> 8;
+wire signed [6:0] d_r7 = d_line + 7'sd8;
+wire signed [2:0] d_rnd = d_r7 >>> 4;
 wire [11:0] h_cr = h + 12'd2 + {{9{d_rnd[2]}}, d_rnd};
 // (luma 8 samples ahead of the chroma: the edge detection of stage E looks
 // ahead, no chroma delay line)
-wire [11:0] h_yr = h + 12'd11 + {{10{d_line[9]}}, d_line[9:8]};
+wire [11:0] h_yr = h + 12'd11 + {{10{d_line[5]}}, d_line[5:4]};
 
 // ---------------------------------------------------------------------------
 // blank level: x0 is first filtered by a 6-sample box (about one subcarrier
@@ -459,14 +457,18 @@ reg signed [17:0] w_re, w_im;
 reg s_prev;                         // PAL switch of the previous line
 reg signed [18:0] RPr, RPi;         // r of the previous line
 reg rpv;
-reg signed [39:0] dIm;              // |Ri*RPr| < 2^37
-reg signed [23:0] dq;
+reg rot_p, rot_z;                   // sign of Im(r * conj(rp)): r rotates +, no rotation
 reg signed [18:0] Sr, Si;           // reference used: r low-passed over lines
 wire signed [19:0] sdr = Rr - Sr;
 wire signed [19:0] sdi = Ri - Si;
-wire signed [19:0] sdr_s = sdr >>> rflt;
-wire signed [19:0] sdi_s = sdi >>> rflt;
-wire signed [25:0] corr_next = corr + (dq >>> 1);
+wire signed [19:0] sdr_s = sdr >>> 3;
+wire signed [19:0] sdi_s = sdi >>> 3;
+// sign-only (bang-bang) loop, step 128 (0.02 degrees per line), 1024 after
+// 8 lines rotating the same way (acquisition: 100ppm off in ~100 lines)
+reg [6:0] rot_h;
+wire rot_fast = (rot_h == {7{rot_p}});
+wire signed [22:0] corr_step = rot_fast ? 23'sd1024 : 23'sd128;
+wire signed [22:0] corr_next = rot_z ? $signed({corr[21], corr}) : (rot_p ? corr + corr_step : corr - corr_step);
 reg kill;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
 reg [9:0] alt_cnt, bad_cnt;
@@ -579,7 +581,7 @@ always @(posedge clk) begin
             6: begin
                 ma <= Ri; mb <= RPr;
                 // reference low-pass over lines (none: this line's burst)
-                if (rflt == 2'd0) begin
+                if (~rflt) begin
                     Sr <= Rr;
                     Si <= Ri;
                 end else begin
@@ -592,7 +594,8 @@ always @(posedge clk) begin
                 t1 <= mres;         // Ri*RPr
             end
             9: begin
-                dIm <= t1 - mres;   // Im(r * conj(rp))
+                rot_p <= (t1 > mres);   // Im(r * conj(rp)) = Ri*RPr - Rr*RPi
+                rot_z <= (t1 == mres);
                 ma <= Sr; mb <= Sr;
             end
             10: begin ma <= Si; mb <= Si; end
@@ -628,22 +631,19 @@ always @(posedge clk) begin
                     st <= st;
                 end
             end
-            15: begin
-                // dq = Im(r*conj(rp)) / |r|^2 (x2^16, ~radians per line)
-                ma <= sat24($signed(dIm >>> 8));
-                mb <= {4'h0, rec};
-            end
+            15: ;
             16: begin ma <= Sr; mb <= {4'h0, rec}; end
             17: begin
-                dq <= sat24(mres >>> 16);
                 ma <= Si; mb <= {4'h0, rec};
             end
             18: begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
                 // frequency loop (the line to line rotation of r)
                 if (rpv) begin
-                    if (corr_next[25:21] != {5{corr_next[25]}})
-                        corr <= corr_next[25] ? 22'h200000 : 22'h1fffff;
+                    if (~rot_z)
+                        rot_h <= {rot_h[5:0], rot_p};
+                    if (corr_next[22] != corr_next[21])
+                        corr <= corr_next[22] ? 22'h200000 : 22'h1fffff;
                     else
                         corr <= corr_next[21:0];
                 end
@@ -750,7 +750,7 @@ always @(posedge clk) begin
     yl_q <= yl_mem[h_yr[10:0]];
     yl_mem[h_d1] <= yAn8;
     yl_qp <= yl_q;
-    d_f <= d_line[7:4];     // 1/16 sample
+    d_f <= d_line[3:0];
     // between the two samples read last (fraction of d)
     yAo <= $signed({3'b0, yl_qp}) + (yl_ip >>> 4) - 11'sd32;
 end
@@ -800,48 +800,16 @@ always @(posedge clk) begin
     VE <= vE_p >>> 8;
 end
 
-// diagnostic view: U / V minus their average over the lines (per group of 8
-// samples, low-pass 1/8 over lines), x8, on mid grey. A steady colour shows
-// as flat grey whatever it is; line to line colour changes show as stripes.
-(* ramstyle = "M9K" *) reg [27:0] dg_mem [0:255];
-reg [27:0] dg_rd;
-reg signed [13:0] dg_sU, dg_sV;
-wire [7:0] dg_bin = h[10:3];
-wire signed [13:0] dg_aU = dg_rd[27:14];     // average x8
-wire signed [13:0] dg_aV = dg_rd[13:0];
-wire signed [13:0] dg_sU_n = dg_sU + UE;
-wire signed [13:0] dg_sV_n = dg_sV + VE;
-wire signed [13:0] dg_nU = dg_aU + ((dg_sU_n - dg_aU) >>> 3);
-wire signed [13:0] dg_nV = dg_aV + ((dg_sV_n - dg_aV) >>> 3);
-wire signed [13:0] dg_dU = {UE, 3'b0} - dg_aU;     // deviation x8
-wire signed [13:0] dg_dV = {VE, 3'b0} - dg_aV;
-always @(posedge clk) begin
-    dg_rd <= dg_mem[dg_bin];
-    if (h[2:0] == 3'd7) begin
-        dg_mem[dg_bin] <= {dg_nU, dg_nV};
-        dg_sU <= 14'sd0;
-        dg_sV <= 14'sd0;
-    end else begin
-        dg_sU <= dg_sU_n;
-        dg_sV <= dg_sV_n;
-    end
-end
-// x8 deviation limited to +-511 (output +-1.1 to +-2 x 511: clipped anyway)
-wire signed [10:0] dg_U = (dg_dU[13:9] == 5'b00000 || dg_dU[13:9] == 5'b11111) ? dg_dU[10:0] : (dg_dU[13] ? -11'sd512 : 11'sd511);
-wire signed [10:0] dg_V = (dg_dV[13:9] == 5'b00000 || dg_dV[13:9] == 5'b11111) ? dg_dV[10:0] : (dg_dV[13] ? -11'sd512 : 11'sd511);
-wire signed [10:0] UEx = diag ? dg_U : UE;
-wire signed [10:0] VEx = diag ? dg_V : VE;
-
 // stage B: luma gain (white 160 -> 255), brightness, YUV -> RGB products
 wire signed [18:0] yB_p = yE * $signed({1'b0, luma_gain});
 reg signed [11:0] yB;
 reg signed [21:0] pRV, pGU, pGV, pBU;
 always @(posedge clk) begin
-    yB <= diag ? 12'sd128 : (yB_p >>> 5) + {{5{bright[5]}}, bright, 1'b0};
-    pRV <= VEx * 10'sd292;   // 1.140
-    pGU <= UEx * 10'sd101;   // 0.395
-    pGV <= VEx * 10'sd149;   // 0.581
-    pBU <= UEx * 11'sd520;   // 2.032
+    yB <= (yB_p >>> 5) + {{5{bright[5]}}, bright, 1'b0};
+    pRV <= VE * 10'sd292;   // 1.140
+    pGU <= UE * 10'sd101;   // 0.395
+    pGV <= VE * 10'sd149;   // 0.581
+    pBU <= UE * 11'sd520;   // 2.032
 end
 
 // stage C: sums
@@ -908,10 +876,9 @@ end
 // power-up values (also for simulation: the running sums need a defined start)
 integer j;
 initial begin
-    ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; dIm = 0; dq = 0; Sr = 0; Si = 0;
+    ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; rot_p = 0; rot_z = 1; rot_h = 7'h55; Sr = 0; Si = 0;
     Pr = 0; Pi = 0; Rr = 0; Ri = 0;
-    w_re = 0; w_im = 0; kill = 1; Rr2 = 0; dg_sU = 0; dg_sV = 0; dg_rd = 0;
-    for (j=0; j<256; j=j+1) dg_mem[j] = 0;
+    w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
     cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;

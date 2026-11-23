@@ -112,8 +112,7 @@ static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTS
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
 static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
-static const char* const cv_diag_desc[] = { "Off", "Color dev. x8" };
-static const char* const cv_reffilt_desc[] = { "Auto", "Off", "1/2", "1/4", "1/8" };
+static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 
 static void sync_vth_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d mV", (v*1127)/100); }
 static void intclks_to_time_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u.%.2u us", (unsigned)(((1000000U*v)/(TVP_INTCLK_HZ/1000))/1000), (unsigned)((((1000000U*v)/(TVP_INTCLK_HZ/1000))%1000)/10)); }
@@ -303,7 +302,6 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Sample clock",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_xtal,      OPT_WRAP,   SETTING_ITEM(cv_xtal_desc) } } },
     { "Line re-timing",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_retime_off, OPT_WRAP,  SETTING_ITEM(on_off_desc) } } },
     { "Ref. filter",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_reffilt,   OPT_WRAP,   SETTING_ITEM(cv_reffilt_desc) } } },
-    { "Diag. view",                             OPT_AVCONFIG_SELECTION, { .sel = { &cv_diagview,     OPT_WRAP,   SETTING_ITEM(cv_diag_desc) } } },
     { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },
     { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },

@@ -251,11 +251,11 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     // reference low-pass over lines: with the crystal clock the burst phase
     // is the same on every line (frequency loop); line-locked it moves
     if (cc->cv_reffilt == 0)
-        rf = cc->cv_xtal ? 3 : 0;
+        rf = cc->cv_xtal ? 1 : 0;
     else
-        rf = cc->cv_reffilt - 1;
+        rf = (cc->cv_reffilt == 2);
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
-          ((uint32_t)(rf & 3) << 10);
+          ((uint32_t)(rf & 1) << 10);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     cv_diagview_applied = cv_diagview;
@@ -265,7 +265,6 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off != 0) << 4) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
-                        ((uint32_t)(cv_diagview != 0) << 7) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |
                         ((uint32_t)(cc->cv_edge & 3) << 22)) : 0;
