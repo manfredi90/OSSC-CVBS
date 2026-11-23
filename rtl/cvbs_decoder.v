@@ -47,7 +47,8 @@ module cvbs_decoder #(
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
-    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32
+    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [15:14] gain
+    // of the reference ramp (1x, 1.5x, 2x, 3x)
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -77,6 +78,16 @@ wire pal      = cfg[2];
 wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
 wire interp_off = cfg[5];      // test: reference not interpolated along the line
+// ramp gain: the next burst sees only part of the drift along the line (the
+// H-PLL corrects part of it at the hsync): step = (w - wp) / 1716 x gain
+reg signed [23:0] r_gain;
+always @(posedge clk)
+    case (hc[15:14])
+    2'd1: r_gain <= 24'sd917;
+    2'd2: r_gain <= 24'sd1222;
+    2'd3: r_gain <= 24'sd1833;
+    default: r_gain <= 24'sd611;
+    endcase
 wire diag     = cfg[7];
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
@@ -547,8 +558,8 @@ always @(posedge clk) begin
             // ramp of the previous line's reference towards this one:
             // step = (w - wp) / 1716 (x2^12: x611/2^8), start value at
             // h = bstart + 140 (124 samples after the burst centre)
-            26: begin ma <= {{6{w_re[17]}}, w_re} - {{6{wp_re[17]}}, wp_re}; mb <= 24'sd611; end
-            27: begin ma <= {{6{w_im[17]}}, w_im} - {{6{wp_im[17]}}, wp_im}; mb <= 24'sd611; end
+            26: begin ma <= {{6{w_re[17]}}, w_re} - {{6{wp_re[17]}}, wp_re}; mb <= r_gain; end
+            27: begin ma <= {{6{w_im[17]}}, w_im} - {{6{wp_im[17]}}, wp_im}; mb <= r_gain; end
             28: st_re <= interp_off ? 22'sd0 : mres[29:8];
             29: st_im <= interp_off ? 22'sd0 : mres[29:8];
             30: begin

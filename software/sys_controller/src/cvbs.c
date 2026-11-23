@@ -248,7 +248,8 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     else if (lg > 95)
         lg = 95;
 
-    *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26);
+    *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
+          ((uint32_t)(cc->cv_igain & 3) << 14);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     cv_diagview_applied = cv_diagview;

@@ -1,6 +1,16 @@
 Changelog
 =========
 
+CVBS decoder 0.13
+-----------------
+
+### New
+- CVBS decoder > Interp. gain (1x, 1.5x, 2x, 3x, test): strength of the
+  reference ramp along the line. Captures of 0.12: the hue error still grows
+  along the line (1.4 -> 2.6 degrees left to right, 1.9 -> 3.75 without the
+  ramp, ~1 with the 27MHz crystal clock): the next burst sees only part of
+  the H-PLL drift, which the PLL corrects in part at the hsync.
+
 CVBS decoder 0.12
 -----------------
 
