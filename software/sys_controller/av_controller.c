@@ -859,7 +859,10 @@ void program_mode()
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
     if (cv_mode && cm.cc.cv_xtal && (cv_diagview == 0) && cm.totlines) {
-        uint64_t lp_x256 = ((uint64_t)cm.pcnt_field << 8) / (cm.totlines >> !cm.progressive);
+        // clocks per line x256: pcnt_field is per field, a field of an
+        // interlaced source has totlines / 2 lines (262.5, not 262)
+        uint64_t lp_x256 = cm.progressive ? (((uint64_t)cm.pcnt_field << 8) / cm.totlines) :
+                                            (((uint64_t)cm.pcnt_field << 9) / cm.totlines);
         uint64_t den = (uint64_t)pll_h_total << 8;
         // rounded up (output lines never shorter than the input ones: the
         // output would read lines before they are written) and never below

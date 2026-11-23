@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 0.23
+-----------------
+
+### Fixed
+- 27MHz xtal clock, Xtal out sync Auto: interlaced sources (480i) with the
+  fields out of place, OSD garbled. The line period was computed with 262
+  lines per field instead of 262.5: output lines 0.2% too long, the second
+  field (not resynced) started about a line late.
+
 CVBS decoder 0.22
 -----------------
 
