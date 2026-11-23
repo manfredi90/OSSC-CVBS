@@ -510,8 +510,8 @@ always @(posedge pclk_out) begin
     end else begin
         case (ds_csync)
             2'h1: HS_o1 <= ~(HSYNC_sc ^ VSYNC_sc); // XOR: hsync inverted during vsync
-            2'h2: HS_o1 <= HSYNC_sc & VSYNC_sc;    // AND: low for the whole vsync
-            2'h3: HS_o1 <= CSYNC_sc;               // standard: equalizing pulses + serrated vsync
+            2'h2, 2'h3: HS_o1 <= HSYNC_sc & VSYNC_sc;  // AND: low for the whole vsync (CVBS firmware: no
+                                                    // standard csync, room for the line lock)
             default: HS_o1 <= HSYNC_sc;
         endcase
         VS_o1 <= VSYNC_sc;

@@ -19,6 +19,9 @@ CVBS decoder 0.21
 ### Removed
 - Unverified changes, for room: vsync debounce (0.19), no frequency loop /
   reference filter update in the vertical interval (0.15), R in Sync diag.
+- CSync on HSYNC > Standard (equalising pulses, serrated vsync), for room:
+  Off (H+V), XOR and AND remain. Default now Off (H+V), as in the HD
+  firmware (HDMI TVs); XOR / AND for SCART.
 
 CVBS decoder 0.20
 -----------------

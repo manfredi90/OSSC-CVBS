@@ -70,7 +70,7 @@ CVBS decoder menu
 | Sample clock | Line-locked, 27MHz xtal | ADC clock: the OSSC 27MHz crystal (default: steady colour phase, lines re-timed on their sync), or the TVP7002 H-PLL locked to the hsync (the colour phase drifts along the line) |
 | Line re-timing | On, Off | 27MHz xtal only: each line is re-timed on its sync trailing edge (fractional delay of the luma), so the picture does not shake. Off only for tests. Default On |
 | Ref. filter | Auto, Off, On | colour reference averaged over the lines (less line to line colour noise). Auto: On with the xtal clock, Off line-locked. Default Auto |
-| CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware |
+| CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware (CSync: Off (H+V, default), XOR, AND; no Standard csync) |
 
 The LCD shows the mode and the colour system on the first row and the
 diagnostics on the second.
