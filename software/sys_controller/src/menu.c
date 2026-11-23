@@ -295,6 +295,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
     { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
     { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
+    { "<Sync diag.    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_sync_diag, NULL } } },
     { "ADC gain",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcgain,    OPT_NOWRAP, 0, 15, cv_gain_disp } } },
     { "ADC offset",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcofs,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE, SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE, signed_disp } } },
     { "Burst position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bgate,      OPT_NOWRAP, CV_BGATE_MIN, CV_BGATE_MAX, value_disp } } },

@@ -29,8 +29,9 @@ typedef union {
         uint8_t interlace_flag:1;
         uint8_t sync_active:1;
         uint8_t wd_kill:1;      // 15kHz watchdog suppressing output
-        uint8_t ds_resync_cnt:8;    // diagnostics: output resyncs (wraps)
-        uint16_t ds_fperiod_lo:10;  // diagnostics: input frame period in clocks, low bits
+        uint16_t fw_vspos:12;       // CVBS xtal: raw vsync position in the line (clocks)
+        uint8_t fw_locked:1;        // CVBS xtal: hsync flywheel locked
+        uint8_t fw_rej:5;           // CVBS xtal: hsync edges ignored in the last field
     } __attribute__((packed, __may_alias__));
     uint32_t data;
 } fe_status_reg;

@@ -1,6 +1,21 @@
 Changelog
 =========
 
+CVBS decoder 0.16
+-----------------
+
+### Fixed
+- 27MHz xtal clock: the TVP7002 vsync output also comes anywhere in the
+  line without the H-PLL, and the frontend takes the position of the vsync
+  edge in the line for field detection / frame start. The vsync is now
+  re-aligned to the line start (or to the half line, when it comes in the
+  middle half: interlaced sources). Hsync flywheel window narrowed to 7/8
+  of the line.
+
+### New
+- CVBS decoder > Sync diag.: raw vsync position / clocks per line, hsync
+  edges ignored by the flywheel in the last field, L = flywheel locked.
+
 CVBS decoder 0.15
 -----------------
 

@@ -324,6 +324,20 @@ void cvbs_diag_str(char *s, int len) {
               ST_KILL(st) ? 'K' : (ST_ALT(st) ? 'P' : 'N'));
 }
 
+// 27MHz xtal clock: raw vsync position / clocks per line, hsync edges
+// ignored by the flywheel in the last field, flywheel locked
+int cvbs_sync_diag() {
+    fe_status_reg fs;
+    if (!cv_mode || (cm.id < 0)) {
+        strncpy(func_ret_status, "No CVBS input", LCD_ROW_LEN+1);
+        return 1;
+    }
+    fs.data = sc->fe_status.data;
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "V%u/%u R%u %c", (unsigned)fs.fw_vspos, (unsigned)cm.clkcnt,
+              (unsigned)fs.fw_rej, fs.fw_locked ? 'L' : '-');
+    return 1;
+}
+
 int cvbs_diagnostics() {
     if (!cv_mode || (cm.id < 0)) {
         strncpy(func_ret_status, "No CVBS input", LCD_ROW_LEN+1);

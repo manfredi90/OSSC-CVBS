@@ -60,6 +60,7 @@ const char* cvbs_std_name();
 // diagnostics (16 characters)
 void cvbs_diag_str(char *s, int len);
 int cvbs_diagnostics();
+int cvbs_sync_diag();
 // reset the automatic detection (new input or mode)
 void cvbs_reset_auto();
 
