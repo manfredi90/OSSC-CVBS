@@ -72,6 +72,16 @@ tvp_input_t target_tvp;
 tvp_sync_input_t target_tvp_sync;
 alt_u8 target_type;
 alt_u8 update_cur_vm;
+// CVBS decoder on the 27MHz xtal clock: the setup is repeated once, 1.5s
+// after a mode change (tests: a setup done while the source is still
+// switching, e.g. loading a MiSTer core, can leave the picture moved down or
+// black until the next setup)
+static alt_u8 cv_resetup_pending;
+static alt_timestamp_type cv_resetup_ts;
+static void cv_resetup_arm(void) {
+    cv_resetup_pending = cv_mode && cm.cc.cv_xtal;
+    cv_resetup_ts = alt_timestamp();
+}
 
 // Downscaler firmware: set while the internal 15kHz test pattern ("safe
 // screen") is output instead of the input video
@@ -1578,6 +1588,7 @@ int main(int argc, char **argv, char **envp)
                     IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, sys_ctrl);
                     tvp_powerup();
                     program_mode();
+                    cv_resetup_arm();
                     SetupAudio(cm.cc.tx_mode);
                 } else {
                     printf("Sync lost\n");
@@ -1598,6 +1609,7 @@ int main(int argc, char **argv, char **envp)
                 if (cm.sync_active) {
                     printf("Mode change\n");
                     program_mode();
+                    cv_resetup_arm();
                 }
                 break;
             case SC_CONFIG_CHANGE:
@@ -1609,6 +1621,14 @@ int main(int argc, char **argv, char **envp)
             default:
                 break;
             }
+        }
+
+        if (cv_resetup_pending && (cm.avinput != AV_TESTPAT) && cm.sync_active &&
+            ((alt_timestamp() - cv_resetup_ts) > (3*alt_timestamp_freq()/2))) {
+            cv_resetup_pending = 0;
+            printf("CVBS xtal: setup repeated\n");
+            cm.id = -1;     // full setup (TVP7002 sync processing reset)
+            program_mode();
         }
 
         // CVBS: automatic colour system detection

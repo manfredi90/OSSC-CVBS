@@ -1,6 +1,17 @@
 Changelog
 =========
 
+CVBS decoder 0.25
+-----------------
+
+### Fixed
+- 27MHz xtal clock: picture moved down at random after loading a MiSTer
+  core, or black after a core / menu change, until the next setup (the own
+  vsync of 0.24 did not change it). The setup is now repeated once, 1.5s
+  after a mode change, with a full TVP7002 sync processing reset - what
+  changing Sample clock did by hand. Not the root cause, which is still
+  unknown.
+
 CVBS decoder 0.24
 -----------------
 
