@@ -1,6 +1,20 @@
 Changelog
 =========
 
+CVBS decoder 0.29
+-----------------
+
+### Fixed
+- 27MHz xtal clock with separate H / V syncs (CSync on HSYNC Off, needed by
+  HDMI TVs): picture moved or stretched at random on some sources (SNES, PC
+  Engine), fine with csync (AND). The output is resynced at every input
+  frame, cutting short the line before the frame start; the vsync started
+  right after it, a fraction of a line after the previous hsync (depending on
+  the source line period, up to ~half a line: SNES ~0.4, PC Engine ~0.55), so
+  HDMI sinks could take it as an interlaced field. The vsync now starts 4
+  lines later (progressive output, resync mode only): only full lines before
+  it. The short line stays in the vertical blanking.
+
 CVBS decoder 0.28
 -----------------
 

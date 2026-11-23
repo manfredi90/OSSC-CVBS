@@ -150,6 +150,7 @@ wire [8:0] V_BACKPORCH = hv_out_config3[12:4];
 
 wire [10:0] V_STARTLINE = hv_out_config3[23:13];
 
+localparam [10:0] VS_OFS = 11'd4;   // vsync offset with resync_always (lines)
 wire [10:0] V_STARTLINE_PREV = (V_STARTLINE == 0) ? (V_TOTAL-1) : (V_STARTLINE-1);
 // output field parity at V_STARTLINE and at the line before it
 wire FID_START = (V_STARTLINE < (V_TOTAL/2)) ? FID_ODD : FID_EVEN;
@@ -568,6 +569,16 @@ always @(posedge PCLK_OUT_i) begin
     HSYNC_pp[1] <= (h_cnt < H_SYNCLEN) ? 1'b0 : 1'b1;
     if (ds_i2p)
         VSYNC_pp[1] <= (v_cnt < V_SYNCLEN) ? 1'b0 : 1'b1;     // 480i -> 240p: both fields at a line start
+    else if (resync_always & ~V_INTERLACED)
+        // resync at every input frame (CVBS xtal clock): the line before
+        // the resync point (v_cnt 0) is cut short. With the vsync right after
+        // it, the vsync edge came a fraction of a line after the previous
+        // hsync (up to ~half a line, depending on the source: SNES, PC
+        // Engine); with separate H / V syncs HDMI sinks could take it as an
+        // interlaced field and pick a wrong mode (picture moved / stretched
+        // at random, fine with csync). Vsync moved VS_OFS lines later: only
+        // full lines before it.
+        VSYNC_pp[1] <= ((v_cnt >= VS_OFS) & (v_cnt < VS_OFS+V_SYNCLEN)) ? 1'b0 : 1'b1;
     else if (dst_fid == FID_ODD)
         VSYNC_pp[1] <= ((v_cnt < V_SYNCLEN) | ((v_cnt == V_TOTAL) & (h_cnt >= (H_TOTAL/2)))) ? 1'b0 : 1'b1;
     else
