@@ -813,13 +813,21 @@ static uint32_t cvx_pll_h_total, cvx_lp_x256, cvx_lp_now;
 static uint16_t cvx_hi_pre, cvx_ho_pre, cvx_hi, cvx_ho;
 static uint8_t cvx_redo_cnt;
 
+// alt_timestamp() is 64 bits: elapsed times in 32 bits (0.20-0.27 subtracted
+// a 32-bit start from the 64-bit time: after 159s of uptime (2^32 clocks)
+// every wait ended at once, Sync diag. read all zeros, Xtal timing "Not
+// stable" and the setup used a single field period again)
+static inline uint32_t cvx_now() {
+    return (uint32_t)alt_timestamp();
+}
+
 // output vsync edge (PIO flag), at most 50ms
 static int cvx_wait_vsync() {
-    uint32_t tps = alt_timestamp_freq(), t0 = alt_timestamp();
+    uint32_t tps = alt_timestamp_freq(), t0 = cvx_now();
     while (IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK)
-        if (alt_timestamp() - t0 > tps/20) return 0;
+        if (cvx_now() - t0 > tps/20) return 0;
     while (!(IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK))
-        if (alt_timestamp() - t0 > tps/20) return 0;
+        if (cvx_now() - t0 > tps/20) return 0;
     return 1;
 }
 
@@ -887,7 +895,7 @@ static void cvx_check() {
     static uint32_t ts_last, mn, mx;
     static uint64_t sum;
     static uint8_t n, bad;
-    uint32_t now = alt_timestamp(), pc;
+    uint32_t now = cvx_now(), pc;
 
     if (now - ts_last < alt_timestamp_freq()/50)
         return;
@@ -936,8 +944,8 @@ int cvbs_sync_diag() {
     }
     prev = !!(IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK);
     d1 = sc->fe_status.data;
-    t0 = alt_timestamp();
-    while ((alt_timestamp() - t0) < tps/4) {
+    t0 = cvx_now();
+    while ((cvx_now() - t0) < tps/4) {
         int v = !!(IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK);
         if (v & !prev)
             o++;

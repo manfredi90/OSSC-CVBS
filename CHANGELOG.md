@@ -1,6 +1,16 @@
 Changelog
 =========
 
+CVBS decoder 0.28
+-----------------
+
+### Fixed
+- Sync diag. read all zeros and Xtal timing "Not stable" after 159s of
+  uptime: the 64-bit timestamp minus a 32-bit start (every wait in these
+  diagnostics ended at once, since 0.20). The readings of 0.24-0.27 taken
+  after that (F0 S0) were not real. The same bug made the stable line period
+  measurement of 0.27 fall back to a single field period after 159s.
+
 CVBS decoder 0.27
 -----------------
 
