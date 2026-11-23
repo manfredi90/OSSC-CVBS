@@ -183,16 +183,16 @@ wire [2:0] SL_IV_Y = sl_config3[20:18];
 wire [3:0] SL_IV_X = sl_config3[24:21];
 wire [4:0] SL_HYBRSTR = sl_config3[29:25];
 
-wire [3:0] MISC_MASK_BR = misc_config[3:0];
-wire [2:0] MISC_MASK_COLOR = misc_config[6:4];
+wire [3:0] MISC_MASK_BR = 4'h0;            // CVBS firmware: border black (no menu)
+wire [2:0] MISC_MASK_COLOR = 3'h0;
 wire MISC_LM_DEINT_MODE = 1'b0;
 wire MISC_NIR_EVEN_OFFSET = 1'b0;
 wire [3:0] MISC_BFI_STR = 4'h0;
 wire MISC_BFI_ENABLE = 1'b0;
-wire MISC_SHMASK_ENABLE = misc_config[15];
+wire MISC_SHMASK_ENABLE = 1'b0;            // CVBS firmware: no shadow mask (no menu)
 wire [3:0] MISC_SHMASK_IV_X = misc_config[19:16];
 wire [3:0] MISC_SHMASK_IV_Y = misc_config[23:20];
-wire MISC_PANASONIC_HACK = misc_config[24];
+wire MISC_PANASONIC_HACK = 1'b0;
 
 wire [7:0] MASK_R = MISC_MASK_COLOR[2] ? {2{MISC_MASK_BR}} : 8'h00;
 wire [7:0] MASK_G = MISC_MASK_COLOR[1] ? {2{MISC_MASK_BR}} : 8'h00;
@@ -435,7 +435,7 @@ videogen vg0 (
     .pclk           (PCLK_OUT_i),
     .xpos           (xpos_tp >> 1),                   // 1440x240 test pattern ->
     .ypos           ({ypos_tp[9:0], 1'b0}),           // 720x480 generator coords
-    .tp_sel         (misc_config[10:9]),              // test pattern (stock reverse LPF bits)
+    .tp_sel         (2'b00),                          // CVBS firmware: stock pattern only
     .R_out          (R_vg),
     .G_out          (G_vg),
     .B_out          (B_vg)
@@ -533,7 +533,7 @@ end
 reg cs_half_a, cs_even_a, cs_half_b;
 reg signed [13:0] cs_flen_a;
 reg [12:0] cs_hpos_a;
-reg [10:0] cs_v_a;
+reg signed [11:0] cs_v_a;   // line from the vsync start (VS_OFS later with resync_always)
 reg signed [13:0] cs_pcur_b, cs_pnext_b;
 reg cs_lt_vs_b, cs_lt_eq_b, cs_lt_hs_b, cs_lt_vs_c, cs_lt_eq_c, cs_lt_hs_c;
 reg cs_vs_c, cs_eq_c;
@@ -544,14 +544,14 @@ always @(posedge PCLK_OUT_i) begin
     // stage A (same time as pipeline stage 1)
     cs_half_a <= (h_cnt >= (H_TOTAL/2));
     cs_hpos_a <= (h_cnt >= (H_TOTAL/2)) ? (h_cnt - (H_TOTAL/2)) : h_cnt;
-    cs_v_a <= v_cnt;
+    cs_v_a <= $signed({1'b0, v_cnt}) - ((resync_always & ~V_INTERLACED) ? $signed({1'b0, VS_OFS}) : 12'sd0);
     cs_even_a <= V_INTERLACED & ~ds_i2p & (dst_fid == FID_EVEN);
     // field length in half lines (480i: 262.5 lines; 480i -> 240p: 263 / 262)
     cs_flen_a <= ds_i2p ? $signed({2'b00, V_TOTAL + {10'h0, (dst_fid == FID_ODD)}, 1'b0}) :
                           ($signed({2'b00, V_TOTAL, 1'b0}) + $signed({13'h0, V_INTERLACED}));
     // stage B
-    cs_pcur_b <= $signed({2'b00, cs_v_a, cs_half_a}) + $signed({13'h0, cs_even_a});
-    cs_pnext_b <= $signed({2'b00, cs_v_a, cs_half_a}) + $signed({13'h0, cs_even_a}) - cs_flen_a;
+    cs_pcur_b <= $signed({cs_v_a, cs_half_a}) + $signed({13'h0, cs_even_a});
+    cs_pnext_b <= $signed({cs_v_a, cs_half_a}) + $signed({13'h0, cs_even_a}) - cs_flen_a;
     cs_half_b <= cs_half_a;
     cs_lt_vs_b <= (cs_hpos_a < ((H_TOTAL/2) - H_SYNCLEN));
     cs_lt_eq_b <= (cs_hpos_a < (H_SYNCLEN/2));

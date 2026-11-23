@@ -532,14 +532,14 @@ status_t get_status(tvp_sync_input_t syncinput)
     // (mode reprogram), the rest only the decoder registers
     if (cv_mode && sync_active && valid_mode &&
         ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp) ||
-         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal) || (cv_diagview != cv_diagview_applied)))
+         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal)))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();
 
     {
         int cv_changed = memcmp(&tc.cv_std, &cm.cc.cv_std, sizeof(avconfig_t) - offsetof(avconfig_t, cv_std)) ||
-                         (cv_diagview != cv_diagview_applied) || (cv_vssrc != cv_vssrc_applied);
+                         (tc.cv_sharp != cm.cc.cv_sharp);
         int ds_csync_changed = (tc.ds_csync != cm.cc.ds_csync);
         int ds_range_changed = (tc.ds_out_range != cm.cc.ds_out_range);
         int ds_tp_changed = (tc.ds_tp_sel != cm.cc.ds_tp_sel);
@@ -931,9 +931,7 @@ static void cvx_check() {
 }
 
 // <Sync diag.> (over 1/4 s, per second): O = output frames (vsync flag),
-// F / f = input frames at the decoder / frontend, S = output resyncs
-// (counters read with explicit shifts: 0.24-0.26 showed F0 S0 even with a
-// good picture)
+// F = input frames (decoder), S = output resyncs
 int cvbs_sync_diag() {
     uint32_t d1, d2, tps = alt_timestamp_freq(), t0, o = 0;
     int prev;
@@ -952,15 +950,14 @@ int cvbs_sync_diag() {
         prev = v;
     }
     d2 = sc->fe_status.data;
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "O%lu F%lu f%lu S%lu", (unsigned long)(o * 4),
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "O%lu F%lu S%lu", (unsigned long)(o * 4),
               (unsigned long)((((d2 >> 22) - (d1 >> 22)) & 15) * 4),
-              (unsigned long)((((d2 >> 26) - (d1 >> 26)) & 15) * 4),
               (unsigned long)((((d2 >> 14) - (d1 >> 14)) & 255) * 4));
     return 1;
 }
 
 // <Xtal timing>: line period now (27MHz clocks per line, 4 stable fields),
-// output line length applied / right for it now ('*' if outside the
+// output line length applied ("O1716"; "O1716>1717" if outside the
 // tolerance: the setup would be redone)
 int cvbs_xtal_diag() {
     uint32_t lp;
@@ -978,8 +975,11 @@ int cvbs_xtal_diag() {
         strncpy(func_ret_status, "Not stable", LCD_ROW_LEN+1);
         return 1;
     }
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u/%u%c", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
-              (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, lp), cvx_htot_ok(lp) ? ' ' : '*');
+    if (cvx_htot_ok(lp))
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
+                  (unsigned)cvx_ho);
+    else
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, lp));
     return 1;
 }
 
@@ -1052,7 +1052,7 @@ void program_mode()
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
-    if (cv_mode && cm.cc.cv_xtal && (cv_diagview == 0) && cm.totlines) {
+    if (cv_mode && cm.cc.cv_xtal && cm.totlines) {
         uint32_t lp = cvx_measure_lp();
         if (!lp)
             lp = cvx_lp_from(cm.pcnt_field, 1);     // not stable: checked again by cvx_check()

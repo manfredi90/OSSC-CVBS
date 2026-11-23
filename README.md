@@ -61,6 +61,7 @@ CVBS decoder menu
 | Contrast | 50–160% | |
 | Brightness | ±31 | |
 | Luma notch | On, Off | Off: full bandwidth luma (dot crawl visible) |
+| Sharpness | Off, 1-7 | luma peaking: sharper pixel edges (the luma of a composite signal is softened by the notch). No boost at DC or at the highest frequencies (no extra noise). Default Off |
 | Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing (cross-colour) at black / white edges, slightly softer colour edges, dark bands at edges between colours of very different brightness at high settings. Always off with S-Video. Default Medium |
 | Diagnostics | | `Bn` burst level, `Ln` blank level (ADC code), `Pn` highest ADC code in the picture (255: white clipped, lower the ADC gain), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
 | ADC gain | 0–15 | TVP7002 coarse gain (full scale shown in Vpp), default 2 |
@@ -70,7 +71,7 @@ CVBS decoder menu
 | Sample clock | Line-locked, 27MHz xtal | ADC clock: the OSSC 27MHz crystal (default: steady colour phase, lines re-timed on their sync), or the TVP7002 H-PLL locked to the hsync (the colour phase drifts along the line) |
 | Line re-timing | On, Off | 27MHz xtal only: each line is re-timed on its sync trailing edge (fractional delay of the luma), so the picture does not shake. Off only for tests. Default On |
 | Ref. filter | Auto, Off, On | colour reference averaged over the lines (less line to line colour noise). Auto: On with the xtal clock, Off line-locked. Default Auto |
-| CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware (CSync: Off (H+V, default), XOR, AND; no Standard csync) |
+| CSync on HSYNC, HDMI range, H. / V. position | | as in the OSSC Downscaler firmware (CSync: Off (H+V, default, HDMI TVs), XOR, AND, Standard (equalizing pulses + serrated vsync, for picky CRTs)) |
 
 The LCD shows the mode and the colour system on the first row and the
 diagnostics on the second.

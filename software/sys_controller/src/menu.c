@@ -99,9 +99,8 @@ static const char* const lumacode_pal_desc[] = { "PAL", "NTSC", c_lc_palette_set
 static const char* const adc_pll_bw_desc[] = { "High", "Medium", "Low", "Ultra low" };
 static const char* const fpga_pll_bw_desc[] = { "High", "Low" };
 static const char* const palset_type_arr[] = { "Custom .txt", "NES .pal" };
-static const char* const ds_csync_desc[] = { "Off (H+V)", "XOR", "AND" };
+static const char* const ds_csync_desc[] = { "Off (H+V)", "XOR", "AND", "Standard" };
 static const char* const ds_range_desc[] = { "Full (0-255)", "Lim. (16-235)", "Lim. (16-255)" };
-static const char* const ds_tp_desc[] = { "Gray", "Grid", "Monoscope", "RGB" };
 static const char* const ds_720p_ar_desc[] = { "Full 16:9", "Center 4:3", "Wide" };
 static const char* const on_off_desc[] = { "On", "Off" };   // for *_off settings
 static const char* const ds_out_desc[] = { "240p", "480i" };
@@ -113,8 +112,6 @@ static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
 static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
-static const char* const cv_xsync_desc[] = { "Auto", "Resync", "Off" };
-static const char* const cv_vssrc_desc[] = { "TVP7002", "Own" };
 
 static void sync_vth_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d mV", (v*1127)/100); }
 static void intclks_to_time_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u.%.2u us", (unsigned)(((1000000U*v)/(TVP_INTCLK_HZ/1000))/1000), (unsigned)((((1000000U*v)/(TVP_INTCLK_HZ/1000))%1000)/10)); }
@@ -129,6 +126,7 @@ static void pixels_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, LNG("%u 
 static void value_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", v); }
 static void ds_width_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d%%", 100+(alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void signed_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
+static void cv_sharp_disp(alt_u8 v) { if (v) sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", (unsigned)v); else strncpy(menu_row2, "Off", LCD_ROW_LEN+1); }
 static void cv_pct5_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*5); }
 static void cv_pct2_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*2); }
 static void cv_deg_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d deg", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
@@ -295,6 +293,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Contrast",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_contrast,   OPT_NOWRAP, CV_CONTRAST_MIN, CV_CONTRAST_MAX, cv_pct2_disp } } },
     { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
     { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
+    { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
     { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
     { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
     { "<Sync diag.    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_sync_diag, NULL } } },
@@ -306,14 +305,11 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Sample clock",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_xtal,      OPT_WRAP,   SETTING_ITEM(cv_xtal_desc) } } },
     { "Line re-timing",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_retime_off, OPT_WRAP,  SETTING_ITEM(on_off_desc) } } },
     { "Ref. filter",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_reffilt,   OPT_WRAP,   SETTING_ITEM(cv_reffilt_desc) } } },
-    { "Xtal out sync",                          OPT_AVCONFIG_SELECTION, { .sel = { &cv_diagview,     OPT_WRAP,   SETTING_ITEM(cv_xsync_desc) } } },
-    { "Xtal vsync",                             OPT_AVCONFIG_SELECTION, { .sel = { &cv_vssrc,        OPT_WRAP,   SETTING_ITEM(cv_vssrc_desc) } } },
     { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },
     { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },
     { "H. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_hpos,       OPT_NOWRAP, DS_HPOS_MIN, DS_HPOS_MAX, signed_disp } } },
     { "V. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_vpos,       OPT_NOWRAP, DS_VPOS_MIN, DS_VPOS_MAX, signed_disp } } },
-    { "Test pattern",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_tp_sel,    OPT_WRAP,   SETTING_ITEM(ds_tp_desc) } } },
 }))
 
 

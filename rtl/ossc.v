@@ -195,13 +195,11 @@ assign HDMI_TX_PCLK = pclk_out;
 // the half-line pulses of the vertical interval come through (extra lines,
 // lines cut short). Once locked (8 lines of the same length), edges before
 // 7/8 of the line are ignored and a missing edge is generated 4 clocks after
-// the expected end of the line. Unlocked when more than 8 of 32 lines end on
-// a generated edge (locked to a wrong length, e.g. during a source switch:
-// it could stay there, with a generated edge between two real ones).
+// the expected end of the line. Restarted at every setup (cfg[5] off for one
+// register write).
 reg TVP_HS_raw, fw_hs_prev, fw_locked;
 reg [11:0] fw_cnt, fw_len;
-reg [3:0] fw_good, fw_miss;
-reg [4:0] fw_win;
+reg [3:0] fw_good;
 wire fw_en = sl_config2[8] & sl_config2[13];
 wire fw_edge = fw_hs_prev & ~TVP_HS_raw;
 wire [12:0] fw_diff = {1'b0, fw_cnt} - {1'b0, fw_len};
@@ -212,7 +210,6 @@ always @(posedge TVP_PCLK_i) begin
     fw_hs_prev <= TVP_HS_raw;
     if (fw_accept | fw_gen) begin
         fw_cnt <= 12'd0;
-        fw_win <= fw_win + 1'b1;
         if (fw_accept) begin
             if (fw_near | ~fw_locked)
                 fw_len <= fw_cnt;
@@ -220,15 +217,6 @@ always @(posedge TVP_PCLK_i) begin
                 fw_good <= fw_near ? fw_good + 1'b1 : 4'd0;
                 fw_locked <= fw_near & (fw_good == 4'd7);
             end
-        end else if (fw_miss != 4'hf)
-            fw_miss <= fw_miss + 1'b1;
-        if (fw_win == 5'h1f) begin
-            // window of 32 lines: too many generated edges -> unlock
-            if (fw_miss > 4'd8) begin
-                fw_locked <= 1'b0;
-                fw_good <= 4'd0;
-            end
-            fw_miss <= 4'd0;
         end
     end else if (fw_cnt != 12'hfff)
         fw_cnt <= fw_cnt + 1'b1;
@@ -238,53 +226,6 @@ always @(posedge TVP_PCLK_i) begin
     end
     TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
 end
-
-// Own vsync (same mode, unless hc[11]): the TVP7002 vsync output can lock at
-// a wrong line without the H-PLL (picture moved down by tens of lines at
-// random, until the next setup). As in a TV, the vertical sync is taken from
-// the composite sync (SOG, active low): a sync pulse longer than 300 clocks
-// (11us, 1/6 line; hsync 4.7us) is a broad pulse. Vsync from the first one
-// (300 clocks into its half line: odd and even fields keep their half-line
-// offset) until 1.25 lines (2150 clocks) without one; fixed lengths, not
-// from the flywheel (0.24: a flywheel locked to a wrong length gave a
-// threshold below the hsync width, vsync stuck, no frame starts),
-// with the polarity of the TVP7002 vsync output (its majority level is the
-// inactive one).
-reg [10:0] vd_low;
-reg [12:0] vd_since;
-reg vd_act;
-reg [15:0] vd_pol_acc;
-wire vd_en = fw_en & ~sl_config[11];
-wire vd_inact = vd_pol_acc[15];         // inactive (majority) level of the TVP vsync
-wire TVP_VS_own = vd_act ? ~vd_inact : vd_inact;
-always @(posedge TVP_PCLK_i) begin
-    if (TVP_SOG_sync2_reg)
-        vd_low <= 11'h0;
-    else if (vd_low != 11'h7ff)
-        vd_low <= vd_low + 1'b1;
-    if (vd_low == 11'd300) begin
-        vd_act <= 1'b1;
-        vd_since <= 13'h0;
-    end else begin
-        if (vd_since != 13'h1fff)
-            vd_since <= vd_since + 1'b1;
-        if (vd_since > 13'd2150)
-            vd_act <= 1'b0;
-    end
-    // majority level of the TVP vsync (saturating up / down count)
-    if (TVP_VS_sync2_reg) begin
-        if (vd_pol_acc != 16'hffff) vd_pol_acc <= vd_pol_acc + 1'b1;
-    end else begin
-        if (vd_pol_acc != 16'h0) vd_pol_acc <= vd_pol_acc - 1'b1;
-    end
-end
-wire TVP_VS_fe = vd_en ? TVP_VS_own : TVP_VS_sync2_reg;
-reg TVP_VSo_s1, TVP_VSo_s2;
-always @(posedge clk27) begin
-    TVP_VSo_s1 <= TVP_VS_own;
-    TVP_VSo_s2 <= TVP_VSo_s1;
-end
-wire vd_en27 = sl_config2[8] & sl_config2[13] & ~sl_config[11];
 
 // TVP7002 RGB digitizer
 always @(posedge TVP_PCLK_i) begin
@@ -323,9 +264,9 @@ tvp7002_frontend u_tvp_frontend (
     .G_i(TVP_G),
     .B_i(TVP_B),
     .HS_i(TVP_HS),
-    .VS_i(TVP_VS_fe),
+    .VS_i(TVP_VS_sync2_reg),
     .HSYNC_i(TVP_HSYNC_sync2_reg),
-    .VSYNC_i(vd_en27 ? TVP_VSo_s2 : TVP_VSYNC_sync2_reg),
+    .VSYNC_i(TVP_VSYNC_sync2_reg),
     .DE_i(1'b0),
     .FID_i(1'b0),
     .sogref_update_i(TVP_SOG_prev & ~TVP_SOG_sync2_reg),
@@ -383,16 +324,13 @@ cvbs_decoder #(
     .status(cv_status)
 );
 
-// diagnostics: input frames (decoder and frontend frame change strobes)
-reg fc_dec_prev, fc_fe_prev;
-reg [3:0] fc_cnt, fcf_cnt;
+// diagnostics: input frames (decoder frame change strobes)
+reg fc_dec_prev;
+reg [3:0] fc_cnt;
 always @(posedge TVP_PCLK_i) begin
     fc_dec_prev <= frame_change_dec;
     if (frame_change_dec & ~fc_dec_prev)
         fc_cnt <= fc_cnt + 1'b1;
-    fc_fe_prev <= TVP_fe_frame_change;
-    if (TVP_fe_frame_change & ~fc_fe_prev)
-        fcf_cnt <= fcf_cnt + 1'b1;
 end
 
 
@@ -566,8 +504,8 @@ always @(posedge pclk_out) begin
     end else begin
         case (ds_csync)
             2'h1: HS_o1 <= ~(HSYNC_sc ^ VSYNC_sc); // XOR: hsync inverted during vsync
-            2'h2, 2'h3: HS_o1 <= HSYNC_sc & VSYNC_sc;  // AND: low for the whole vsync (CVBS firmware: no
-                                                    // standard csync, room for the line lock)
+            2'h2: HS_o1 <= HSYNC_sc & VSYNC_sc;    // AND: low for the whole vsync
+            2'h3: HS_o1 <= CSYNC_sc;               // standard: equalizing pulses + serrated vsync
             default: HS_o1 <= HSYNC_sc;
         endcase
         VS_o1 <= VSYNC_sc;
@@ -640,7 +578,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({2'b00, fcf_cnt, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({6'h0, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),

@@ -198,12 +198,8 @@ static void cos_sin_q16(int deg, int32_t *c, int32_t *s) {
 // test option (not kept, default both), 27MHz xtal clock output timing:
 // 0 auto (resync at every input frame + output line length from the
 // measured period, rounded up, never below the preset), 1 resync only, 2 off
-alt_u8 cv_diagview;
-alt_u8 cv_diagview_applied;
 // test option (not kept), 27MHz xtal clock: vsync from the TVP7002 (0) or
 // from the composite sync (1, own)
-alt_u8 cv_vssrc;
-alt_u8 cv_vssrc_applied;
 
 void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     avconfig_t *cc = &cm.cc;
@@ -263,18 +259,16 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
         rf = (cc->cv_reffilt == 2);
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
           ((uint32_t)(rf & 1) << 10);
-    *hc |= ((uint32_t)(cv_vssrc == 0) << 11);   // FPGA: hc[11] = TVP7002 vsync
+    *hc |= ((uint32_t)(cc->cv_sharp & 7) << 11);  // FPGA: hc[13:11] = sharpness
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
-    cv_diagview_applied = cv_diagview;
-    cv_vssrc_applied = cv_vssrc;
     *flags = cv_mode ? (1 |
                         ((cv_mode == 2) << 1) |
                         (pal << 2) |
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off != 0) << 4) |
                         ((cc->cv_xtal != 0) << 5) |
-                        ((uint32_t)((cc->cv_xtal != 0) && (cv_diagview <= 1)) << 7) |
+                        ((uint32_t)(cc->cv_xtal != 0) << 7) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |

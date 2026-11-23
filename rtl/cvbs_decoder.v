@@ -46,13 +46,13 @@ module cvbs_decoder #(
     // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] 27MHz crystal
     // clock (HS flywheel, in ossc.v),
     // [6] luma re-timed on the sync edge (27MHz crystal clock), [7] output
-    // resync at every frame (scanconverter, test),
+    // resync at every frame (scanconverter),
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
     // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [10]
-    // reference low-pass over lines (1/8)
+    // reference low-pass over lines (1/8), [13:11] sharpness (0-7)
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -83,6 +83,7 @@ wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
 wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal clock)
 wire rflt = hc[10];             // reference low-pass over lines (1/8)
+wire [2:0] sharp = hc[13:11];   // sharpness 0-7
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
@@ -767,14 +768,23 @@ always @(posedge clk) begin
     VA <= V3;
 end
 
-// stage S: luma delayed by 4 (alignment with the chroma of stage E)
+// stage S: sharpness (peaking), luma delayed by 4 (alignment with the chroma
+// of stage E). The luma of a composite signal is low-passed by the notch and
+// the sampling is not locked to the pixels of the source: edges are soft.
+// y' = y + k/32 * hp, hp = [-1 -2 1 4 1 -2 -1] * y: zero gain at DC and at
+// the Nyquist frequency (no noise boost), ~5 at 2.7MHz, ~9.5 at 5MHz
+// (k = 0-7, as in 0.6-0.11)
 reg signed [10:0] yAd [1:6];
 reg signed [10:0] yS;
+wire signed [13:0] s_hp = $signed({yAd[3], 2'b0}) + yAd[2] + yAd[4]
+                        - $signed({yAd[1], 1'b0}) - $signed({yAd[5], 1'b0}) - yA - yAd[6];
+wire signed [17:0] s_p = s_hp * $signed({1'b0, sharp});
+wire signed [13:0] s_sum = yAd[3] + (s_p >>> 5);
 always @(posedge clk) begin
     yAd[1] <= yA;
     for (i=2; i<=6; i=i+1)
         yAd[i] <= yAd[i-1];
-    yS <= yAd[3];
+    yS <= sat11(s_sum);
 end
 
 // stage E: chroma suppression at luma edges. A sharp luma edge has energy at

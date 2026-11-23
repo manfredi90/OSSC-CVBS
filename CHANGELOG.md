@@ -1,6 +1,33 @@
 Changelog
 =========
 
+CVBS decoder 0.30
+-----------------
+
+### New
+- Sharpness (Off, 1-7, CVBS decoder menu): luma peaking, as in 0.6-0.11.
+  7-tap filter, no gain at DC and at the Nyquist frequency (no noise boost).
+- CSync on HSYNC > Standard is back (equalizing pulses, serrated vsync), with
+  the vsync offset of 0.29 in the crystal clock resync mode.
+
+### Changed
+- Sample clock default: 27MHz xtal (saved settings keep their value).
+- Xtal timing: "L<line period> O<output line length>", or "L.. O..>.." when
+  the applied length is outside the tolerance (the setup will be redone).
+- Sync diag.: O F S (the frontend count f of 0.27 is gone).
+
+### Removed
+- Introduced for causes that turned out to be wrong (the real one, 0.29: a
+  vsync right after the cut-short line, with separate H / V syncs):
+  - Xtal vsync / own vsync from the composite sync (0.24): the TVP7002 vsync
+    was in the right place (Sync diag. of 0.26).
+  - Unlock of the hsync flywheel on generated edges (0.26); the flywheel is
+    still restarted at every setup.
+  - Xtal out sync (Resync / Off test options): always Auto.
+- Test patterns Grid, Monoscope and RGB (the stock gray pattern stays, for
+  the safe screens); shadow mask, border colour / brightness and Panasonic
+  hack paths (no menu in this firmware): room for the above.
+
 CVBS decoder 0.29
 -----------------
 
