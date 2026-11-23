@@ -196,8 +196,9 @@ static void cos_sin_q16(int deg, int32_t *c, int32_t *s) {
 // diagnostic view (not kept): colour deviation from its average over the
 // lines, x8 on grey
 // test option (not kept, default both), 27MHz xtal clock output timing:
-// 0 both, 1 resync the output at every input frame, 2 line lengths from the
-// measured period, 3 off
+// 0 line lock (output lines follow each input line, line length from the
+// measured period rounded down, resync at every input frame), 1 line length
+// rounded up + resync, 2 resync only, 3 off
 alt_u8 cv_diagview;
 alt_u8 cv_diagview_applied;
 
@@ -258,7 +259,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     else
         rf = (cc->cv_reffilt == 2);
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
-          ((uint32_t)(rf & 1) << 10);
+          ((uint32_t)(rf & 1) << 10) | ((uint32_t)((cc->cv_xtal != 0) && (cv_diagview == 0)) << 11);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     cv_diagview_applied = cv_diagview;
@@ -268,7 +269,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off != 0) << 4) |
                         ((cc->cv_xtal != 0) << 5) |
-                        ((uint32_t)((cc->cv_xtal != 0) && (cv_diagview <= 1)) << 7) |
+                        ((uint32_t)((cc->cv_xtal != 0) && (cv_diagview <= 2)) << 7) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |

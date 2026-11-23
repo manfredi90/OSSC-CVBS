@@ -1,6 +1,21 @@
 Changelog
 =========
 
+CVBS decoder 0.21
+-----------------
+
+### New
+- 27MHz xtal clock: line lock (CVBS decoder > Xtal out sync = Line lock, the
+  new default). Tests of 0.20: the output must never run ahead of the input
+  (cut line) and must be resynced at every frame (periodic jumps: no
+  picture), and no fixed output line length suits every source (SNES ~1714.8
+  clocks per line, MiSTer menu ~1716, Mega Drive ~1719.8). Now the output
+  position is checked at every input line and the difference (a few clocks)
+  is taken out of the next output line, in its front porch: the output
+  follows the input line by line, whatever the line length.
+- Xtal out sync: Line lock, Both (line length rounded up + resync), Resync,
+  Off. Line len. alone removed (periodic jumps by design).
+
 CVBS decoder 0.20
 -----------------
 

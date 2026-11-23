@@ -858,13 +858,15 @@ void program_mode()
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
-    if (cv_mode && cm.cc.cv_xtal && ((cv_diagview == 0) || (cv_diagview == 2)) && cm.totlines) {
+    if (cv_mode && cm.cc.cv_xtal && (cv_diagview <= 1) && cm.totlines) {
         uint64_t lp_x256 = ((uint64_t)cm.pcnt_field << 8) / (cm.totlines >> !cm.progressive);
         uint64_t den = (uint64_t)pll_h_total << 8;
-        // rounded up: output lines never shorter than the input ones (the
-        // output would read lines before they are written)
-        vmode_in.timings.h_total = (uint16_t)(((uint64_t)vmode_in.timings.h_total * lp_x256 + den - 1) / den);
-        vmode_out.timings.h_total = (uint16_t)(((uint64_t)vmode_out.timings.h_total * lp_x256 + den - 1) / den);
+        // line lock: rounded down (the FPGA lengthens lines to follow the
+        // input); else rounded up (output lines never shorter than the input
+        // ones, the output would read lines before they are written)
+        uint64_t rnd = (cv_diagview == 0) ? 0 : den - 1;
+        vmode_in.timings.h_total = (uint16_t)(((uint64_t)vmode_in.timings.h_total * lp_x256 + rnd) / den);
+        vmode_out.timings.h_total = (uint16_t)(((uint64_t)vmode_out.timings.h_total * lp_x256 + rnd) / den);
         printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp_x256 >> 8), (unsigned long)(((lp_x256 & 0xff) * 100) >> 8),
                (unsigned)vmode_in.timings.h_total, (unsigned)vmode_out.timings.h_total);
     }

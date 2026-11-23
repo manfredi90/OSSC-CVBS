@@ -67,6 +67,7 @@ module scanconverter (
     input lb_rgb,               // line buffer layout 3: RGB, one pixel per word
     input [12:0] ds_hofs,       // output position at the input frame start (clocks, 0 = line start)
     input resync_always,        // resync the output at every input frame (input clock not locked to the source)
+    input line_lock,            // output lines follow each input line (input clock not locked to the source)
     input ext_sync_mode,
     input ext_frame_change_i,
     input [7:0] ext_R_i,
@@ -469,8 +470,41 @@ always @(posedge PCLK_OUT_i) begin
     end
 end
 
+// Line lock (CVBS decoder on the 27MHz crystal: a line is not a whole number
+// of clocks, the output would drift against the input within the frame).
+// The output position at each input line start (HSYNC_i falling edge) is
+// compared with the one at the first line after the frame resync; the
+// difference (a few clocks) is taken out of the next output line, in its
+// front porch.
+reg ll_s1, ll_s2, ll_s3, ll_valid, ll_pend;
+reg [12:0] ll_ref;
+reg signed [4:0] ll_d;
+wire ll_start = line_lock & ll_s3 & ~ll_s2;
+wire signed [13:0] ll_diff0 = $signed({1'b0, h_cnt}) - $signed({1'b0, ll_ref});
+wire signed [13:0] ll_diff = (ll_diff0 > $signed({2'b0, H_TOTAL[12:1]})) ? ll_diff0 - $signed({1'b0, H_TOTAL}) :
+                             (ll_diff0 < -$signed({2'b0, H_TOTAL[12:1]})) ? ll_diff0 + $signed({1'b0, H_TOTAL}) : ll_diff0;
+wire [12:0] ll_apply_pos = H_TOTAL - 13'd10;
+always @(posedge PCLK_OUT_i) begin
+    {ll_s1, ll_s2, ll_s3} <= {HSYNC_i, ll_s1, ll_s2};
+end
+
 // H/V counters
 always @(posedge PCLK_OUT_i) begin
+    if (frame_change_resync | ~line_lock) begin
+        ll_valid <= 1'b0;
+        ll_pend <= 1'b0;
+    end else if (ll_start) begin
+        if (~ll_valid) begin
+            ll_ref <= h_cnt;
+            ll_valid <= 1'b1;
+        end else begin
+            ll_d <= (ll_diff > 14'sd8) ? 5'sd8 : (ll_diff < -14'sd8) ? -5'sd8 : ll_diff[4:0];
+            ll_pend <= 1'b1;
+        end
+    end else if (ll_pend & (h_cnt == ll_apply_pos)) begin
+        ll_pend <= 1'b0;
+    end
+
     if (ext_sync_mode & ext_frame_change_i) begin
         h_cnt <= PP_SRCSEL_START; // compensate pipeline delays
         v_cnt <= 0;
@@ -499,6 +533,9 @@ always @(posedge PCLK_OUT_i) begin
             end
             h_cnt <= 0;
             h_avidstart <= 1'b0;
+        end else if (ll_pend & (h_cnt == ll_apply_pos) & ~ll_start) begin
+            // line lock correction (front porch): ahead -> longer line
+            h_cnt <= h_cnt + 1'b1 - {{8{ll_d[4]}}, ll_d};
         end else begin
             h_cnt <= h_cnt + 1'b1;
             h_avidstart <= (h_cnt == H_SYNCLEN+H_BACKPORCH-1'b1);
