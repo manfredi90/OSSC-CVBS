@@ -1,6 +1,23 @@
 Changelog
 =========
 
+CVBS decoder 0.15
+-----------------
+
+### Fixed
+- 27MHz xtal clock: black screen on the MiSTer menu, last line cut short
+  and flickering line at the bottom on the Mega Drive. Without the H-PLL the
+  TVP7002 hsync output also carries the half-line pulses of the vertical
+  interval: a flywheel now ignores hsync edges before 3/4 of the line and
+  fills in missing ones (like a TV).
+- 27MHz xtal clock: slow hue wobble, larger at the top of the picture
+  (captures of 0.14: ~1 level rms on cyan / red, the line to line streaks are
+  gone). The frequency loop and the reference filter no longer update in the
+  first lines after the vsync (no or odd bursts there).
+
+### Changed
+- All multipliers on the FPGA embedded multipliers (logic elements freed).
+
 CVBS decoder 0.14
 -----------------
 

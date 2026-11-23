@@ -264,6 +264,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         (pal << 2) |
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off != 0) << 4) |
+                        ((cc->cv_xtal != 0) << 5) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |

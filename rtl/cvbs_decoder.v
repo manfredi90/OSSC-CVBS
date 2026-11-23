@@ -29,6 +29,9 @@
 // reference interpolated between the bursts of its line and of the next one.
 //
 
+// all multipliers (constants included) on the embedded multipliers: logic
+// elements are the scarce resource
+(* multstyle = "dsp" *)
 module cvbs_decoder #(
     parameter SIDE_W = 40
 ) (
@@ -40,7 +43,8 @@ module cvbs_decoder #(
     input VS_i,                 // active low
     input [SIDE_W-1:0] side_i,  // other signals delayed with the video
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
-    // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] free,
+    // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] 27MHz crystal
+    // clock (HS flywheel, in ossc.v),
     // [6] luma re-timed on the sync edge (27MHz crystal clock), [7] free,
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
@@ -499,6 +503,15 @@ wire s_new = pal ? ((vb & pv) ? meas_w : ~s_cur) : 1'b1;
 
 // vsync leading edge (field counters)
 wire vs_fall = vs0_prev & ~vs0;
+// lines after the vsync leading edge: no frequency loop / reference filter
+// update in the vertical interval (equalising pulses, no or odd bursts)
+reg [3:0] vb_lines;
+wire vb_hold = (vb_lines != 4'hf);
+always @(posedge clk)
+    if (vs_fall)
+        vb_lines <= 4'h0;
+    else if ((hs0_prev & ~hs0) && vb_hold)
+        vb_lines <= vb_lines + 1'b1;
 always @(posedge clk)
     if (vs_fall && (bl_err > 13'sd12 || bl_err < -13'sd12))
         blank <= blank_f[11:4] + blank_f[3];
@@ -584,7 +597,7 @@ always @(posedge clk) begin
                 if (~rflt) begin
                     Sr <= Rr;
                     Si <= Ri;
-                end else begin
+                end else if (~vb_hold) begin
                     Sr <= Sr + sdr_s[18:0];
                     Si <= Si + sdi_s[18:0];
                 end
@@ -639,7 +652,7 @@ always @(posedge clk) begin
             18: begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
                 // frequency loop (the line to line rotation of r)
-                if (rpv) begin
+                if (rpv & ~vb_hold) begin
                     if (~rot_z)
                         rot_h <= {rot_h[5:0], rot_p};
                     if (corr_next[22] != corr_next[21])
@@ -876,7 +889,7 @@ end
 // power-up values (also for simulation: the running sums need a defined start)
 integer j;
 initial begin
-    ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; rot_p = 0; rot_z = 1; rot_h = 7'h55; Sr = 0; Si = 0;
+    ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; rot_p = 0; rot_z = 1; rot_h = 7'h55; vb_lines = 4'hf; Sr = 0; Si = 0;
     Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
