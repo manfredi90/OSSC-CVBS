@@ -774,16 +774,20 @@ end
 // y' = y + k/32 * hp, hp = [-1 -2 1 4 1 -2 -1] * y: zero gain at DC and at
 // the Nyquist frequency (no noise boost), ~5 at 2.7MHz, ~9.5 at 5MHz
 // (k = 0-7, as in 0.6-0.11)
+// Two register stages (timing): luma delayed by 5 here, one less in stage E.
 reg signed [10:0] yAd [1:6];
-reg signed [10:0] yS;
+reg signed [10:0] yS, s_c;
+reg signed [13:0] s_hp_r;
 wire signed [13:0] s_hp = $signed({yAd[3], 2'b0}) + yAd[2] + yAd[4]
                         - $signed({yAd[1], 1'b0}) - $signed({yAd[5], 1'b0}) - yA - yAd[6];
-wire signed [17:0] s_p = s_hp * $signed({1'b0, sharp});
-wire signed [13:0] s_sum = yAd[3] + (s_p >>> 5);
+wire signed [17:0] s_p = s_hp_r * $signed({1'b0, sharp});
+wire signed [13:0] s_sum = s_c + (s_p >>> 5);
 always @(posedge clk) begin
     yAd[1] <= yA;
     for (i=2; i<=6; i=i+1)
         yAd[i] <= yAd[i-1];
+    s_hp_r <= s_hp;
+    s_c <= yAd[3];
     yS <= sat11(s_sum);
 end
 
@@ -791,7 +795,7 @@ end
 // the subcarrier, which is demodulated as colour fringes (cross-colour, e.g.
 // blue / purple at black / white edges). The chroma is attenuated around the
 // edges: edge strength e = |Y(n) - Y(n-4)|, envelope decaying by 6 per
-// sample, chroma delayed by 8 (luma: 4 in stage S, then 5 + 1) so that the
+// sample, chroma delayed by 8 (luma: 5 in stage S, then 4 + 1) so that the
 // attenuation also covers the fringe before the edge. Off with S-Video (no
 // cross-colour; dark bands at edges between colours of different luma).
 reg signed [10:0] yE_d [1:5];
@@ -811,7 +815,7 @@ always @(posedge clk) begin
         yE_d[i] <= yE_d[i-1];
     e_env <= (e_abs > e_dec) ? e_abs : e_dec;
     e_att <= ((edge_sup == 2'h0) | svideo) ? 9'h0 : ((e_scaled > 14'd256) ? 9'd256 : e_scaled[8:0]);
-    yE <= yE_d[5];
+    yE <= yE_d[4];      // (stage S: 5 clocks)
     UE <= uE_p >>> 8;
     VE <= vE_p >>> 8;
 end
@@ -916,7 +920,7 @@ initial begin
     // synthesis translate_off
     for (j=0; j<2048; j=j+1) yl_mem[j] = 8'd32;
     // synthesis translate_on
-    yS = 0;
+    yS = 0; s_c = 0; s_hp_r = 0;
 end
 
 endmodule
