@@ -242,9 +242,12 @@ end
 // Own vsync (same mode, unless hc[11]): the TVP7002 vsync output can lock at
 // a wrong line without the H-PLL (picture moved down by tens of lines at
 // random, until the next setup). As in a TV, the vertical sync is taken from
-// the composite sync (SOG, active low): a sync pulse longer than 1/8 line is
-// a broad pulse. Vsync from the first one (1/8 line into its half line: odd
-// and even fields keep their half-line offset) until 1.25 lines without one,
+// the composite sync (SOG, active low): a sync pulse longer than 300 clocks
+// (11us, 1/6 line; hsync 4.7us) is a broad pulse. Vsync from the first one
+// (300 clocks into its half line: odd and even fields keep their half-line
+// offset) until 1.25 lines (2150 clocks) without one; fixed lengths, not
+// from the flywheel (0.24: a flywheel locked to a wrong length gave a
+// threshold below the hsync width, vsync stuck, no frame starts),
 // with the polarity of the TVP7002 vsync output (its majority level is the
 // inactive one).
 reg [10:0] vd_low;
@@ -260,13 +263,13 @@ always @(posedge TVP_PCLK_i) begin
         vd_low <= 11'h0;
     else if (vd_low != 11'h7ff)
         vd_low <= vd_low + 1'b1;
-    if (vd_low == {3'h0, fw_len[11:3]}) begin
+    if (vd_low == 11'd300) begin
         vd_act <= 1'b1;
         vd_since <= 13'h0;
     end else begin
         if (vd_since != 13'h1fff)
             vd_since <= vd_since + 1'b1;
-        if (vd_since > ({1'b0, fw_len} + {3'h0, fw_len[11:2]}))
+        if (vd_since > 13'd2150)
             vd_act <= 1'b0;
     end
     // majority level of the TVP vsync (saturating up / down count)

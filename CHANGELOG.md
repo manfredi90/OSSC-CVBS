@@ -12,6 +12,9 @@ CVBS decoder 0.26
   two real ones); the mode detection did not see it (it measures the raw
   sync), changing Sample clock reset the flywheel. Now unlocked when more
   than 8 of 32 lines end on a generated edge, and restarted at every setup.
+  Sync diag. in that state: F0 S0 (no frame starts): the own vsync (0.24)
+  took its broad pulse threshold from the flywheel line length (below the
+  hsync width): now fixed lengths (300 clocks, 1.25 lines).
 
 ### Removed
 - The repeated setup of 0.25 (no effect).
