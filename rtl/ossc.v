@@ -673,7 +673,7 @@ scanconverter #(
     .lb_slots(ds_lb_slots),
     .lb_rgb(ds_lb_rgb),
     .ds_hofs(ds_hofs),
-    .resync_always(fw_en),
+    .resync_always(fw_en & sl_config2[15]),    // cfg[7]: test option
     .ext_sync_mode(1'b0),
     .ext_frame_change_i(1'b0),
     .ext_R_i(8'h00),

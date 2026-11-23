@@ -532,7 +532,7 @@ status_t get_status(tvp_sync_input_t syncinput)
     // (mode reprogram), the rest only the decoder registers
     if (cv_mode && sync_active && valid_mode &&
         ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp) ||
-         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal)))
+         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal) || (cv_diagview != cv_diagview_applied)))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();
@@ -858,7 +858,7 @@ void program_mode()
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
-    if (cv_mode && cm.cc.cv_xtal && cm.totlines) {
+    if (cv_mode && cm.cc.cv_xtal && (cv_diagview & 2) && cm.totlines) {
         uint64_t lp_x256 = ((uint64_t)cm.pcnt_field << 8) / (cm.totlines >> !cm.progressive);
         uint64_t den = (uint64_t)pll_h_total << 8;
         vmode_in.timings.h_total = (uint16_t)(((uint64_t)vmode_in.timings.h_total * lp_x256 + den/2) / den);

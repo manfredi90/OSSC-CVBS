@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 0.18
+-----------------
+
+### Changed
+- The two output timing changes of 0.17 (garbled picture with the 27MHz
+  xtal clock) are now a test option, CVBS decoder > Xtal out sync (Off,
+  Resync, Line len., Both; not kept, default Off = as 0.16): resync the
+  output at every input frame, line lengths from the measured period.
+
 CVBS decoder 0.17
 -----------------
 

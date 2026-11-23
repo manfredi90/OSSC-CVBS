@@ -45,7 +45,8 @@ module cvbs_decoder #(
     // [0] enable, [1] S-Video (chroma on B), [2] PAL (V switch), [3] band-pass
     // for 4.43MHz (else 3.58MHz), [4] no luma notch, [5] 27MHz crystal
     // clock (HS flywheel, in ossc.v),
-    // [6] luma re-timed on the sync edge (27MHz crystal clock), [7] free,
+    // [6] luma re-timed on the sync edge (27MHz crystal clock), [7] output
+    // resync at every frame (scanconverter, test),
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
