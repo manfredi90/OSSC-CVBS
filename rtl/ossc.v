@@ -195,10 +195,13 @@ assign HDMI_TX_PCLK = pclk_out;
 // the half-line pulses of the vertical interval come through (extra lines,
 // lines cut short). Once locked (8 lines of the same length), edges before
 // 7/8 of the line are ignored and a missing edge is generated 4 clocks after
-// the expected end of the line.
+// the expected end of the line. Unlocked when more than 8 of 32 lines end on
+// a generated edge (locked to a wrong length, e.g. during a source switch:
+// it could stay there, with a generated edge between two real ones).
 reg TVP_HS_raw, fw_hs_prev, fw_locked;
 reg [11:0] fw_cnt, fw_len;
 reg [3:0] fw_good, fw_miss;
+reg [4:0] fw_win;
 wire fw_en = sl_config2[8] & sl_config2[13];
 wire fw_edge = fw_hs_prev & ~TVP_HS_raw;
 wire [12:0] fw_diff = {1'b0, fw_cnt} - {1'b0, fw_len};
@@ -209,20 +212,23 @@ always @(posedge TVP_PCLK_i) begin
     fw_hs_prev <= TVP_HS_raw;
     if (fw_accept | fw_gen) begin
         fw_cnt <= 12'd0;
+        fw_win <= fw_win + 1'b1;
         if (fw_accept) begin
-            fw_miss <= 4'd0;
             if (fw_near | ~fw_locked)
                 fw_len <= fw_cnt;
             if (~fw_locked) begin
                 fw_good <= fw_near ? fw_good + 1'b1 : 4'd0;
                 fw_locked <= fw_near & (fw_good == 4'd7);
             end
-        end else begin
+        end else if (fw_miss != 4'hf)
             fw_miss <= fw_miss + 1'b1;
-            if (fw_miss == 4'hf) begin
+        if (fw_win == 5'h1f) begin
+            // window of 32 lines: too many generated edges -> unlock
+            if (fw_miss > 4'd8) begin
                 fw_locked <= 1'b0;
                 fw_good <= 4'd0;
             end
+            fw_miss <= 4'd0;
         end
     end else if (fw_cnt != 12'hfff)
         fw_cnt <= fw_cnt + 1'b1;

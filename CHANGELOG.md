@@ -1,6 +1,21 @@
 Changelog
 =========
 
+CVBS decoder 0.26
+-----------------
+
+### Fixed
+- 27MHz xtal clock: picture moved down, black or stretched at random after a
+  core / menu change, staying so (also back in the menu) until Sample clock
+  was changed. The hsync flywheel (0.15) could lock to a wrong line length
+  while the source was switching, and stay locked (a generated edge between
+  two real ones); the mode detection did not see it (it measures the raw
+  sync), changing Sample clock reset the flywheel. Now unlocked when more
+  than 8 of 32 lines end on a generated edge, and restarted at every setup.
+
+### Removed
+- The repeated setup of 0.25 (no effect).
+
 CVBS decoder 0.25
 -----------------
 
