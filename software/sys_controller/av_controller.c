@@ -559,8 +559,11 @@ status_t get_status(tvp_sync_input_t syncinput)
     return status;
 }
 
+static uint16_t cvx_n_setup, cvx_n_update;    // diagnostics: setups / register updates since boot
+
 void update_sc_config()
 {
+    cvx_n_update++;
     int i, p, t;
     shmask_data_arr *shmask_data_arr_ptr;
     struct {uint32_t offset; uint32_t size; uint8_t mode;} lc_cfg_arr[] = {{0, 0, 0},
@@ -956,6 +959,15 @@ int cvbs_sync_diag() {
     return 1;
 }
 
+// <Event count.>: since boot, P = setups (program_mode), U = register
+// updates (update_sc_config, also at every setup), X = output resyncs out of
+// place (not in the last output line, or in its first 64 clocks)
+int cvbs_event_diag() {
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "P%u U%u X%lu", (unsigned)cvx_n_setup, (unsigned)cvx_n_update,
+              (unsigned long)((sc->fe_status.data >> 26) & 0x3f));
+    return 1;
+}
+
 // <Xtal timing>: line period now (27MHz clocks per line, 4 stable fields),
 // output line length applied ("O1716"; "O1716>1717" if outside the
 // tolerance: the setup would be redone)
@@ -986,6 +998,7 @@ int cvbs_xtal_diag() {
 // Configure TVP7002 and scan converter logic based on the video mode
 void program_mode()
 {
+    cvx_n_setup++;
     int retval, fpga_pll_config_changed, vmode_changed;
     alt_u8 h_syncinlen, v_syncinlen, macrovis, hdmitx_pclk_level, osd_x_size, osd_y_size;
     alt_u32 h_hz, h_synclen_px, pclk_i_hz, dotclk_hz, pll_h_total;

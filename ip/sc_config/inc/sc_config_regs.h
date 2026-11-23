@@ -31,7 +31,7 @@ typedef union {
         uint8_t wd_kill:1;      // 15kHz watchdog suppressing output
         uint8_t resync_cnt:8;       // output resyncs (wraps)
         uint8_t frame_cnt:4;        // input frames (wraps)
-        uint8_t fe_st_rsv:6;
+        uint8_t anom_cnt:6;         // CVBS xtal: resyncs out of place (wraps)
     } __attribute__((packed, __may_alias__));
     uint32_t data;
 } fe_status_reg;

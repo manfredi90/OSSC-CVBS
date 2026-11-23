@@ -15,6 +15,10 @@ CVBS decoder 0.30
 - Xtal timing: "L<line period> O<output line length>", or "L.. O..>.." when
   the applied length is outside the tolerance (the setup will be redone).
 - Sync diag.: O F S (the frontend count f of 0.27 is gone).
+- New <Event count.> (since boot): P = setups, U = register updates (also
+  at every setup and settings change), X = output resyncs out of place (not
+  in the last output line, or in its first 64 clocks: a very short line).
+  To find out what happens at the random black frames on HDMI TVs.
 
 ### Removed
 - Introduced for causes that turned out to be wrong (the real one, 0.29: a

@@ -114,6 +114,7 @@ wire [5:0] ds_lb_slots = 6'h0;
 wire ds_lb_rgb = 1'b0;
 wire [12:0] ds_hofs = 13'h0;
 wire [7:0] ds_resync_cnt;
+wire [5:0] ds_anom_cnt;
 wire [9:0] ds_fperiod_lo;
 wire [9:0] ds_field_cfg = 10'h0;
 
@@ -578,7 +579,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({6'h0, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({ds_anom_cnt, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),
@@ -683,6 +684,7 @@ scanconverter #(
     .shmask_data(12'h0),
     .resync_strobe(resync_strobe_i),
     .ds_resync_cnt(ds_resync_cnt),
+    .ds_anom_cnt(ds_anom_cnt),
     .ds_fperiod_lo(ds_fperiod_lo),
     .lt_active(lt_active),
     .lt_mode(lt_mode_synced),
