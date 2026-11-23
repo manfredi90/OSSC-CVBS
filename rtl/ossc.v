@@ -252,9 +252,8 @@ end
 // inactive one).
 reg [10:0] vd_low;
 reg [12:0] vd_since;
-reg vd_act, vd_act_prev, vd_vsraw_prev;
+reg vd_act;
 reg [15:0] vd_pol_acc;
-reg [8:0] vd_lc, vd_off;
 wire vd_en = fw_en & ~sl_config[11];
 wire vd_inact = vd_pol_acc[15];         // inactive (majority) level of the TVP vsync
 wire TVP_VS_own = vd_act ? ~vd_inact : vd_inact;
@@ -278,15 +277,6 @@ always @(posedge TVP_PCLK_i) begin
     end else begin
         if (vd_pol_acc != 16'h0) vd_pol_acc <= vd_pol_acc - 1'b1;
     end
-    // diagnostics: lines from the own vsync to the TVP7002 vsync leading edge
-    vd_act_prev <= vd_act;
-    vd_vsraw_prev <= TVP_VS_sync2_reg;
-    if (vd_act & ~vd_act_prev)
-        vd_lc <= 9'h0;
-    else if ((fw_accept | fw_gen) && (vd_lc != 9'h1ff))
-        vd_lc <= vd_lc + 1'b1;
-    if ((vd_vsraw_prev == vd_inact) && (TVP_VS_sync2_reg != vd_inact))
-        vd_off <= vd_lc;
 end
 wire TVP_VS_fe = vd_en ? TVP_VS_own : TVP_VS_sync2_reg;
 reg TVP_VSo_s1, TVP_VSo_s2;
@@ -393,13 +383,16 @@ cvbs_decoder #(
     .status(cv_status)
 );
 
-// diagnostics: input frames (decoder frame change strobes)
-reg fc_dec_prev;
-reg [3:0] fc_cnt;
+// diagnostics: input frames (decoder and frontend frame change strobes)
+reg fc_dec_prev, fc_fe_prev;
+reg [3:0] fc_cnt, fcf_cnt;
 always @(posedge TVP_PCLK_i) begin
     fc_dec_prev <= frame_change_dec;
     if (frame_change_dec & ~fc_dec_prev)
         fc_cnt <= fc_cnt + 1'b1;
+    fc_fe_prev <= TVP_fe_frame_change;
+    if (TVP_fe_frame_change & ~fc_fe_prev)
+        fcf_cnt <= fcf_cnt + 1'b1;
 end
 
 
@@ -647,7 +640,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({vd_off[8:3], fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({2'b00, fcf_cnt, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),

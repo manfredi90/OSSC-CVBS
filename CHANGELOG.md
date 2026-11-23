@@ -1,6 +1,31 @@
 Changelog
 =========
 
+CVBS decoder 0.27
+-----------------
+
+### Fixed
+- 27MHz xtal clock, Xtal out sync Auto: picture moved, stretched or garbled
+  at random after loading some MiSTer cores (SNES, PC Engine), depending on
+  when the setup happened (e.g. with the OSSC menu open or not), until Sample
+  clock was changed. The output line length came from the single field
+  period that triggered the setup, possibly a transient one while the core
+  was starting, and the mode detection tolerance (50 clocks per field) never
+  redid it. Now the line period is the average of 4 stable fields, and it is
+  checked continuously (16 samples, ~0.3s): the setup is redone when the
+  applied line length is too short or longer than needed by more than 1/4
+  clock per line (hysteresis for line periods at a rounding step, e.g. PC
+  Engine ~1716.2 clocks).
+
+### Changed
+- Sync diag.: O = output frames, F / f = input frames at the decoder /
+  frontend, S = output resyncs (per second). 0.24-0.26 read F0 S0 even with a
+  good picture; counters now read with explicit shifts, and the output /
+  frontend counts as a cross-check. The own vsync offset (V) and the sync
+  width (W, ~115 clocks: fine) are gone.
+- New <Xtal timing>: line period now (27MHz clocks per line), output line
+  length applied / right for it now (`*`: outside the tolerance).
+
 CVBS decoder 0.26
 -----------------
 

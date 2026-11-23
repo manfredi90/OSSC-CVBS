@@ -797,6 +797,184 @@ void show_safe_screen(const char *reason)
     }
 }
 
+// CVBS decoder on the 27MHz xtal clock, Xtal out sync Auto: the output line
+// length follows the measured line period (see program_mode()).
+// 0.22-0.26 took it from the single field period that triggered the setup:
+// while a MiSTer core is starting, that can be a transient value (SNES / PC
+// Engine: picture moved, stretched or garbled at random, depending on when
+// the setup happened, e.g. with the OSSC menu open or not) and the mode
+// detection tolerance (50 clocks per field) never redid the setup. Now the
+// line period is the average of stable fields, and it is checked again
+// continuously: the setup is redone when the applied line length is wrong.
+extern char func_ret_status[];
+void program_mode();
+static uint8_t cvx_active;
+static uint32_t cvx_pll_h_total, cvx_lp_x256, cvx_lp_now;
+static uint16_t cvx_hi_pre, cvx_ho_pre, cvx_hi, cvx_ho;
+static uint8_t cvx_redo_cnt;
+
+// output vsync edge (PIO flag), at most 50ms
+static int cvx_wait_vsync() {
+    uint32_t tps = alt_timestamp_freq(), t0 = alt_timestamp();
+    while (IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK)
+        if (alt_timestamp() - t0 > tps/20) return 0;
+    while (!(IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK))
+        if (alt_timestamp() - t0 > tps/20) return 0;
+    return 1;
+}
+
+static uint32_t cvx_lp_from(uint64_t pcnt_sum, uint32_t n) {
+    // clocks per line x256: pcnt_field is per field, a field of an
+    // interlaced source has totlines / 2 lines (262.5, not 262)
+    return (uint32_t)((pcnt_sum << (cm.progressive ? 8 : 9)) / ((uint64_t)n * cm.totlines));
+}
+
+// line period (x256) from 4 consecutive fields with the current line count
+// and field periods within 8 clocks; 0 if not stable within 24 fields
+static uint32_t cvx_measure_lp() {
+    uint32_t p[4], mn, mx;
+    uint64_t sum;
+    int i, k, n = 0;
+
+    if (!cm.totlines)
+        return 0;
+    for (i = 0; i < 24; i++) {
+        uint32_t pc;
+        if (!cvx_wait_vsync())
+            break;
+        pc = sc->fe_status2.pcnt_field;
+        if ((sc->fe_status.vtotal != cm.totlines) || ((!sc->fe_status.interlace_flag) != cm.progressive) || !pc) {
+            n = 0;
+            continue;
+        }
+        p[n & 3] = pc;
+        if (++n < 4)
+            continue;
+        mn = mx = p[0];
+        sum = 0;
+        for (k = 0; k < 4; k++) {
+            if (p[k] < mn) mn = p[k];
+            if (p[k] > mx) mx = p[k];
+            sum += p[k];
+        }
+        if (mx - mn <= 8)
+            return cvx_lp_from(sum, 4);
+    }
+    return 0;
+}
+
+// line length for a preset h_total: rounded up (output lines never shorter
+// than the input ones: the output would read lines before they are written)
+// and never below the preset (tests of 0.20 / 0.21: SNES ~1714 clocks per
+// line, no picture with a shorter output line, fine with the preset)
+static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256) {
+    uint64_t den = (uint64_t)cvx_pll_h_total << 8;
+    uint16_t h = (uint16_t)(((uint64_t)pre * lp_x256 + den - 1) / den);
+    return (h > pre) ? h : pre;
+}
+
+// applied line lengths still right for the line period lp: not too short,
+// not longer than needed by more than 1/4 clock per input line (hysteresis:
+// a line period at a rounding step, e.g. PC Engine ~1716.2, must not toggle)
+static int cvx_htot_ok(uint32_t lp) {
+    return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_ho >= cvx_htot(cvx_ho_pre, lp)) &&
+           (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho <= cvx_htot(cvx_ho_pre, lp + 64));
+}
+
+// main loop: line period over 16 samples 20ms apart (~0.3s, non-blocking);
+// setup redone after 2 consecutive stable windows with wrong line lengths
+static void cvx_check() {
+    static uint32_t ts_last, mn, mx;
+    static uint64_t sum;
+    static uint8_t n, bad;
+    uint32_t now = alt_timestamp(), pc;
+
+    if (now - ts_last < alt_timestamp_freq()/50)
+        return;
+    ts_last = now;
+    pc = sc->fe_status2.pcnt_field;
+    if ((sc->fe_status.vtotal != cm.totlines) || !pc) {
+        n = 0;
+        return;
+    }
+    if (n == 0) {
+        sum = 0;
+        mn = mx = pc;
+    }
+    sum += pc;
+    if (pc < mn) mn = pc;
+    if (pc > mx) mx = pc;
+    if (++n < 16)
+        return;
+    n = 0;
+    if (mx - mn > 16) {
+        bad = 0;
+        return;
+    }
+    cvx_lp_now = cvx_lp_from(sum, 16);
+    if (cvx_htot_ok(cvx_lp_now)) {
+        bad = 0;
+    } else if (++bad >= 2) {
+        bad = 0;
+        cvx_redo_cnt++;
+        printf("CVBS xtal: line length redone (%u / %u)\n", (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, cvx_lp_now));
+        program_mode();
+    }
+}
+
+// <Sync diag.> (over 1/4 s, per second): O = output frames (vsync flag),
+// F / f = input frames at the decoder / frontend, S = output resyncs
+// (counters read with explicit shifts: 0.24-0.26 showed F0 S0 even with a
+// good picture)
+int cvbs_sync_diag() {
+    uint32_t d1, d2, tps = alt_timestamp_freq(), t0, o = 0;
+    int prev;
+
+    if (!cv_mode || (cm.id < 0)) {
+        strncpy(func_ret_status, "No CVBS input", LCD_ROW_LEN+1);
+        return 1;
+    }
+    prev = !!(IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK);
+    d1 = sc->fe_status.data;
+    t0 = alt_timestamp();
+    while ((alt_timestamp() - t0) < tps/4) {
+        int v = !!(IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE) & VSYNC_FLAG_MASK);
+        if (v & !prev)
+            o++;
+        prev = v;
+    }
+    d2 = sc->fe_status.data;
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "O%lu F%lu f%lu S%lu", (unsigned long)(o * 4),
+              (unsigned long)((((d2 >> 22) - (d1 >> 22)) & 15) * 4),
+              (unsigned long)((((d2 >> 26) - (d1 >> 26)) & 15) * 4),
+              (unsigned long)((((d2 >> 14) - (d1 >> 14)) & 255) * 4));
+    return 1;
+}
+
+// <Xtal timing>: line period now (27MHz clocks per line, 4 stable fields),
+// output line length applied / right for it now ('*' if outside the
+// tolerance: the setup would be redone)
+int cvbs_xtal_diag() {
+    uint32_t lp;
+
+    if (!cv_mode || (cm.id < 0)) {
+        strncpy(func_ret_status, "No CVBS input", LCD_ROW_LEN+1);
+        return 1;
+    }
+    if (!cvx_active) {
+        strncpy(func_ret_status, "Auto not active", LCD_ROW_LEN+1);
+        return 1;
+    }
+    lp = cvx_measure_lp();
+    if (!lp) {
+        strncpy(func_ret_status, "Not stable", LCD_ROW_LEN+1);
+        return 1;
+    }
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u/%u%c", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
+              (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, lp), cvx_htot_ok(lp) ? ' ' : '*');
+    return 1;
+}
+
 // Configure TVP7002 and scan converter logic based on the video mode
 void program_mode()
 {
@@ -805,6 +983,7 @@ void program_mode()
     alt_u32 h_hz, h_synclen_px, pclk_i_hz, dotclk_hz, pll_h_total;
 
     memset(&vmode_in, 0, sizeof(mode_data_t));
+    cvx_active = 0;
 
     vmode_in.timings.v_hz_x100 = (100*TVP_EXTCLK_HZ)/cm.pcnt_field;
     h_hz = (100*TVP_EXTCLK_HZ)/((100*cm.pcnt_field*(1+!cm.progressive))/cm.totlines);
@@ -866,23 +1045,18 @@ void program_mode()
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
     if (cv_mode && cm.cc.cv_xtal && (cv_diagview == 0) && cm.totlines) {
-        // clocks per line x256: pcnt_field is per field, a field of an
-        // interlaced source has totlines / 2 lines (262.5, not 262)
-        uint64_t lp_x256 = cm.progressive ? (((uint64_t)cm.pcnt_field << 8) / cm.totlines) :
-                                            (((uint64_t)cm.pcnt_field << 9) / cm.totlines);
-        uint64_t den = (uint64_t)pll_h_total << 8;
-        // rounded up (output lines never shorter than the input ones: the
-        // output would read lines before they are written) and never below
-        // the preset (tests of 0.20 / 0.21: SNES ~1714 clocks per line, no
-        // picture with a shorter output line, fine with the preset)
-        uint16_t hi = (uint16_t)(((uint64_t)vmode_in.timings.h_total * lp_x256 + den - 1) / den);
-        uint16_t ho = (uint16_t)(((uint64_t)vmode_out.timings.h_total * lp_x256 + den - 1) / den);
-        if (hi > vmode_in.timings.h_total)
-            vmode_in.timings.h_total = hi;
-        if (ho > vmode_out.timings.h_total)
-            vmode_out.timings.h_total = ho;
-        printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp_x256 >> 8), (unsigned long)(((lp_x256 & 0xff) * 100) >> 8),
-               (unsigned)vmode_in.timings.h_total, (unsigned)vmode_out.timings.h_total);
+        uint32_t lp = cvx_measure_lp();
+        if (!lp)
+            lp = cvx_lp_from(cm.pcnt_field, 1);     // not stable: checked again by cvx_check()
+        cvx_pll_h_total = pll_h_total;
+        cvx_hi_pre = vmode_in.timings.h_total;
+        cvx_ho_pre = vmode_out.timings.h_total;
+        cvx_lp_x256 = cvx_lp_now = lp;
+        cvx_hi = vmode_in.timings.h_total = cvx_htot(cvx_hi_pre, lp);
+        cvx_ho = vmode_out.timings.h_total = cvx_htot(cvx_ho_pre, lp);
+        cvx_active = 1;
+        printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 100) >> 8),
+               (unsigned)cvx_hi, (unsigned)cvx_ho);
     }
 
     // Tweak infoframe pixel repetition indicator if passing thru horizontally multiplied mode
@@ -1617,6 +1791,10 @@ int main(int argc, char **argv, char **envp)
                 break;
             }
         }
+
+        // CVBS xtal Auto: applied output line length checked continuously
+        if ((cm.avinput != AV_TESTPAT) && cm.sync_active && !ds_safe_screen && (cm.id >= 0) && cvx_active && (status == NO_CHANGE))
+            cvx_check();
 
         // CVBS: automatic colour system detection
         if ((cm.avinput != AV_TESTPAT) && cm.sync_active && !ds_safe_screen && (cm.id >= 0) && cvbs_update())

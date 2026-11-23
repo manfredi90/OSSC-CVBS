@@ -31,7 +31,8 @@ typedef union {
         uint8_t wd_kill:1;      // 15kHz watchdog suppressing output
         uint8_t resync_cnt:8;       // output resyncs (wraps)
         uint8_t frame_cnt:4;        // input frames (wraps)
-        uint8_t vd_off8:6;          // CVBS xtal: lines / 8 from the own vsync to the TVP7002 vsync
+        uint8_t fe_frame_cnt:4;     // input frames at the frontend (wraps)
+        uint8_t fe_st_rsv:2;
     } __attribute__((packed, __may_alias__));
     uint32_t data;
 } fe_status_reg;
