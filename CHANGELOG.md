@@ -1,6 +1,23 @@
 Changelog
 =========
 
+CVBS decoder 0.24
+-----------------
+
+### Fixed
+- 27MHz xtal clock: picture moved down by a large amount at random (e.g.
+  after loading a MiSTer core), until the next setup; the output resynced
+  every frame (Sync diag. F60 S60) but at the wrong line. The vsync output
+  of the TVP7002 can lock at a wrong line without the H-PLL: the vertical
+  sync is now taken from the composite sync, as in a TV (broad pulses: a
+  sync longer than 1/8 line), keeping the half-line offset of interlaced
+  fields.
+
+### New
+- CVBS decoder > Xtal vsync (Own, TVP7002; test, not kept, default Own).
+- Sync diag.: V = lines from the own vsync to the TVP7002 one (x8); the
+  flywheel lock flag is gone.
+
 CVBS decoder 0.23
 -----------------
 
