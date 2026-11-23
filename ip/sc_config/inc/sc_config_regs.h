@@ -29,8 +29,8 @@ typedef union {
         uint8_t interlace_flag:1;
         uint8_t sync_active:1;
         uint8_t wd_kill:1;      // 15kHz watchdog suppressing output
-        uint8_t fw_vspos:8;         // CVBS xtal: raw vsync position in the line (clocks / 16)
-        uint8_t fw_vs_chg:4;        // CVBS xtal: extra raw vsync changes per frame
+        uint8_t resync_cnt:8;       // output resyncs (wraps)
+        uint8_t frame_cnt:4;        // input frames (wraps)
         uint8_t fw_locked:1;        // CVBS xtal: hsync flywheel locked
         uint8_t fw_rej:5;           // CVBS xtal: hsync edges ignored in the last field
     } __attribute__((packed, __may_alias__));

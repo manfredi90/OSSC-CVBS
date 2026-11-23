@@ -150,8 +150,7 @@ reg [8:0] se_rem;
 reg [7:0] se_den;
 reg [9:0] se_q;             // L x 16
 reg [4:0] se_cnt;
-reg [23:0] se_acc;          // average edge x 2^12 (near fixed: the line start
-                            // quantisation drifts slowly through the sample)
+reg [17:0] se_acc;          // average edge x 2^6
 reg se_init;
 reg signed [12:0] se_d;     // edge - average (1/16 sample)
 reg signed [5:0] d_line;    // for the line read from the memories
@@ -161,7 +160,7 @@ wire [7:0] se_tp = se_tip[12:5];
 wire signed [13:0] se_num = $signed({1'b0, se_ms}) - $signed({2'b0, se_tp, 4'h0});
 wire [7:0] se_dn0 = blank - se_tp;
 wire [11:0] se_e = {se_k, 4'h0} + 12'd512 - {2'b0, se_q};
-wire [11:0] se_avg = se_acc[23:12];
+wire [11:0] se_avg = se_acc[17:6];
 wire signed [12:0] se_dn = $signed({1'b0, se_e}) - $signed({1'b0, se_avg});
 wire [9:0] se_rem2 = {se_rem, se_n[16]};
 always @(posedge clk) begin
@@ -207,11 +206,11 @@ always @(posedge clk) begin
     if (se_found && (h == 12'd300)) begin
         if (se_init || se_dn > 13'sd128 || se_dn < -13'sd128) begin
             // first line, or edge moved (other mode): restart the average
-            se_acc <= {se_e, 12'h0};
+            se_acc <= {se_e, 6'h0};
             se_init <= 1'b0;
             se_d <= 13'sd0;
         end else begin
-            se_acc <= se_acc + {{11{se_dn[12]}}, se_dn};
+            se_acc <= se_acc + {{5{se_dn[12]}}, se_dn};
             se_d <= se_dn;
         end
     end else if (h == 12'd300)

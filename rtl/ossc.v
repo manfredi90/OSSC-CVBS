@@ -367,6 +367,16 @@ cvbs_decoder #(
     .status(cv_status)
 );
 
+// diagnostics: input frames (decoder frame change strobes)
+reg fc_dec_prev;
+reg [3:0] fc_cnt;
+always @(posedge TVP_PCLK_i) begin
+    fc_dec_prev <= frame_change_dec;
+    if (frame_change_dec & ~fc_dec_prev)
+        fc_cnt <= fc_cnt + 1'b1;
+end
+
+
 // Insert synchronizers to async inputs (synchronize to CPU clock)
 always @(posedge clk27 or negedge po_reset_n)
 begin
@@ -611,7 +621,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({fw_rej, fw_locked, fw_vs_chg, fw_vspos[11:4], wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({fw_rej, fw_locked, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),

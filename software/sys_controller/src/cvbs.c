@@ -336,9 +336,14 @@ int cvbs_sync_diag() {
         strncpy(func_ret_status, "No CVBS input", LCD_ROW_LEN+1);
         return 1;
     }
+    fe_status_reg fs2;
+    uint32_t t0 = alt_timestamp(), tps = alt_timestamp_freq();
     fs.data = sc->fe_status.data;
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "V%u R%u E%u %c", (unsigned)fs.fw_vspos*16,
-              (unsigned)fs.fw_rej, (unsigned)fs.fw_vs_chg, fs.fw_locked ? 'L' : '-');
+    while ((alt_timestamp() - t0) < tps/4) ;
+    fs2.data = sc->fe_status.data;
+    // per second (over 1/4 s): input frames, output resyncs
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "F%u S%u R%u %c", (unsigned)(((fs2.frame_cnt - fs.frame_cnt) & 15) * 4),
+              (unsigned)(((fs2.resync_cnt - fs.resync_cnt) & 255) * 4), (unsigned)fs2.fw_rej, fs2.fw_locked ? 'L' : '-');
     return 1;
 }
 

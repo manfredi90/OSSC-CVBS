@@ -1,6 +1,23 @@
 Changelog
 =========
 
+CVBS decoder 0.20
+-----------------
+
+### Fixed
+- 27MHz xtal clock, Xtal out sync Line len. / Both: no picture with the
+  SNES (MiSTer). The output line length was rounded to the nearest clock:
+  shorter than the input lines on sources below 1716 clocks per line, the
+  output read lines before they were written. Now rounded up.
+
+### Changed
+- Line re-timing reference back to an average over 64 lines (the 4000 lines
+  of 0.17 were not verified, possibly the extra shaking on the Mega Drive).
+- Sample clock default back to Line-locked (saved settings keep their value)
+  until the crystal clock works on every source.
+- Sync diag.: F = input frames per second, S = output resyncs per second,
+  R = hsync edges ignored, L = flywheel locked.
+
 CVBS decoder 0.19
 -----------------
 
