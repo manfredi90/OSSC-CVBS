@@ -13,11 +13,15 @@ cvbs_decoder #(.SIDE_W(2)) dut (
     .clk(clk), .R_i(8'h80), .G_i(G), .B_i(B), .HS_i(HS), .VS_i(VS),
     .side_i({HS, VS}), .cfg(cfg), .hc(hc), .inc(inc),
     .R_o(Ro), .G_o(Go), .B_o(Bo), .side_o(side_o), .status(status));
-integer fin, fout, r, n;
+integer fin, fout, fdbg, r, n;
+`ifdef SE_DBG
+always @(posedge clk) if (dut.h == 12'd301) $fwrite(fdbg, "%0d %0d %0d %0d %0d\n", dut.se_k, dut.se_q, dut.se_e, dut.se_d, dut.se_found);
+`endif
 reg [31:0] gv, bv, hv, vv;
 initial begin
     fin = $fopen("in.txt", "r");
     fout = $fopen("out.txt", "w");
+    fdbg = $fopen("dbg.txt", "w");
     r = $fscanf(fin, "%h %h %h\n", cfg, hc, inc);
     n = 0;
     while (!$feof(fin)) begin

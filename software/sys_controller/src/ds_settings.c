@@ -128,8 +128,8 @@ int ds_settings_load() {
         (tc.cv_edge > 3) || (tc.cv_clamp > CV_CLAMP_MAX)) {
         memcpy(&tc.cv_std, &tc_default.cv_std, offsetof(avconfig_t, cv_clamp) + 1 - offsetof(avconfig_t, cv_std));
     }
-    if (tc.cv_igain > 3)
-        tc.cv_igain = 0;
+    if (tc.cv_reffilt > 4)
+        tc.cv_reffilt = 0;
     if (tc.cv_xtal > 1)
         tc.cv_xtal = 0;
     if (tc.s480p_mode > 2)

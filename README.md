@@ -13,7 +13,7 @@ official firmware again.
 > **Unofficial, experimental and AI.** This project was made with the help of AI. The code was written together with Claude. It's an unofficial fork of the original OSSC firmware.
 > Use at your own risk. I am not responsible for any damage to the OSSC or the monitor
 
-> **Status: test version (0.13).**
+> **Status: test version (0.14).**
 
 
 Inputs
@@ -67,9 +67,9 @@ CVBS decoder menu
 | ADC offset | ±31 | blank level = ADC code 128 + offset (default -31: ~97, shown as `L` in the diagnostics) |
 | Burst position | 120–220 | start of the burst gate, samples after the hsync leading edge (default 165) |
 | Clamp position | 0–120 | TVP7002 clamp start, samples after the hsync trailing edge (default 92: after the burst) |
-| Ref. interp. | On, Off | colour reference interpolated along the line between the bursts of the line and of the next one (follows the TVP7002 clock drift; the picture is one line lower). Off only for tests. Default On |
-| Interp. gain | 1x, 1.5x, 2x, 3x | strength of the reference ramp along the line (test, to be tuned with captures). Default 1x |
-| Sample clock | Line-locked, 27MHz xtal | ADC clock: TVP7002 H-PLL locked to the hsync (default), or the OSSC 27MHz crystal (steady colour phase along the line, edges not locked to the source lines). Test option |
+| Sample clock | Line-locked, 27MHz xtal | ADC clock: the OSSC 27MHz crystal (default: steady colour phase, lines re-timed on their sync), or the TVP7002 H-PLL locked to the hsync (the colour phase drifts along the line) |
+| Line re-timing | On, Off | 27MHz xtal only: each line is re-timed on its sync trailing edge (fractional delay of the luma), so the picture does not shake. Off only for tests. Default On |
+| Ref. filter | Auto, Off, 1/2, 1/4, 1/8 | colour reference averaged over the lines (less line to line colour noise). Auto: 1/8 with the xtal clock, Off line-locked. Default Auto |
 | Diag. view | Off, Color dev. x8 | test view: colour deviation from its average over the lines, x8 on grey (steady colour = flat grey). Not kept |
 | CSync on HSYNC, HDMI range, H. / V. position, Test pattern | | as in the OSSC Downscaler firmware |
 

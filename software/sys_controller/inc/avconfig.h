@@ -194,13 +194,13 @@ typedef struct {
     alt_u8 cv_adcgain;      // TVP7002 coarse gain 0-15 (gain 0.5 + n/10)
     alt_u8 cv_bgate;        // burst gate start (samples from the hsync leading edge)
     alt_u8 cv_notch_off;    // 0 = luma notch on
-    alt_u8 cv_loop_off;     // 0 = colour reference interpolated along the line (0.12; was: frequency loop)
+    alt_u8 cv_retime_off;   // 0 = luma re-timed on the sync edge with the 27MHz xtal clock (0.14; was 0.12 ref. interp., frequency loop)
     alt_u8 cv_adcofs;       // Y blank level: mid-level clamp (ADC code 128) + coarse offset, x1 code (SIGNED_NUMVAL_ZERO = 0)
     alt_u8 cv_edge;         // chroma suppression at luma edges: 0 off, 1-3
     alt_u8 cv_clamp;        // TVP7002 clamp start, pixels after the hsync trailing edge
     alt_u8 cv_line2x;       // test option: 1 = Line2x output (31kHz, HDMI TVs), never kept (0 at every boot)
     /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
-    alt_u8 cv_igain;        // reference ramp gain: 0-3 = 1x, 1.5x, 2x, 3x (0.13; was 0.6-0.11 sharpness)
+    alt_u8 cv_reffilt;      // colour reference low-pass over lines: 0 auto (1/8 with the xtal clock, else off), 1 off, 2-4 = 1/2, 1/4, 1/8 (0.14; was ramp gain, sharpness)
     alt_u8 cv_xtal;         // sample clock: 0 = TVP7002 H-PLL (line-locked), 1 = 27MHz crystal (EXT_CLK) (was 0.6 chroma delay, 0.8 ref. filter)
 } __attribute__((packed)) avconfig_t;
 

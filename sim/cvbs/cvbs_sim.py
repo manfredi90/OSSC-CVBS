@@ -43,8 +43,10 @@ def gen(args):
         fh = 15625.0 if lines625 else (FSC['ntsc'] / 227.5 if std == 'ntsc' else 15734.26)
     fsc = FSC[std] * (1 + args.fsc_ppm * 1e-6)
     fs = N * fh
+    if args.xtal:
+        fs = 27e6                       # crystal sample clock, not line-locked
     pal = std in ('pal', 'pal60', 'palm', 'paln')
-    os_ = 4                                 # oversampling for the analog model
+    os_ = args.os                           # oversampling for the analog model
     t_line = 1.0 / fh
     us = 1e-6
     cpv = args.codes_per_v
@@ -60,9 +62,17 @@ def gen(args):
 
     tt = (np.arange(N * os_) / (fs * os_))  # time inside a line
     cv_all, c_all = [], []
+    hs_all = []
     rng = np.random.default_rng(1)
     for ln in range(args.lines):
         t0 = ln * t_line
+        if args.xtal:
+            # samples k = ceil(ln*T*fs) .. ceil((ln+1)*T*fs)-1 of a continuous
+            # 27MHz clock: N or N+1 samples per line, the line starts at a
+            # different fraction of a sample on each line
+            k0 = math.ceil(ln * t_line * fs)
+            k1 = math.ceil((ln + 1) * t_line * fs)
+            tt = (k0 * os_ + np.arange((k1 - k0) * os_)) / (fs * os_) - t0
         # line-locked clock jitter: the sampling instants of a line are
         # shifted by a random amount (H-PLL phase noise)
         jit = rng.normal(0, args.jitter_ns * 1e-9) if args.jitter_ns else 0.0
@@ -116,10 +126,11 @@ def gen(args):
             cc = np.zeros_like(c)
         cv_all.append(cv)
         c_all.append(cc)
+        hs_all.append((ta[::os_] >= sync_w).astype(int))
     cv = np.concatenate(cv_all)
     cc = np.concatenate(c_all)
     # analog bandwidth (~6MHz, gaussian) then sampling
-    k = np.arange(-12, 13)
+    k = np.arange(-3 * os_, 3 * os_ + 1)
     sig = fs * os_ / (2 * math.pi * 6e6)
     g = np.exp(-0.5 * (k / sig) ** 2)
     g /= g.sum()
@@ -127,12 +138,12 @@ def gen(args):
     cc = np.convolve(cc, g, mode='same')[::os_]
     G = np.clip(np.round(blank_code + cv * cpv + rng.normal(0, args.noise, cv.shape)), 0, 255).astype(int)
     B = np.clip(np.round(128 + cc * cpv + rng.normal(0, args.noise, cc.shape)), 0, 255).astype(int)
-    n = np.arange(len(G))
-    hs = ((n % N) >= int(4.7e-6 * fs)).astype(int)
+    hs = np.concatenate(hs_all)
+    lno = np.concatenate([np.full(len(h_), i) for i, h_ in enumerate(hs_all)])
     fl = 312 if lines625 else 262
     vs = np.ones_like(hs)
     if args.vblank:
-        vs[((n // N) % fl) < 3] = 0
+        vs[(lno % fl) < 3] = 0
     inc = int(round(FSC[std] * (1 + args.osc_ppm * 1e-6) / fs * 2 ** 32)) & 0xffffffff
     return G, B, hs, vs, N, inc, pal
 
@@ -140,8 +151,9 @@ def gen(args):
 def run(args):
     G, B, hs, vs, N, inc, pal = gen(args)
     cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
-    hc = hc_for(pal, args.sat, args.hue) | ((args.igain & 3) << 14)
+    hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 3) << 10)
     cfg |= (1 << 7) if args.diag else 0
+    cfg |= (1 << 6) if (args.xtal and not args.noalign) else 0
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
         f.write('%06x %08x %08x\n' % (cfg, hc, inc))
         for a, b, c, d in zip(G, B, hs, vs):
@@ -198,6 +210,9 @@ def main():
     ap.add_argument('--loop-off', action='store_true')
     ap.add_argument('--vblank', action='store_true', help='fields with 9 blanked lines (no burst) and vsync')
     ap.add_argument('--bw', action='store_true', help='no colour (no burst)')
+    ap.add_argument('--noalign', action='store_true')
+    ap.add_argument('--os', type=int, default=4, help='oversampling of the analog model (edges quantised to 1/os sample)')
+    ap.add_argument('--xtal', action='store_true', help='27MHz crystal sampling (not line-locked)')
     ap.add_argument('--pll-gain', type=float, default=0.2, help='H-PLL phase correction per line')
     ap.add_argument('--vco-ppm', type=float, default=0.0, help='per-line sampling clock frequency error (ppm rms)')
     ap.add_argument('--jitter-ns', type=float, default=0.0, help='per-line sampling clock jitter (ns rms)')
@@ -226,6 +241,29 @@ def main():
     print('WORST %.1f' % worst)
     # luma stability of the white bar over the lines (bands)
     wl = [measure(R, G, B, starts, N, pal, ln)[0][1] for ln in range(30, len(starts) - 1)]
+    # horizontal jitter: position of the luma edges of each line (relative to
+    # the output hsync), rms of the line to line deviation
+    Yall = 0.299 * R + 0.587 * G + 0.114 * B
+    fs_us = N / 64.0 if pal else N / 63.556
+    act0_ = (10.5 if pal else 9.4); act1_ = (64.0 if pal else 63.556) - 1.5
+    pos = []
+    for ln in range(30, len(starts) - 1):
+        s0_ = starts[ln]; row = []
+        for i in (1, 3, 5, 7):
+            c = s0_ + int((act0_ + i * (act1_ - act0_) / 8) * fs_us)
+            seg = Yall[c - 12:c + 12].astype(float)
+            lo, hi = seg[:6].mean(), seg[-6:].mean()
+            if abs(hi - lo) < 15: continue
+            mid = (lo + hi) / 2
+            for k in range(1, len(seg)):
+                if (seg[k - 1] - mid) * (seg[k] - mid) <= 0 and seg[k] != seg[k - 1]:
+                    row.append(k - 1 + (mid - seg[k - 1]) / (seg[k] - seg[k - 1])); break
+        if row: pos.append(np.mean(row))
+    if pos:
+        pos = np.array(pos)
+        print('LINE JITTER: %.3f samples rms (%.1f ns)' % (pos.std(), pos.std() / 27e6 * 1e9 if args.xtal else pos.std() / (N * 15734.0) * 1e9))
+        dd = np.diff(pos) / math.sqrt(2)
+        print('LINE JITTER line to line: %.3f samples rms' % dd.std())
     # per-line colour error of the bars (as in the capture analysis): hue /
     # saturation of each bar against its mean over the lines
     if not args.diag:

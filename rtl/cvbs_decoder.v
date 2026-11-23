@@ -47,8 +47,8 @@ module cvbs_decoder #(
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
     // edges (0 off, 1-3)
     input [23:0] cfg,
-    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [15:14] gain
-    // of the reference ramp (1x, 1.5x, 2x, 3x)
+    // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [11:10]
+    // reference low-pass over lines (off, 1/2, 1/4, 1/8)
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -77,17 +77,8 @@ wire svideo   = cfg[1];
 wire pal      = cfg[2];
 wire bp443    = cfg[3];
 wire nonotch  = cfg[4];
-wire interp_off = cfg[5];      // test: reference not interpolated along the line
-// ramp gain: the next burst sees only part of the drift along the line (the
-// H-PLL corrects part of it at the hsync): step = (w - wp) / 1716 x gain
-reg signed [23:0] r_gain;
-always @(posedge clk)
-    case (hc[15:14])
-    2'd1: r_gain <= 24'sd917;
-    2'd2: r_gain <= 24'sd1222;
-    2'd3: r_gain <= 24'sd1833;
-    default: r_gain <= 24'sd611;
-    endcase
+wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal clock)
+wire [1:0] rflt = hc[11:10];    // reference low-pass over lines: off, 1/2, 1/4, 1/8
 wire diag     = cfg[7];
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
@@ -136,6 +127,101 @@ always @(posedge clk) begin
     for (i=2; i<=26; i=i+1)
         x0d[i] <= x0d[i-1];
 end
+
+// ---------------------------------------------------------------------------
+// sync trailing edge (27MHz crystal: the line start h = 0 is quantised to a
+// sample, so each line is shifted by up to +-0.5 sample). The edge is found
+// at the crossing of the level half way between sync tip and blank, then
+// timed by the area over 16 samples around it: with a band-limited edge the
+// number of samples at blank level L = sum(x - tip) / (blank - tip) does not
+// depend on the edge shape. E = k - L; d = E - average E (1/256 sample),
+// applied to the luma read from the line memory (rounded for the chroma)
+reg [12:0] se_tip;
+reg [8:0] se_thr2;          // tip + blank (2x threshold)
+reg [12:0] se_ms;           // sum of the last 16 samples
+reg se_arm, se_found;
+reg [7:0] se_k;
+reg [3:0] se_wait;
+reg [20:0] se_n;            // dividend, shifted out MSB first
+reg [8:0] se_rem;
+reg [7:0] se_den;
+reg [13:0] se_q;            // L x 256
+reg [4:0] se_cnt;
+reg [21:0] se_acc;          // average edge x 2^6
+reg se_init;
+reg signed [16:0] se_d;     // edge - average (1/256 sample)
+reg signed [9:0] d_line;    // for the line read from the memories
+wire [8:0] x0_2 = {x0, 1'b0};
+wire [8:0] x0d_2 = {x0d[1], 1'b0};
+wire [7:0] se_tp = se_tip[12:5];
+wire signed [13:0] se_num = $signed({1'b0, se_ms}) - $signed({2'b0, se_tp, 4'h0});
+wire [7:0] se_dn0 = blank - se_tp;
+wire [15:0] se_e = {se_k, 8'h0} + 16'd8192 - {2'b0, se_q};
+wire [15:0] se_avg = se_acc[21:6];
+wire signed [16:0] se_dn = $signed({1'b0, se_e}) - $signed({1'b0, se_avg});
+wire [9:0] se_rem2 = {se_rem, se_n[20]};
+always @(posedge clk) begin
+    se_ms <= se_ms + x0 - x0d[16];
+    if (h == 12'd32)
+        se_tip <= {5'h0, x0};
+    else if (h < 12'd64)
+        se_tip <= se_tip + x0;
+    if (h == 12'd64) begin
+        se_thr2 <= se_tp + blank;
+        se_arm <= 1'b1;
+        se_found <= 1'b0;
+    end else if (se_arm && (h < 12'd255) && (x0d_2 < se_thr2) && (x0_2 >= se_thr2)) begin
+        // x0d[1] is the sample before x0: wait for 8 more samples
+        se_arm <= 1'b0;
+        se_k <= h[7:0];
+        se_wait <= 4'd8;
+    end else if (h == 12'd255)
+        se_arm <= 1'b0;
+    if (se_wait != 4'd0) begin
+        se_wait <= se_wait - 1'b1;
+        if (se_wait == 4'd1) begin
+            se_n <= {(se_num[13] ? 13'h0 : se_num[12:0]), 8'h0};
+            se_den <= se_dn0;
+            se_rem <= 9'h0;
+            se_cnt <= (se_dn0 >= 8'd8 && se_dn0 < 8'd200) ? 5'd21 : 5'd0;
+        end
+    end
+    if (se_cnt != 5'd0) begin
+        // restoring division, one quotient bit per clock
+        se_cnt <= se_cnt - 1'b1;
+        se_n <= {se_n[19:0], 1'b0};
+        if (se_rem2 >= {2'b0, se_den}) begin
+            se_rem <= se_rem2 - {2'b0, se_den};
+            se_q <= {se_q[12:0], 1'b1};
+        end else begin
+            se_rem <= se_rem2[8:0];
+            se_q <= {se_q[12:0], 1'b0};
+        end
+        if (se_cnt == 5'd1)
+            se_found <= 1'b1;
+    end
+    if (se_found && (h == 12'd300)) begin
+        if (se_init || se_dn > 17'sd2048 || se_dn < -17'sd2048) begin
+            // first line, or edge moved (other mode): restart the average
+            se_acc <= {se_e, 6'h0};
+            se_init <= 1'b0;
+            se_d <= 17'sd0;
+        end else begin
+            se_acc <= se_acc + {{5{se_dn[16]}}, se_dn};
+            se_d <= se_dn;
+        end
+    end else if (h == 12'd300)
+        se_d <= 17'sd0;
+    if (hs0_prev & ~hs0)
+        d_line <= ~line_align ? 10'sd0 :
+                  (se_d > 17'sd511) ? 10'sd511 :
+                  (se_d < -17'sd512) ? -10'sd512 : se_d[9:0];
+end
+// read positions: h + 2 + d (luma), h + 2 + round(d) (chroma)
+wire signed [10:0] d_r11 = d_line + 11'sd128;
+wire signed [2:0] d_rnd = d_r11 >>> 8;
+wire [11:0] h_cr = h + 12'd2 + {{9{d_rnd[2]}}, d_rnd};
+wire [11:0] h_yr = h + 12'd3 + {{10{d_line[9]}}, d_line[9:8]};
 
 // ---------------------------------------------------------------------------
 // blank level: x0 is first filtered by a 6-sample box (about one subcarrier
@@ -211,8 +297,11 @@ always @(posedge clk)
 // ---------------------------------------------------------------------------
 // DDS and sin/cos ROM (10-bit signed, +-511)
 reg [31:0] ph;
-wire [31:0] inc_eff = inc;      // no frequency loop: the interpolated
-                                // reference follows the line to line rotation
+// frequency loop: the DDS follows the subcarrier of the source (the burst
+// phase stays still from line to line, so the reference can be low-passed
+// over lines). Low gain: the burst noise does not modulate the DDS.
+reg signed [21:0] corr;
+wire [31:0] inc_eff = inc + {{10{corr[21]}}, corr};
 reg [19:0] sincos_rom [0:1023];
 initial $readmemh("rtl/cvbs_sincos.hex", sincos_rom);
 reg [19:0] sc_q;
@@ -303,7 +392,7 @@ wire signed [9:0] cos_z = cos_z0;
 reg [31:0] cl_q;
 reg signed [15:0] cl_loI, cl_loQ, cl_hiI, cl_hiQ;
 reg signed [15:0] zIo, zQo;         // Z of the previous line
-wire [8:0] cl_ra = h[10:2] + 9'd1;
+wire [8:0] cl_ra = h_cr[10:2] + 9'd1;
 wire signed [16:0] cl_mI = cl_loI + cl_hiI;
 wire signed [16:0] cl_mQ = cl_loQ + cl_hiQ;
 reg [1:0] h_f;
@@ -311,7 +400,7 @@ always @(posedge clk) begin
     cl_q <= cl_mem[cl_ra];
     if (h[1:0] == 2'd0)
         cl_mem[h[10:2]] <= {zI0, zQ0};
-    h_f <= h[1:0];
+    h_f <= h_cr[1:0];
     if (h_f == 2'd0) begin
         cl_loI <= cl_hiI;
         cl_loQ <= cl_hiQ;
@@ -366,13 +455,18 @@ reg [19:0] rec;
 reg [5:0] div_i;
 reg signed [23:0] ar, ai;
 reg signed [17:0] w_re, w_im;
-reg signed [17:0] wp_re, wp_im;     // reference of the previous line
-reg signed [21:0] st_re, st_im;     // reference step per sample (x2^12)
-reg signed [30:0] wi0_re, wi0_im;   // interpolated reference at h = bstart + 140
-reg signed [30:0] wa_re, wa_im;     // interpolated reference (x2^12)
 reg s_prev;                         // PAL switch of the previous line
-wire signed [17:0] wa_re_s = wa_re[29:12];
-wire signed [17:0] wa_im_s = wa_im[29:12];
+reg signed [18:0] RPr, RPi;         // r of the previous line
+reg rpv;
+reg signed [47:0] dIm;
+reg signed [23:0] dq;
+reg signed [18:0] Sr, Si;           // reference used: r low-passed over lines
+wire signed [19:0] sdr = Rr - Sr;
+wire signed [19:0] sdi = Ri - Si;
+wire signed [19:0] sdr_s = sdr >>> rflt;
+wire signed [19:0] sdi_s = sdi >>> rflt;
+localparam signed [21:0] CORR_MAX = 22'sd2000000;
+wire signed [25:0] corr_next = corr + (dq >>> 1);
 reg kill;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
 reg [9:0] alt_cnt, bad_cnt;
@@ -474,13 +568,6 @@ always @(posedge clk) begin
                         kill <= 1'b1;
                     pv <= 1'b0;
                     st <= 7'd0;
-                    // the previous line keeps its reference (no ramp)
-                    wp_re <= w_re;
-                    wp_im <= w_im;
-                    st_re <= 22'sd0;
-                    st_im <= 22'sd0;
-                    wi0_re <= {w_re[17], w_re, 12'h0};
-                    wi0_im <= {w_im[17], w_im, 12'h0};
                 end
             end
             5: begin
@@ -489,16 +576,29 @@ always @(posedge clk) begin
                     Ri <= Ri <<< 1;
                 end
             end
-            6, 7: ;  // (were the frequency loop products)
+            6: begin
+                ma <= Ri; mb <= RPr;
+                // reference low-pass over lines (none: this line's burst)
+                if (rflt == 2'd0) begin
+                    Sr <= Rr;
+                    Si <= Ri;
+                end else begin
+                    Sr <= Sr + sdr_s[18:0];
+                    Si <= Si + sdi_s[18:0];
+                end
+            end
+            7: begin ma <= Rr; mb <= RPi; end
             8: begin
+                t1 <= mres;         // Ri*RPr
                 // burst level for the status: r low-pass over lines (1/4)
                 Fr <= Fr + ((Rr - Fr) >>> 2);
                 Fi <= Fi + ((Ri - Fi) >>> 2);
             end
             9: begin
-                ma <= Rr; mb <= Rr;
+                dIm <= t1 - mres;   // Im(r * conj(rp))
+                ma <= Sr; mb <= Sr;
             end
-            10: begin ma <= Ri; mb <= Ri; end
+            10: begin ma <= Si; mb <= Si; end
             11: t1 <= mres;
             12: begin
                 m <= (t1 + mres) > 48'sh7fffffff ? 32'h7fffffff : t1[31:0] + mres[31:0];
@@ -511,12 +611,9 @@ always @(posedge clk) begin
                     kill <= 1'b1;
                     w_re <= 18'h0;
                     w_im <= 18'h0;
-                    wp_re <= w_re;
-                    wp_im <= w_im;
-                    st_re <= 22'sd0;
-                    st_im <= 22'sd0;
-                    wi0_re <= {w_re[17], w_re, 12'h0};
-                    wi0_im <= {w_im[17], w_im, 12'h0};
+                    RPr <= Rr;
+                    RPi <= Ri;
+                    rpv <= 1'b1;
                     st <= 7'd0;
                 end
             end
@@ -534,19 +631,33 @@ always @(posedge clk) begin
                     st <= st;
                 end
             end
-            15: ;  // (was the frequency loop)
-            16: begin ma <= Rr; mb <= {4'h0, rec}; end
+            15: begin
+                // dq = Im(r*conj(rp)) / |r|^2 (x2^16, ~radians per line)
+                ma <= sat24(dIm >>> 8);
+                mb <= {4'h0, rec};
+            end
+            16: begin ma <= Sr; mb <= {4'h0, rec}; end
             17: begin
-                ma <= Ri; mb <= {4'h0, rec};
+                dq <= sat24(mres >>> 16);
+                ma <= Si; mb <= {4'h0, rec};
             end
             18: begin
                 ar <= sat24(mres >>> 12);       // conj(r) * rec
+                // frequency loop (the line to line rotation of r)
+                if (rpv) begin
+                    if (corr_next > CORR_MAX)
+                        corr <= CORR_MAX;
+                    else if (corr_next < -CORR_MAX)
+                        corr <= -CORR_MAX;
+                    else
+                        corr <= corr_next[21:0];
+                end
             end
             19: begin
                 ai <= sat24(-(mres >>> 12));
             end
             // w = a * hc (x1/256)
-            20: begin ma <= ar; mb <= hc_re; wp_re <= w_re; wp_im <= w_im; end
+            20: begin ma <= ar; mb <= hc_re; end
             21: begin ma <= ai; mb <= hc_im; end
             22: begin t1 <= mres; ma <= ar; mb <= hc_im; end
             23: begin w_re <= sat18((t1 - mres) >>> 8); ma <= ai; mb <= hc_re; end
@@ -554,17 +665,9 @@ always @(posedge clk) begin
             25: begin
                 w_im <= sat18((t1 + mres) >>> 8);
                 kill <= 1'b0;
-            end
-            // ramp of the previous line's reference towards this one:
-            // step = (w - wp) / 1716 (x2^12: x611/2^8), start value at
-            // h = bstart + 140 (124 samples after the burst centre)
-            26: begin ma <= {{6{w_re[17]}}, w_re} - {{6{wp_re[17]}}, wp_re}; mb <= r_gain; end
-            27: begin ma <= {{6{w_im[17]}}, w_im} - {{6{wp_im[17]}}, wp_im}; mb <= r_gain; end
-            28: st_re <= interp_off ? 22'sd0 : mres[29:8];
-            29: st_im <= interp_off ? 22'sd0 : mres[29:8];
-            30: begin
-                wi0_re <= {wp_re[17], wp_re, 12'h0} + ({{9{st_re[21]}}, st_re} <<< 7) - ({{9{st_re[21]}}, st_re} <<< 2);
-                wi0_im <= {wp_im[17], wp_im, 12'h0} + ({{9{st_im[21]}}, st_im} <<< 7) - ({{9{st_im[21]}}, st_im} <<< 2);
+                RPr <= Rr;
+                RPi <= Ri;
+                rpv <= 1'b1;
                 st <= 7'd0;
             end
             default: st <= 7'd0;
@@ -617,29 +720,15 @@ always @(posedge clk) begin
 
     // U + jV of the previous line from its Z and the interpolated reference
     // (1/2^20); U = -Re, V = -s*Im
-    q1 <= zIo * wa_re_s;
-    q2 <= zQo * wa_im_s;
-    q3 <= zIo * wa_im_s;
-    q4 <= zQo * wa_re_s;
+    q1 <= zIo * w_re;
+    q2 <= zQo * w_im;
+    q3 <= zIo * w_im;
+    q4 <= zQo * w_re;
     zre <= q1 - q2;
     zim <= q3 + q4;
     s_d <= s_prev;
     U3 <= sat11(-(zre >>> 20));
     V3 <= s_d ? sat11(-(zim >>> 20)) : sat11(zim >>> 20);
-end
-
-// interpolated reference of the previous line: continues the ramp from the
-// line before, then from h = bstart + 140 (the ramp of this line is known)
-// starts again from the computed value
-wire [11:0] h_wi0 = {4'h0, bstart} + 12'd140;
-always @(posedge clk) begin
-    if (h == h_wi0) begin
-        wa_re <= wi0_re;
-        wa_im <= wi0_im;
-    end else begin
-        wa_re <= wa_re + {{9{st_re[21]}}, st_re};
-        wa_im <= wa_im + {{9{st_im[21]}}, st_im};
-    end
 end
 
 // ---------------------------------------------------------------------------
@@ -653,15 +742,22 @@ reg signed [10:0] yAo;
 wire signed [11:0] yAn_o = yAn + 12'sd32;
 wire [7:0] yAn8 = yAn_o[11] ? 8'd0 : ((yAn_o > 12'sd255) ? 8'd255 : yAn_o[7:0]);
 reg [10:0] h_d1;
+reg [7:0] yl_qp;
+reg [7:0] d_f;
+wire signed [8:0] yl_dd = $signed({1'b0, yl_q}) - $signed({1'b0, yl_qp});
+wire signed [17:0] yl_ip = yl_dd * $signed({1'b0, d_f});
 always @(posedge clk) begin
     if (svideo | nonotch | kill)
         yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank});
     else
         yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank}) - rmod;
     h_d1 <= h[10:0];
-    yl_q <= yl_mem[h[10:0]];
+    yl_q <= yl_mem[h_yr[10:0]];
     yl_mem[h_d1] <= yAn8;
-    yAo <= $signed({3'b0, yl_q}) - 11'sd32;
+    yl_qp <= yl_q;
+    d_f <= d_line[7:0];
+    // between the two samples read last (fraction of d)
+    yAo <= $signed({3'b0, yl_qp}) + (yl_ip >>> 8) - 11'sd32;
 end
 reg signed [10:0] yA;
 always @(posedge clk) begin
@@ -816,7 +912,7 @@ always @(posedge clk) begin
         st_line <= st_line + 1'b1;
     if ((hs0_prev & ~hs0) && (st_line == 9'd120))
         kill_st <= kill;
-    status <= {5'h0, 1'b0, alt_ok, kill_st, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
+    status <= {corr[21:17], 1'b0, alt_ok, kill_st, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
 end
 
 
@@ -824,16 +920,17 @@ end
 // power-up values (also for simulation: the running sums need a defined start)
 integer j;
 initial begin
-    ph = 0; st = 0; pv = 0; vb = 0;
+    ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; dIm = 0; dq = 0; Sr = 0; Si = 0;
     Fr = 0; Fi = 0; Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0; dg_sU = 0; dg_sV = 0; dg_rd = 0;
     for (j=0; j<256; j=j+1) dg_mem[j] = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
-    wp_re = 0; wp_im = 0; st_re = 0; st_im = 0; wi0_re = 0; wi0_im = 0; wa_re = 0; wa_im = 0;
     cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
+    se_tip = 0; se_thr2 = 0; se_ms = 0; se_arm = 0; se_found = 0; se_k = 0; se_wait = 0; se_n = 0; se_rem = 0; se_den = 0; se_q = 0; se_cnt = 0;
+    se_acc = 0; se_init = 1; se_d = 0; d_line = 0; yl_qp = 0; d_f = 0;
     h = 0; c_bp = 0; sc_q = 0; x0 = 0; c0 = 0; hs0 = 1; hs0_prev = 1; vs0 = 1; vs0_prev = 1;
     for (j=1; j<=6; j=j+1) begin pI_d[j] = 0; pQ_d[j] = 0; end
     for (j=1; j<=7; j=j+1) begin b6I_d[j] = 0; b6Q_d[j] = 0; end
