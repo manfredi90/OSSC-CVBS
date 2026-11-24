@@ -99,7 +99,6 @@ static const char* const lumacode_pal_desc[] = { "PAL", "NTSC", c_lc_palette_set
 static const char* const adc_pll_bw_desc[] = { "High", "Medium", "Low", "Ultra low" };
 static const char* const fpga_pll_bw_desc[] = { "High", "Low" };
 static const char* const palset_type_arr[] = { "Custom .txt", "NES .pal" };
-static const char* const cv_spread_desc[] = { "Spread", "Cut" };
 static const char* const ds_csync_desc[] = { "Off (H+V)", "XOR", "AND", "Standard" };
 static const char* const ds_range_desc[] = { "Full (0-255)", "Lim. (16-235)", "Lim. (16-255)" };
 static const char* const ds_720p_ar_desc[] = { "Full 16:9", "Center 4:3", "Wide" };
@@ -110,7 +109,7 @@ static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
-static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz" };
+static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line2x 720" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 
@@ -298,7 +297,6 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
     { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
     { "<Sync diag.    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_sync_diag, NULL } } },
-    { "Xtal frame end",                         OPT_AVCONFIG_SELECTION, { .sel = { &cv_spread,       OPT_WRAP,   SETTING_ITEM(cv_spread_desc) } } },
     { "<Xtal timing   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_xtal_diag, NULL } } },
     { "<Event count.  >",                       OPT_FUNC_CALL,          { .fun = { cvbs_event_diag, NULL } } },
     { "ADC gain",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcgain,    OPT_NOWRAP, 0, 15, cv_gain_disp } } },

@@ -1181,8 +1181,14 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         mindiff_lm = MODE_PT;
 
     // CVBS decoder, Line2x: every sample at ~27MHz as in the passthrough,
-    // output at ~54MHz (1440x480p / 1440x576p, pixels repeated 2x)
-    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
+    // output at ~54MHz (1440x480p / 1440x576p, pixels repeated 2x).
+    // Line2x 720: one sample out of 2 (h_skip 1, set by the TVP7002 PLL
+    // doubling in program_mode()), output at 27MHz: 720x480p / 720x576p as
+    // in CEA-861 (VIC 2/3, 17/18, no pixel repetition), and with the 27MHz
+    // crystal the output clock is the crystal itself (FPGA PLL bypassed unless
+    // FPGA PLL BW Low). For HDMI TVs that drop a frame now and then on the
+    // 54MHz 1440 wide signal (seen also with the stock firmware in Line2x).
+    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group) && (cc->cv_line2x == 1)) {
         vmode_hv_mult(vm_in, 2, 1);
         vmode_hv_mult(vm_out, 2, 1);
     }
@@ -1451,7 +1457,7 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
 
     if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
         vm_out->vic = ((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60;
-        vm_conf->hdmitx_pixr_ifr = 1;
+        vm_conf->hdmitx_pixr_ifr = (cc->cv_line2x == 1);
     }
 
     if (vm_out->vic == HDMI_Unknown)

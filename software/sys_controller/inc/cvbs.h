@@ -61,7 +61,6 @@ void cvbs_diag_str(char *s, int len);
 int cvbs_diagnostics();
 int cvbs_sync_diag();
 int cvbs_xtal_diag();
-extern alt_u8 cv_spread, cv_spread_applied;
 int cvbs_event_diag();
 // reset the automatic detection (new input or mode)
 void cvbs_reset_auto();

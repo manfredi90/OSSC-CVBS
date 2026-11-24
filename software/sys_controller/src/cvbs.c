@@ -77,11 +77,6 @@ static int lines625() {
     return in_ilace ? (in_totlines > 575) : (in_totlines > 287);
 }
 
-// Xtal frame end: 0 = spread the resync cut over the front porch lines
-// (default), 1 = cut the last line (0.29). Test option, not saved.
-alt_u8 cv_spread;
-alt_u8 cv_spread_applied;
-
 uint8_t cvbs_input_mode(avinput_t input) {
     if (input == AV2_RGsB)
         return 1;
@@ -265,8 +260,6 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
           ((uint32_t)(rf & 1) << 10);
     *hc |= ((uint32_t)(cc->cv_sharp & 7) << 11);  // FPGA: hc[13:11] = sharpness
-    *hc |= ((uint32_t)(cv_spread == 0) << 14);    // FPGA: hc[14] = spread the resync cut (scanconverter)
-    cv_spread_applied = cv_spread;
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     *flags = cv_mode ? (1 |

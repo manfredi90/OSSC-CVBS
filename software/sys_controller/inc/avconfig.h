@@ -198,7 +198,7 @@ typedef struct {
     alt_u8 cv_adcofs;       // Y blank level: mid-level clamp (ADC code 128) + coarse offset, x1 code (SIGNED_NUMVAL_ZERO = 0)
     alt_u8 cv_edge;         // chroma suppression at luma edges: 0 off, 1-3
     alt_u8 cv_clamp;        // TVP7002 clamp start, pixels after the hsync trailing edge
-    alt_u8 cv_line2x;       // test option: 1 = Line2x output (31kHz, HDMI TVs), never kept (0 at every boot)
+    alt_u8 cv_line2x;       // test option: 1 = Line2x output (31kHz, 1440 wide at 54MHz), 2 = Line2x 720 (CEA 720x480p at 27MHz), never kept (0 at every boot)
     /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
     alt_u8 cv_reffilt;      // colour reference low-pass over lines: 0 auto (on with the xtal clock, else off), 1 off, 2 on (1/8) (0.14; was ramp gain, sharpness)
     alt_u8 cv_xtal;         // sample clock: 0 = TVP7002 H-PLL (line-locked), 1 = 27MHz crystal (EXT_CLK) (was 0.6 chroma delay, 0.8 ref. filter)

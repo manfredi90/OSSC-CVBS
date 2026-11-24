@@ -539,7 +539,7 @@ status_t get_status(tvp_sync_input_t syncinput)
 
     {
         int cv_changed = memcmp(&tc.cv_std, &cm.cc.cv_std, sizeof(avconfig_t) - offsetof(avconfig_t, cv_std)) ||
-                         (tc.cv_sharp != cm.cc.cv_sharp) || (cv_spread != cv_spread_applied);
+                         (tc.cv_sharp != cm.cc.cv_sharp);
         int ds_csync_changed = (tc.ds_csync != cm.cc.ds_csync);
         int ds_range_changed = (tc.ds_out_range != cm.cc.ds_out_range);
         int ds_tp_changed = (tc.ds_tp_sel != cm.cc.ds_tp_sel);

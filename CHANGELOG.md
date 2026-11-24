@@ -1,6 +1,22 @@
 Changelog
 =========
 
+CVBS decoder 0.32
+-----------------
+
+### New
+- Output > Line2x 720: 720x480p / 720x576p at 27MHz exactly as in CEA-861
+  (VIC 2/3, 17/18, no pixel repetition), one sample out of 2. With the 27MHz
+  crystal the output clock is the crystal itself (FPGA PLL bypassed, unless
+  FPGA PLL BW Low). Line2x 31kHz stays as before: 1440 wide at 54MHz through
+  the FPGA PLL, sent as 480p with pixel repetition. For HDMI TVs that drop a
+  frame now and then in Line2x (a Samsung TV here, also with the stock
+  firmware in Line2x; stable in Line3x / Line5x).
+
+### Removed
+- The resync cut spread of 0.31 (Xtal frame end): the random black frames
+  were the TV, also with line-locked sampling.
+
 CVBS decoder 0.31
 -----------------
 
