@@ -1,6 +1,11 @@
 Changelog
 =========
 
+CVBS decoder 1.0
+----------------
+
+First release (0.39 with the release version).
+
 CVBS decoder 0.39
 -----------------
 
