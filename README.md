@@ -151,7 +151,7 @@ Technical settings: the defaults are right for most sources.
 | Diagnostics > Decoder diag. | | `Bn` burst level, `Ln` blank level (ADC code), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC), `3`: 3-line luma notch |
 | Diagnostics > Sync diag. | | per second: `O` output frames, `F` input frames, `S` output resyncs (xtal clock: one per input frame) |
 | Diagnostics > Xtal timing | | `L` line period (27MHz clocks), `O` output line length (`O..>..`: being redone) |
-| Diagnostics > Event count. | | since power on: `P` setups, `U` register updates, `X` output resyncs out of place |
+| Diagnostics > Event count. | | since power on: `P` setups, `U` register updates |
 
 The LCD shows the mode and the colour system on the first row and the
 diagnostics on the second.

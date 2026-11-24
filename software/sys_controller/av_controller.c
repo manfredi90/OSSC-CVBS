@@ -987,11 +987,9 @@ int cvbs_sync_diag() {
 }
 
 // <Event count.>: since boot, P = setups (program_mode), U = register
-// updates (update_sc_config, also at every setup), X = output resyncs out of
-// place (not in the last output line, or in its first 64 clocks)
+// updates (update_sc_config, also at every setup)
 int cvbs_event_diag() {
-    sniprintf(func_ret_status, LCD_ROW_LEN+1, "P%u U%u X%lu", (unsigned)cvx_n_setup, (unsigned)cvx_n_update,
-              (unsigned long)((sc->fe_status.data >> 26) & 0x3f));
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "P%u U%u", (unsigned)cvx_n_setup, (unsigned)cvx_n_update);
     return 1;
 }
 

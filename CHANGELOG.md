@@ -1,10 +1,20 @@
 Changelog
 =========
 
-CVBS decoder 1.0
-----------------
+CVBS decoder 0.40
+-----------------
 
-First release (0.39 with the release version).
+### Fixed
+- Interlaced sources (480i / 576i) with the 27MHz crystal clock: fields
+  swapped (Standard csync) or no picture (other sync types) on 15kHz CRTs.
+  0.30 had removed the vsync taken from the composite sync (broad pulses),
+  which keeps the half-line offset between the two fields; the TVP7002 vsync
+  output loses it without the H-PLL. Back for the crystal clock (Line-locked
+  was not affected).
+
+### Removed
+- Event count.: the `X` counter (resyncs out of place), logic space for the
+  fix above.
 
 CVBS decoder 0.39
 -----------------

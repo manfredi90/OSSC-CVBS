@@ -88,7 +88,6 @@ module scanconverter (
     output reg resync_strobe,
     // Downscaler diagnostics (read by the CPU)
     output reg [7:0] ds_resync_cnt,
-    output reg [5:0] ds_anom_cnt,     // resyncs not in the last output line, or in its first 64 clocks (very short line)
     output reg [9:0] ds_fperiod_lo,
     input lt_active,
     input [1:0] lt_mode,
@@ -463,11 +462,6 @@ always @(posedge PCLK_OUT_i) begin
     // diagnostics: number of output resyncs, input frame period (low bits)
     if (frame_change_resync)
         ds_resync_cnt <= ds_resync_cnt + 1'b1;
-    // diagnostics: with the output line at least as long as the input line
-    // the input frame starts while the output is in its last line; anything
-    // else cuts a line very short or jumps by more than a line
-    if (frame_change_resync & ~((v_cnt == V_TOTAL-1) & (h_cnt >= 13'd64)))
-        ds_anom_cnt <= ds_anom_cnt + 1'b1;
     if (~frame_change_prev & frame_change) begin
         ds_fperiod_lo <= fp_ctr[9:0];
         fp_ctr <= 20'd1;
