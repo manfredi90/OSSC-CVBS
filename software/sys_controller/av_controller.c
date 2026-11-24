@@ -1087,7 +1087,8 @@ void program_mode()
     dotclk_hz = estimate_dotclk(&vmode_in, h_hz);
     cm.pclk_o_hz = calculate_pclk(pclk_i_hz, &vmode_out, &vm_conf);
     // native sampling: output on the FPGA PLL at an exact ratio of the ADC clock
-    ds_pll_active = (vm_conf.ds_vdec && vm_conf.ds_pll_n);
+    // (also the CVBS Line3x output: 3/2 of the 27MHz ADC clock)
+    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || (cv_mode && (cm.cc.cv_line2x == 3)));
     if (ds_pll_active) {
         ds_pll_make(vm_conf.ds_pll_n, vm_conf.ds_pll_m, vm_conf.ds_pll_c, &ds_pll_cfg);
         cm.pclk_o_hz = (uint32_t)(((uint64_t)pclk_i_hz*vm_conf.ds_pll_m)/((uint32_t)vm_conf.ds_pll_n*vm_conf.ds_pll_c));
@@ -1104,9 +1105,9 @@ void program_mode()
     // except the Line2x test output, explicitly selected and not kept)
     {
         uint32_t out_hfreq = cm.pclk_o_hz / ((vm_conf.tx_pixelrep+1) * vmode_out.timings.h_total);
-        int l2 = cvbs_line2x(&cm.cc, vmode_in.group) && (vm_conf.y_rpt == 1);
-        uint32_t hmin = l2 ? 2*DS_HFREQ_MIN : DS_HFREQ_MIN;
-        uint32_t hmax = l2 ? 2*DS_HFREQ_MAX : DS_HFREQ_MAX;
+        int l2 = cvbs_line2x(&cm.cc, vmode_in.group) && ((vm_conf.y_rpt == 1) || (vm_conf.y_rpt == 2));
+        uint32_t hmin = l2 ? (vm_conf.y_rpt+1)*DS_HFREQ_MIN : DS_HFREQ_MIN;
+        uint32_t hmax = l2 ? (vm_conf.y_rpt+1)*DS_HFREQ_MAX : DS_HFREQ_MAX;
         printf("Output line rate: %luHz\n", out_hfreq);
         if (l2)
             sys_ctrl |= WD_BYPASS;

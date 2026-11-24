@@ -1,6 +1,17 @@
 Changelog
 =========
 
+CVBS decoder 0.33
+-----------------
+
+### New
+- Output > Line3x 47kHz: each line shown 3 times, one sample out of 2
+  (858 / 864 per line, as Line2x 720), output on the FPGA PLL at 3/2 of the
+  27MHz ADC clock: 40.5MHz, 858 clocks per output line, 786 / 936 lines
+  (720 / 864 active). Not a CEA mode, like the stock Line3x (accepted by the
+  Samsung TV that drops frames in Line2x). Within the existing FPGA timing
+  constraints (output PLL up to 66MHz).
+
 CVBS decoder 0.32
 -----------------
 

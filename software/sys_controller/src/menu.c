@@ -109,7 +109,7 @@ static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
-static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line2x 720" };
+static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line2x 720", "Line3x 47kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 

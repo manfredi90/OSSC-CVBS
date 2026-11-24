@@ -1193,7 +1193,18 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         vmode_hv_mult(vm_out, 2, 1);
     }
 
-    if (mindiff_lm >= MODE_L6_GEN_4_3)
+    // CVBS decoder, Line3x: one sample out of 2 (858 / 864 per line, as
+    // Line2x 720), each line shown 3 times, output on the FPGA PLL at 3/2
+    // of the 27MHz ADC clock: 40.5MHz, 858 clocks per output line (720 /
+    // 576 active, 786 / 936 lines). Not a CEA mode (like the stock Line3x).
+    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group) && (cc->cv_line2x == 3)) {
+        vm_conf->y_rpt = 2;
+        vm_conf->h_skip = 1;
+        vm_conf->si_pclk_mult = 1;
+        vm_conf->ds_pll_n = 3;      // PFD 9MHz, VCO 810MHz, out 40.5MHz
+        vm_conf->ds_pll_m = 90;
+        vm_conf->ds_pll_c = 20;
+    } else if (mindiff_lm >= MODE_L6_GEN_4_3)
         vm_conf->y_rpt = 5;
     else if (mindiff_lm >= MODE_L5_GEN_4_3)
         vm_conf->y_rpt = 4;
@@ -1456,7 +1467,7 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         ds_pt_position(cc, vm_out, vm_conf);
 
     if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
-        vm_out->vic = ((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60;
+        vm_out->vic = (cc->cv_line2x == 3) ? HDMI_Unknown : (((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60);
         vm_conf->hdmitx_pixr_ifr = (cc->cv_line2x == 1);
     }
 
