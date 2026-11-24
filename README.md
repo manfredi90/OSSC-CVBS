@@ -64,7 +64,7 @@ CVBS decoder menu
 | Brightness | ±31 | |
 | Sharpness | Off, 1-7 | luma peaking: sharper pixel edges (the luma of a composite signal is softened by the notch). No boost at DC or at the highest frequencies (no extra noise). Default Off |
 | Luma notch | Adaptive, Off, Simple | Adaptive (default): NTSC, the colour removed from the luma is compared with the lines above: luma detail around the subcarrier frequency (fine pixels, thin outlines) changes phase from line to line and is kept, the colour is the same and is removed. Sharper outlines, no grey halo beside them. 2 lines with sources at 227.5 subcarrier cycles per line (180 degrees per line), 3 lines with NES / SNES (227.33, 120 degrees; chosen from the measured line period, `3` at the end of Decoder diag.). Horizontal edges between colours: plain notch. PAL: as Simple. Simple: the notch of 0.35 and before. Off: full bandwidth luma (dot crawl visible) |
-| Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing (cross-colour) at black / white edges, slightly softer colour edges, dark bands at edges between colours of very different brightness at high settings. Always off with S-Video. Default Medium |
+| Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing (cross-colour) at black / white edges, slightly softer colour edges, dark bands at edges between colours of very different brightness at high settings. Always off with S-Video. Default Low |
 | CSync on HSYNC, HDMI range, H. / V. position | | as in the OSSC Downscaler firmware (CSync: Off (H+V, default, HDMI TVs), XOR, AND, Standard (equalizing pulses + serrated vsync, for picky CRTs)) |
 
 CVBS advanced menu

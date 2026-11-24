@@ -1,6 +1,12 @@
 Changelog
 =========
 
+CVBS decoder 0.39
+-----------------
+
+### Changed
+- Edge color sup.: default Low (was Medium, a bit too strong).
+
 CVBS decoder 0.38
 -----------------
 
