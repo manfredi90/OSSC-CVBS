@@ -1,0 +1,437 @@
+------------------------------------------------------------
+Timing Analyzer Summary
+------------------------------------------------------------
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_tvp_cap'
+Slack : 3.599
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_tvp_high'
+Slack : 3.599
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_5x_postmux'
+Slack : 5.496
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'clk27'
+Slack : 7.457
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_1x_postmux'
+Slack : 8.526
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_5x_out'
+Slack : 9.231
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_1x_out'
+Slack : 12.261
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_tvp_low'
+Slack : 15.721
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_27mhz_postmux'
+Slack : 27.382
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Setup 'pclk_27mhz_out'
+Slack : 31.117
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_tvp_cap'
+Slack : 0.417
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_tvp_high'
+Slack : 0.417
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_tvp_low'
+Slack : 0.417
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'clk27'
+Slack : 0.454
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_1x_postmux'
+Slack : 0.454
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_27mhz_postmux'
+Slack : 0.454
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_5x_postmux'
+Slack : 0.454
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_1x_out'
+Slack : 0.490
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_27mhz_out'
+Slack : 0.490
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Hold 'pclk_5x_out'
+Slack : 0.490
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Recovery 'clk27'
+Slack : 27.055
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Removal 'clk27'
+Slack : 3.538
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_5x_postmux'
+Slack : 7.148
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_5x'
+Slack : 7.544
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'clk27'
+Slack : 7.819
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_tvp_cap'
+Slack : 8.515
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_tvp_high'
+Slack : 8.515
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_1x_postmux'
+Slack : 8.566
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_5x_out'
+Slack : 10.670
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_1x_out'
+Slack : 13.700
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_tvp_low'
+Slack : 14.576
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_27mhz_postmux'
+Slack : 18.091
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_27mhz'
+Slack : 18.487
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'pclk_27mhz_out'
+Slack : 32.556
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'flash_clk'
+Slack : 36.969
+TNS   : 0.000
+
+Type  : Slow 1200mV 85C Model Minimum Pulse Width 'flash_clk_out'
+Slack : 69.593
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_tvp_cap'
+Slack : 4.812
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_tvp_high'
+Slack : 4.812
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_5x_postmux'
+Slack : 5.881
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'clk27'
+Slack : 8.048
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_1x_postmux'
+Slack : 8.911
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_5x_out'
+Slack : 9.734
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_1x_out'
+Slack : 12.764
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_tvp_low'
+Slack : 16.934
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_27mhz_postmux'
+Slack : 27.767
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Setup 'pclk_27mhz_out'
+Slack : 31.620
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_1x_out'
+Slack : 0.348
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_27mhz_out'
+Slack : 0.348
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_5x_out'
+Slack : 0.348
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'clk27'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_1x_postmux'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_27mhz_postmux'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_5x_postmux'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_tvp_cap'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_tvp_high'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Hold 'pclk_tvp_low'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Recovery 'clk27'
+Slack : 27.720
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Removal 'clk27'
+Slack : 3.262
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_5x_postmux'
+Slack : 7.173
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_5x'
+Slack : 7.543
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'clk27'
+Slack : 7.790
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_tvp_cap'
+Slack : 8.536
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_tvp_high'
+Slack : 8.536
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_1x_postmux'
+Slack : 8.592
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_5x_out'
+Slack : 10.670
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_1x_out'
+Slack : 13.700
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_tvp_low'
+Slack : 14.597
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_27mhz_postmux'
+Slack : 18.116
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_27mhz'
+Slack : 18.486
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'pclk_27mhz_out'
+Slack : 32.556
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'flash_clk'
+Slack : 36.973
+TNS   : 0.000
+
+Type  : Slow 1200mV 0C Model Minimum Pulse Width 'flash_clk_out'
+Slack : 69.593
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_5x_out'
+Slack : 10.706
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_5x_postmux'
+Slack : 10.875
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_tvp_cap'
+Slack : 12.015
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_tvp_high'
+Slack : 12.015
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_1x_out'
+Slack : 13.736
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_1x_postmux'
+Slack : 13.905
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'clk27'
+Slack : 13.981
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_tvp_low'
+Slack : 24.137
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_27mhz_out'
+Slack : 32.592
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Setup 'pclk_27mhz_postmux'
+Slack : 32.761
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_1x_out'
+Slack : 0.101
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_27mhz_out'
+Slack : 0.101
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_5x_out'
+Slack : 0.101
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_tvp_cap'
+Slack : 0.141
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_tvp_high'
+Slack : 0.141
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_tvp_low'
+Slack : 0.141
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'clk27'
+Slack : 0.186
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_1x_postmux'
+Slack : 0.187
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_27mhz_postmux'
+Slack : 0.187
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Hold 'pclk_5x_postmux'
+Slack : 0.187
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Recovery 'clk27'
+Slack : 32.528
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Removal 'clk27'
+Slack : 1.567
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_5x_postmux'
+Slack : 7.322
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_5x'
+Slack : 7.574
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'clk27'
+Slack : 8.016
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_tvp_cap'
+Slack : 8.297
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_tvp_high'
+Slack : 8.297
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_1x_postmux'
+Slack : 8.298
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_5x_out'
+Slack : 11.151
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_1x_out'
+Slack : 14.181
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_tvp_low'
+Slack : 14.358
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_27mhz_postmux'
+Slack : 18.265
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_27mhz'
+Slack : 18.517
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'pclk_27mhz_out'
+Slack : 33.037
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'flash_clk'
+Slack : 36.990
+TNS   : 0.000
+
+Type  : Fast 1200mV 0C Model Minimum Pulse Width 'flash_clk_out'
+Slack : 70.074
+TNS   : 0.000
+
+------------------------------------------------------------
