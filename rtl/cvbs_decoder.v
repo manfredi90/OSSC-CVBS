@@ -53,7 +53,7 @@ module cvbs_decoder #(
     input [23:0] cfg,
     // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [10]
     // reference low-pass over lines (1/8), [13:11] sharpness (0-7), [14]
-    // simple luma notch (no line comparison)
+    // simple luma notch (no line comparison), [15] 3-line notch
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
@@ -87,6 +87,7 @@ wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal 
 wire rflt = hc[10];             // reference low-pass over lines (1/8)
 wire [2:0] sharp = hc[13:11];   // sharpness 0-7
 wire notch_simple = hc[14];      // luma notch without the previous line
+wire notch_3l = hc[15];          // luma notch: 3 lines (120 degrees per line: NES / SNES)
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
@@ -128,10 +129,10 @@ always @(posedge clk) begin
 end
 
 // x0 delayed (x0d[k] = x0 k clocks earlier)
-reg [7:0] x0d [1:27];
+reg [7:0] x0d [1:28];
 always @(posedge clk) begin
     x0d[1] <= x0;
-    for (i=2; i<=27; i=i+1)
+    for (i=2; i<=28; i=i+1)
         x0d[i] <= x0d[i-1];
 end
 
@@ -230,7 +231,7 @@ wire signed [2:0] d_rnd = d_r7 >>> 4;
 wire [11:0] h_cr = h + 12'd2 + {{9{d_rnd[2]}}, d_rnd};
 // (luma 8 samples ahead of the chroma: the edge detection of stage E looks
 // ahead, no chroma delay line)
-wire [11:0] h_yr = h + 12'd12 + {{10{d_line[5]}}, d_line[5:4]};
+wire [11:0] h_yr = h + 12'd13 + {{10{d_line[5]}}, d_line[5:4]};
 
 // ---------------------------------------------------------------------------
 // blank level: x0 is first filtered by a 6-sample box (about one subcarrier
@@ -340,11 +341,11 @@ always @(posedge clk) begin
     pQ <= flush_p ? 11'sd0 : -pQ_full[18:8];
 end
 
-// sin/cos delayed to the Z stage (13 clocks after sc_q), +1 for the notch
-reg [19:0] scd [1:14];
+// sin/cos delayed to the Z stage (13 clocks after sc_q), +2 for the notch
+reg [19:0] scd [1:15];
 always @(posedge clk) begin
     scd[1] <= sc_q;
-    for (i=2; i<=14; i=i+1)
+    for (i=2; i<=15; i=i+1)
         scd[i] <= scd[i-1];
 end
 wire signed [9:0] sin_z0 = scd[13][19:10];
@@ -416,6 +417,28 @@ always @(posedge clk) begin
     zQo <= (h_f == 2'd0) ? cl_hiQ : (h_f[1] ? cl_mQ[16:1] : cl_loQ);
 end
 
+// second line memory: Z of two lines before (for the 3-line notch), written
+// with the Z of the previous line, read as cl_mem
+(* ramstyle = "M9K" *) reg [31:0] cl2_mem [0:511];
+reg [31:0] cl2_q;
+reg signed [15:0] cl2_loI, cl2_loQ, cl2_hiI, cl2_hiQ;
+reg signed [15:0] zIp, zQp;         // Z of two lines before
+wire signed [16:0] cl2_mI = cl2_loI + cl2_hiI;
+wire signed [16:0] cl2_mQ = cl2_loQ + cl2_hiQ;
+always @(posedge clk) begin
+    cl2_q <= cl2_mem[cl_ra];
+    if (h[1:0] == 2'd0)
+        cl2_mem[h[10:2]] <= {zIo, zQo};
+    if (h_f == 2'd0) begin
+        cl2_loI <= cl2_hiI;
+        cl2_loQ <= cl2_hiQ;
+        cl2_hiI <= cl2_q[31:16];
+        cl2_hiQ <= cl2_q[15:0];
+    end
+    zIp <= (h_f == 2'd0) ? cl2_hiI : (h_f[1] ? cl2_mI[16:1] : cl2_loI);
+    zQp <= (h_f == 2'd0) ? cl2_hiQ : (h_f[1] ? cl2_mQ[16:1] : cl2_loQ);
+end
+
 // Z for the luma notch (remodulation) of the line being received, one clock
 // after the Z stage. NTSC: compared with the Z of the previous line at the
 // same position (zIo / zQo, from the chroma line memory, aligned within a
@@ -429,22 +452,45 @@ end
 // stays. Different magnitudes (a horizontal edge between colours, or between
 // colour and grey): Z of the line alone (the plain notch). PAL (V switched
 // on alternate lines) and hc[14]: plain notch.
+// 3-line notch (hc[15], set by the CPU when the subcarrier turns by about
+// 120 degrees per line, from the measured line period): the luma detail
+// cancels in the sum of three lines (1 + e^j120 + e^j240 = 0). All three of
+// similar magnitude: average of three; else the 2-line rule. Two clocks after
+// the Z stage (stage 1: magnitudes and sums, stage 2: selection).
 wire [15:0] nAI = zI0[15] ? -zI0 : zI0;
 wire [15:0] nAQ = zQ0[15] ? -zQ0 : zQ0;
 wire [15:0] nBI = zIo[15] ? -zIo : zIo;
 wire [15:0] nBQ = zQo[15] ? -zQo : zQo;
-wire [16:0] nmA = (nAI > nAQ) ? ({1'b0, nAI} + {2'b0, nAQ[15:1]}) : ({1'b0, nAQ} + {2'b0, nAI[15:1]});
-wire [16:0] nmB = (nBI > nBQ) ? ({1'b0, nBI} + {2'b0, nBQ[15:1]}) : ({1'b0, nBQ} + {2'b0, nBI[15:1]});
-wire n_comb = ~pal & ~notch_simple & ({1'b0, nmA} <= {nmB, 1'b0}) & ({1'b0, nmB} <= {nmA, 1'b0});
-wire signed [16:0] nSI = zI0 + zIo;
-wire signed [16:0] nSQ = zQ0 + zQo;
+wire [15:0] nCI = zIp[15] ? -zIp : zIp;
+wire [15:0] nCQ = zQp[15] ? -zQp : zQp;
+reg [16:0] nmA, nmB, nmC;
+reg signed [16:0] nSI, nSQ;
+reg signed [17:0] n3I, n3Q;
+reg signed [15:0] nZI, nZQ;
+always @(posedge clk) begin
+    nmA <= (nAI > nAQ) ? ({1'b0, nAI} + {2'b0, nAQ[15:1]}) : ({1'b0, nAQ} + {2'b0, nAI[15:1]});
+    nmB <= (nBI > nBQ) ? ({1'b0, nBI} + {2'b0, nBQ[15:1]}) : ({1'b0, nBQ} + {2'b0, nBI[15:1]});
+    nmC <= (nCI > nCQ) ? ({1'b0, nCI} + {2'b0, nCQ[15:1]}) : ({1'b0, nCQ} + {2'b0, nCI[15:1]});
+    nSI <= zI0 + zIo;
+    nSQ <= zQ0 + zQo;
+    n3I <= zI0 + zIo + zIp;
+    n3Q <= zQ0 + zQo + zQp;
+    nZI <= zI0;
+    nZQ <= zQ0;
+end
+wire n_ab = ({1'b0, nmA} <= {nmB, 1'b0}) & ({1'b0, nmB} <= {nmA, 1'b0});
+wire n_ac = ({1'b0, nmA} <= {nmC, 1'b0}) & ({1'b0, nmC} <= {nmA, 1'b0});
+wire n_comb = ~pal & ~notch_simple & n_ab;
+wire n_tri = n_comb & notch_3l & n_ac;
+wire signed [25:0] n3I_p = n3I * 8'sd85;     // x85/256 = 1/3.01
+wire signed [25:0] n3Q_p = n3Q * 8'sd85;
 reg signed [15:0] zI, zQ;
 always @(posedge clk) begin
-    zI <= n_comb ? nSI[16:1] : zI0;
-    zQ <= n_comb ? nSQ[16:1] : zQ0;
+    zI <= n_tri ? n3I_p[23:8] : (n_comb ? nSI[16:1] : nZI);
+    zQ <= n_tri ? n3Q_p[23:8] : (n_comb ? nSQ[16:1] : nZQ);
 end
-wire signed [9:0] sin_z = scd[14][19:10];
-wire signed [9:0] cos_z = scd[14][9:0];
+wire signed [9:0] sin_z = scd[15][19:10];
+wire signed [9:0] cos_z = scd[15][9:0];
 
 // ---------------------------------------------------------------------------
 // burst gate at the Z stage, burst accumulation
@@ -779,9 +825,9 @@ wire signed [8:0] yl_dd = $signed({1'b0, yl_q}) - $signed({1'b0, yl_qp});
 wire signed [13:0] yl_ip = yl_dd * $signed({1'b0, d_f});
 always @(posedge clk) begin
     if (svideo | nonotch | kill)
-        yAn <= $signed({3'b0, x0d[27]}) - $signed({3'b0, blank});
+        yAn <= $signed({3'b0, x0d[28]}) - $signed({3'b0, blank});
     else
-        yAn <= $signed({3'b0, x0d[27]}) - $signed({3'b0, blank}) - rmod;
+        yAn <= $signed({3'b0, x0d[28]}) - $signed({3'b0, blank}) - rmod;
     h_d1 <= h[10:0];
     yl_q <= yl_mem[h_yr[10:0]];
     yl_mem[h_d1] <= yAn8;
@@ -940,7 +986,7 @@ initial begin
     Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
-    cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
+    cl2_q = 0; cl2_loI = 0; cl2_loQ = 0; cl2_hiI = 0; cl2_hiQ = 0; zIp = 0; zQp = 0; cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; st_line = 0; k_min = 0; k_l = 0; k_sum = 0; k_cnt = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;

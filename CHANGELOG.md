@@ -1,6 +1,18 @@
 Changelog
 =========
 
+CVBS decoder 0.38
+-----------------
+
+### Changed
+- Luma notch Adaptive: 3 lines with NES / SNES. Their subcarrier turns by
+  120 degrees per line (227.33 cycles per line), so the average of two lines
+  only halved the luma detail; the sum of three lines cancels it (1 + e^j120
+  + e^j240 = 0). The firmware picks 2 or 3 lines from the measured field
+  period (`3` at the end of Decoder diag.). Three lines of similar colour
+  magnitude: average of three; else the 2-line rule; else the plain notch.
+  Second chroma line memory (Z of two lines before).
+
 CVBS decoder 0.37
 -----------------
 

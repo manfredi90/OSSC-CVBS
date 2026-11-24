@@ -151,7 +151,7 @@ def gen(args):
 def run(args):
     G, B, hs, vs, N, inc, pal = gen(args)
     cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
-    hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 1) << 10) | ((args.sharp & 7) << 11)
+    hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 1) << 10) | ((args.sharp & 7) << 11) | ((args.tri & 1) << 15)
     cfg |= (1 << 7) if args.diag else 0
     cfg |= (1 << 6) if (args.xtal and not args.noalign) else 0
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
@@ -221,6 +221,7 @@ def main():
     ap.add_argument('--reffilt', type=int, default=0, help='reference filter over lines 0-1')
     ap.add_argument('--sharp', type=int, default=0, help='sharpness 0-7')
     ap.add_argument('--igain', type=int, default=0, help='reference ramp gain 0-3 (1x 1.5x 2x 3x)')
+    ap.add_argument('--tri', type=int, default=0, help='3-line notch (hc[15])')
     ap.add_argument('--setup', type=float, default=0.0, help='NTSC setup (0.075 = 7.5 IRE)')
     ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')

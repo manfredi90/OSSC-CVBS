@@ -65,6 +65,7 @@ uint8_t cv_mode;
 static uint16_t in_samples;
 static uint32_t in_totlines, in_pcnt;
 static uint8_t in_ilace;
+static uint8_t notch_3l;    // 3-line luma notch in use (diagnostics)
 
 // automatic detection state
 static uint8_t auto_other;      // 0: usual subcarrier for the line count (625: 4.43MHz, 525: 3.58MHz), 1: the other one
@@ -269,6 +270,16 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
           ((uint32_t)(rf & 1) << 10);
     *hc |= ((uint32_t)(cc->cv_sharp & 7) << 11);  // FPGA: hc[13:11] = sharpness
     *hc |= ((uint32_t)(cc->cv_notch_off == 2) << 14);   // hc[14]: simple notch
+    // hc[15]: 3-line notch when the subcarrier turns by ~120 / 240 degrees
+    // per line (NES / SNES: 227.33 cycles per line; 227.5 = 180 degrees: 2
+    // lines), from the measured field period
+    notch_3l = 0;
+    if ((cc->cv_notch_off == 0) && !pal && in_pcnt && in_totlines) {
+        uint64_t cpl_x1000 = (fsc_x64 * in_pcnt * (in_ilace ? 2 : 1) * 1000ULL) / (64ULL * TVP_EXTCLK_HZ * in_totlines);
+        uint32_t fr = (uint32_t)(cpl_x1000 % 1000);
+        notch_3l = ((fr >= 280) && (fr <= 390)) || ((fr >= 610) && (fr <= 720));
+    }
+    *hc |= ((uint32_t)notch_3l << 15);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     if (setup) {
@@ -345,6 +356,8 @@ void cvbs_diag_str(char *s, int len) {
     // K: darkest luma of the picture, ADC codes above the blank level
     sniprintf(s, len, "B%u L%u K%+d %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st), (int)(int8_t)ST_BLACK(st),
               ST_KILL(st) ? 'K' : (ST_ALT(st) ? 'P' : 'N'));
+    if (notch_3l && (strlen(s) + 2 <= (unsigned)len))
+        strcat(s, "3");
 }
 
 // cvbs_sync_diag() / cvbs_xtal_diag(): in av_controller.c (output timing state)

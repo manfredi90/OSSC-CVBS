@@ -130,6 +130,7 @@ jobs:
       - name: Timing summary
         if: always()
         run: |
+          cat output_files/ossc.fit.summary || true
           grep -A40 "Slow 1200mV 85C Model Setup Summary" output_files/ossc.sta.rpt | head -40 || true
           grep -i "critical warning" output_files/*.rpt | head -40 || true
 
