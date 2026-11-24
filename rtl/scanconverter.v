@@ -66,7 +66,8 @@ module scanconverter (
     input [5:0] lb_slots,       // line buffer layout 3: number of lines
     input lb_rgb,               // line buffer layout 3: RGB, one pixel per word
     input [12:0] ds_hofs,       // output position at the input frame start (clocks, 0 = line start)
-    input resync_always,        // resync the output at every input frame (input clock not locked to the source)
+    input resync_always,              // resync the output at every input frame (input clock not locked to the source)
+    input cut_spread,                 // resync_always: spread the cut over the front porch lines
     input ext_sync_mode,
     input ext_frame_change_i,
     input [7:0] ext_R_i,
@@ -476,6 +477,35 @@ always @(posedge PCLK_OUT_i) begin
     end
 end
 
+// Resync at every input frame (CVBS xtal clock): the output frame is longer
+// than the input one (output lines never shorter than the input ones), so the
+// resync cuts the last line short, by up to ~half a line or more depending on
+// the source. HDMI TVs can drop a frame now and then on such a line (seen as a
+// random black frame). With cut_spread the front porch lines (no picture, no
+// line buffer reads) are shortened by fp_short clocks each, adjusted at every
+// resync so that only ~CUT_M clocks are left to cut: a few lines a few percent
+// shorter instead of one line cut by up to half or more. Progressive input and
+// output only (interlaced fields alternate in length).
+localparam [12:0] CUT_M = 13'd48;
+wire spread_en = cut_spread & resync_always & ~V_INTERLACED & ~interlaced_in_i;
+wire [10:0] V_FP_START = V_SYNCLEN + V_BACKPORCH + V_ACTIVE;
+reg [9:0] fp_short;
+reg [12:0] h_end;
+wire [12:0] cut_left = h_end + 1'b1 - h_cnt;
+wire signed [13:0] cut_err = $signed({1'b0, cut_left}) - $signed({1'b0, CUT_M});
+wire signed [11:0] fp_next = $signed({2'b00, fp_short}) + (cut_err >>> 4);
+always @(posedge PCLK_OUT_i) begin
+    h_end <= (spread_en & (v_cnt >= V_FP_START)) ? (H_TOTAL - 1'b1 - fp_short) : (H_TOTAL - 1'b1);
+    if (~spread_en)
+        fp_short <= 10'd0;
+    else if (frame_change_resync) begin
+        if ((v_cnt == V_TOTAL-1) & (v_cnt >= V_FP_START))
+            fp_short <= (fp_next < 0) ? 10'd0 : ((fp_next > $signed({3'b000, H_TOTAL[12:4]})) ? H_TOTAL[12:4] : fp_next[9:0]);
+        else
+            fp_short <= 10'd0;      // out of place (wrapped before the resync, or early): start again
+    end
+end
+
 // H/V counters
 always @(posedge PCLK_OUT_i) begin
     if (ext_sync_mode & ext_frame_change_i) begin
@@ -490,7 +520,7 @@ always @(posedge PCLK_OUT_i) begin
         dst_fid <= (~V_INTERLACED | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         resync_strobe <= 1'b1;
     end else begin
-        if (h_cnt == H_TOTAL-1) begin
+        if (h_cnt >= h_end) begin
             if ((~V_INTERLACED & (v_cnt == V_TOTAL-1)) |
                 (V_INTERLACED & (dst_fid == FID_ODD) & (v_cnt == V_TOTAL)) |
                 (V_INTERLACED & (dst_fid == FID_EVEN) & (v_cnt == V_TOTAL-1)))

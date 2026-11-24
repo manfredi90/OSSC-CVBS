@@ -1,6 +1,23 @@
 Changelog
 =========
 
+CVBS decoder 0.31
+-----------------
+
+### Changed
+- 27MHz xtal clock: the resync cut is spread over the front porch lines.
+  The output frame is a bit longer than the input one (output lines never
+  shorter than the input ones), so the resync at every input frame cut the
+  last line short: by up to half a line or more, depending on the source.
+  HDMI TVs dropped a frame now and then (random black frame, about once a
+  minute; never with line-locked sampling, never on a PC monitor). Now the
+  front porch lines (no picture, no line buffer reads) are shortened a little
+  each, adjusted at every resync so that only ~48 clocks are left to cut:
+  e.g. Line2x 480p, 9 lines ~4% shorter instead of one line ~40% shorter.
+  Progressive input and output only.
+- Xtal frame end (CVBS decoder menu, test option, not saved): Spread
+  (default) / Cut (as 0.29-0.30).
+
 CVBS decoder 0.30
 -----------------
 
