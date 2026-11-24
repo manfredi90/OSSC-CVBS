@@ -16,7 +16,9 @@ CVBS decoder 0.44
   stopping 3 lines before the picture. No line cut short before a vsync,
   the picture lines all the same length, the output never ahead of the
   input; same rule for every mode and output. A resync (line cut) only to
-  lock, at the start or when the source changes.
+  lock, at the start or when the source changes. The vsync is back at its
+  standard position (0.29-0.43: 4 lines later with the crystal clock, to
+  keep it away from the line cut short by the resync: no such line now).
 - Simulated before the build (`sim/scan`: scanconverter timing with
   480i / 576i / 240p / 288p and Line2x sources, input jitter): one resync at
   the start, then the vsync at a line start / half a line in alternate
