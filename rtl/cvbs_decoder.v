@@ -60,8 +60,8 @@ module cvbs_decoder #(
     output reg [7:0] G_o,
     output reg [7:0] B_o,
     output [SIDE_W-1:0] side_o,
-    // [7:0] burst level, [15:8] blank level in the burst gate, [23:16] back
-    // porch level,
+    // [7:0] burst level, [15:8] blank level, [23:16] darkest luma of the last
+    // field (signed, relative to the blank level),
     // [24] colour killer, [25] PAL alternation seen, [26] frequency loop at
     // (0), [31:27] (0)
     output reg [31:0] status
@@ -271,41 +271,7 @@ always @(posedge clk) begin
         blank_f <= blank_f + bl_step;
 end
 
-// back porch level after the TVP7002 clamp (default: clamp right after the
-// burst), just before the active video: 10 positions of the 6-sample box,
-// 70-80 samples after the burst gate start (NTSC: ~8.5-9.1us from the
-// hsync leading edge; NES: black until 9.1us). The level during the burst
-// gate, ~1.5us after the sync, was ~7-8 codes below the black of the picture
-// (MiSTer composite and S-Video, NES / SNES: brightness -6 to match RGB),
-// no such difference in the simulation: the signal still recovering from
-// the sync pulse. The back porch level is used when it is within 16 codes
-// of the burst gate level (else a picture or border there: burst gate).
-wire gate_bp = (h >= {4'h0, bstart} + 12'd70) && (h < {4'h0, bstart} + 12'd80);
-reg gate_bp_prev;
-reg [13:0] bp_acc;
-reg bp_upd;
-reg [11:0] bp_f = 12'd960;
-reg [11:0] bp_line;
-wire signed [12:0] bp_diff = $signed({1'b0, bp_line}) - $signed({1'b0, bp_f});
-wire [11:0] bp_step = {{3{bp_diff[12]}}, bp_diff[11:3]};
-wire [22:0] bp_scaled = bp_acc * 9'd273;     // x16/60
-wire signed [12:0] bp_gate_d = $signed({1'b0, bp_f}) - $signed({1'b0, blank_f});
-wire bp_ok = (bp_gate_d < 13'sd256) && (bp_gate_d > -13'sd256);
-wire [11:0] black_f = bp_ok ? bp_f : blank_f;
-wire signed [12:0] bl_err = $signed({1'b0, black_f}) - $signed({1'b0, blank, 4'h0});
-always @(posedge clk) begin
-    gate_bp_prev <= gate_bp;
-    bp_upd <= 1'b0;
-    if (gate_bp) begin
-        bp_acc <= bp_acc + bx6;
-    end else if (gate_bp_prev) begin
-        bp_line <= bp_scaled[21:10];
-        bp_acc <= 14'h0;
-        bp_upd <= 1'b1;
-    end
-    if (bp_upd)
-        bp_f <= bp_f + bp_step;
-end
+wire signed [12:0] bl_err = $signed({1'b0, blank_f}) - $signed({1'b0, blank, 4'h0});
 
 // ---------------------------------------------------------------------------
 // band-pass: c_bp = 2*c(n-4) - c(n-4-k) - c(n-4+k), k = 3 (4.43) or 4 (3.58).
@@ -571,7 +537,7 @@ wire vs_fall = vs0_prev & ~vs0;
 
 always @(posedge clk)
     if (vs_fall && (bl_err > 13'sd12 || bl_err < -13'sd12))
-        blank <= black_f[11:4] + black_f[3];
+        blank <= blank_f[11:4] + blank_f[3];
 
 always @(posedge clk) begin
     if (vs_fall) begin
@@ -927,7 +893,17 @@ always @(posedge clk) begin
 end
 
 // ---------------------------------------------------------------------------
-// status: burst gate / back porch levels, PAL alternation
+// status: darkest luma of the last field, PAL alternation
+// darkest luma (relative to the blank level) in the active area of the last
+// field: minimum of the averages of 16-sample blocks of the luma before the
+// sharpness (yA): a black area of the source reads its black level (NTSC
+// setup: ~+9 codes at ADC gain 2); blocks across edges (notch ringing) are
+// not the darkest ones. Lines 24-250, h 300-1600.
+reg signed [14:0] k_sum;
+reg signed [14:0] k_min;
+reg [3:0] k_cnt;
+reg signed [7:0] k_l;
+wire k_act = (st_line > 9'd24) && (st_line < 9'd250) && (h > 12'd300) && (h < 12'd1600);
 // colour killer for the status: sampled in the middle of the field (the
 // killer is briefly on after the vsync, where there is no burst, and the CPU
 // reads the status right after the vsync)
@@ -944,7 +920,15 @@ always @(posedge clk) begin
         st_line <= st_line + 1'b1;
     if ((hs0_prev & ~hs0) && (st_line == 9'd120))
         kill_st <= kill;
-    status <= {corr[21:17], 1'b0, alt_ok, kill_st, bp_f[11:4] + bp_f[3], blank_f[11:4] + blank_f[3], (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
+    k_cnt <= k_cnt + 1'b1;
+    k_sum <= (k_cnt == 4'd0) ? $signed({{4{yA[10]}}, yA}) : (k_sum + yA);
+    if (vs_fall) begin
+        k_l <= ($signed(k_min[14:4]) > 11'sd127) ? 8'sd127 : (($signed(k_min[14:4]) < -11'sd128) ? -8'sd128 : k_min[11:4]);
+        k_min <= 15'sd16383;
+    end else if (k_act && (k_cnt == 4'd0) && (k_sum < k_min)) begin
+        k_min <= k_sum;
+    end
+    status <= {corr[21:17], 1'b0, alt_ok, kill_st, k_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
 end
 
 
@@ -957,8 +941,8 @@ initial begin
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
     cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
-    alt_cnt = 0; bad_cnt = 0; alt_ok = 0;st_line = 0; kill_st = 1;
-    bl_acc = 0; bl_line = 0; bp_acc = 0; bp_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
+    alt_cnt = 0; bad_cnt = 0; alt_ok = 0; st_line = 0; k_min = 0; k_l = 0; k_sum = 0; k_cnt = 0; kill_st = 1;
+    bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
     se_tip = 0; se_thr2 = 0; se_ms = 0; se_arm = 0; se_found = 0; se_k = 0; se_wait = 0; se_n = 0; se_rem = 0; se_den = 0; se_q = 0; se_cnt = 0;
     se_acc = 0; se_init = 1; se_d = 0; d_line = 0; yl_qp = 0; d_f = 0;

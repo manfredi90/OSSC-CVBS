@@ -55,7 +55,7 @@ uint8_t cv_mode;
 // decoder status (lt_status register)
 #define ST_BURST(s)     ((s) & 0xff)
 #define ST_BLANK(s)     (((s) >> 8) & 0xff)
-#define ST_PORCH(s)     (((s) >> 16) & 0xff)
+#define ST_BLACK(s)     (((s) >> 16) & 0xff)   // signed
 #define ST_KILL(s)      (((s) >> 24) & 1)
 #define ST_ALT(s)       (((s) >> 25) & 1)
 #define ST_CSAT(s)      (((s) >> 26) & 1)
@@ -206,7 +206,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     cv_std_t std = cur_std();
     int pal = (std == CV_STD_PAL) || (std == CV_STD_PAL60) || (std == CV_STD_PALM) || (std == CV_STD_PALN);
     uint64_t fsc_x64, fs_x64;
-    int32_t c, s, k, re, im, lg, white_x10, hue, bright, rf;
+    int32_t c, s, k, re, im, lg, white_x10, hue, bright, rf, setup;
     int sat = cc->cv_sat * 5;
 
     switch (std) {
@@ -246,6 +246,14 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     // luma gain: white (0.7V) to 255, times contrast; x32, 32-95
     white_x10 = (1785 * (5 + (cc->cv_adcgain & 0xf))) / 10;     // ADC codes of 0.7V, x10
     lg = (81600 * (cc->cv_contrast * 2) + white_x10*50) / (white_x10 * 100);
+    // NTSC 7.5 IRE setup (NTSC-M, PAL-M): black at 7.5 IRE above the blank
+    // level, white at 100: black -> 0 and white -> 255 again (gain x100/92.5,
+    // offset in the brightness term, 2 codes per step). Auto: NTSC / NTSC
+    // 4.43 / PAL-M (NTSC-J has no setup: Off).
+    setup = (cc->cv_setup == 2) ||
+            ((cc->cv_setup == 0) && ((std == CV_STD_NTSC) || (std == CV_STD_NTSC443) || (std == CV_STD_PALM)));
+    if (setup)
+        lg = (lg * 200 + 92) / 185;
     if (lg < 32)
         lg = 32;
     else if (lg > 95)
@@ -263,6 +271,15 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     *hc |= ((uint32_t)(cc->cv_notch_off == 2) << 14);   // hc[14]: simple notch
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
+    if (setup) {
+        // 7.5 IRE (53.6mV) in ADC codes x10, times the luma gain, in 2-code steps
+        int32_t s_x10 = (white_x10 * 766 + 5000) / 10000;
+        bright -= (s_x10 * lg + 320) / 640;
+    }
+    if (bright < -32)
+        bright = -32;
+    else if (bright > 31)
+        bright = 31;
     *flags = cv_mode ? (1 |
                         ((cv_mode == 2) << 1) |
                         (pal << 2) |
@@ -325,8 +342,8 @@ int cvbs_update() {
 
 void cvbs_diag_str(char *s, int len) {
     uint32_t st = sc->lt_status.data;
-    // L: level in the burst gate / in the back porch after the clamp
-    sniprintf(s, len, "B%u L%u/%u %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st), (unsigned)ST_PORCH(st),
+    // K: darkest luma of the picture, ADC codes above the blank level
+    sniprintf(s, len, "B%u L%u K%+d %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st), (int)(int8_t)ST_BLACK(st),
               ST_KILL(st) ? 'K' : (ST_ALT(st) ? 'P' : 'N'));
 }
 

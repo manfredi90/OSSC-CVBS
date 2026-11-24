@@ -113,6 +113,7 @@ static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
 static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line3x 47kHz", "Line4x 63kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
+static const char* const cv_setup_desc[] = { "Auto", "Off", "On" };
 
 static void sync_vth_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d mV", (v*1127)/100); }
 static void intclks_to_time_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u.%.2u us", (unsigned)(((1000000U*v)/(TVP_INTCLK_HZ/1000))/1000), (unsigned)((((1000000U*v)/(TVP_INTCLK_HZ/1000))%1000)/10)); }
@@ -309,6 +310,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Saturation",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sat,        OPT_NOWRAP, 0, CV_SAT_MAX, cv_pct5_disp } } },
     { "Hue",                                    OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_hue,        OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_HUE_RANGE, SIGNED_NUMVAL_ZERO+CV_HUE_RANGE, cv_deg_disp } } },
     { "Contrast",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_contrast,   OPT_NOWRAP, CV_CONTRAST_MIN, CV_CONTRAST_MAX, cv_pct2_disp } } },
+    { "NTSC 7.5 IRE",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_setup,     OPT_WRAP,   SETTING_ITEM(cv_setup_desc) } } },
     { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
     { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
     { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(cv_notch_desc) } } },

@@ -202,6 +202,8 @@ typedef struct {
     /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
     alt_u8 cv_reffilt;      // colour reference low-pass over lines: 0 auto (on with the xtal clock, else off), 1 off, 2 on (1/8) (0.14; was ramp gain, sharpness)
     alt_u8 cv_xtal;         // sample clock: 0 = TVP7002 H-PLL (line-locked), 1 = 27MHz crystal (EXT_CLK) (was 0.6 chroma delay, 0.8 ref. filter)
+    /* added in settings v6 (0.37): keep at the end (v3-v5 settings are migrated) */
+    alt_u8 cv_setup;        // NTSC 7.5 IRE setup removed: 0 = auto (NTSC, NTSC 4.43, PAL-M), 1 = off, 2 = on
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

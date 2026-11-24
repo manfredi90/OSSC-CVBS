@@ -116,7 +116,7 @@ def gen(args):
         Y = 0.299 * rgb[:, 0] + 0.587 * rgb[:, 1] + 0.114 * rgb[:, 2]
         U = 0.492 * (rgb[:, 2] - Y)
         V = 0.877 * (rgb[:, 0] - Y)
-        y[am] = 0.7 * Y
+        y[am] = 0.7 * (args.setup + (1 - args.setup) * Y)
         c[am] = (0 if args.bw else 0.7) * args.chroma_scale * (U * np.sin(ph[am]) + vsw * V * np.cos(ph[am]))
         if args.svideo:
             cv = y
@@ -221,6 +221,7 @@ def main():
     ap.add_argument('--reffilt', type=int, default=0, help='reference filter over lines 0-1')
     ap.add_argument('--sharp', type=int, default=0, help='sharpness 0-7')
     ap.add_argument('--igain', type=int, default=0, help='reference ramp gain 0-3 (1x 1.5x 2x 3x)')
+    ap.add_argument('--setup', type=float, default=0.0, help='NTSC setup (0.075 = 7.5 IRE)')
     ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')
     args = ap.parse_args()
@@ -230,8 +231,9 @@ def main():
     s = st[-1]
     corr = ((s >> 27) & 0x1f)
     corr = corr - 32 if corr & 0x10 else corr
-    print('status: burst %d blank %d porch %d kill %d alt %d corr_sat %d corr %d' % (
-        s & 0xff, (s >> 8) & 0xff, (s >> 16) & 0xff, (s >> 24) & 1, (s >> 25) & 1, (s >> 26) & 1, corr))
+    kk = (s >> 16) & 0xff
+    print('status: burst %d blank %d black %+d kill %d alt %d corr_sat %d corr %d' % (
+        s & 0xff, (s >> 8) & 0xff, kk - 256 if kk & 0x80 else kk, (s >> 24) & 1, (s >> 25) & 1, (s >> 26) & 1, corr))
     worst = 0
     for ln in range(len(starts) - 1 - args.show, len(starts) - 1):
         m = measure(R, G, B, starts, N, pal, ln)

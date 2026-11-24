@@ -60,6 +60,7 @@ const avconfig_t tc_default = {
     .cv_clamp = 92,
     .cv_reffilt = 0,
     .cv_xtal = 1,
+    .cv_setup = 0,
     .cv_bgate = 165,
     .sl_altern = 1,
     .sync_vth = DEFAULT_SYNC_VTH,

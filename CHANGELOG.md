@@ -1,6 +1,24 @@
 Changelog
 =========
 
+CVBS decoder 0.37
+-----------------
+
+### Added
+- NTSC 7.5 IRE: Auto (default), Off, On. NTSC-M (and PAL-M) put the black
+  7.5 IRE above the blank level; the decoder took the blank level as black,
+  so blacks came out grey (brightness -6 needed to match RGB). On: the setup
+  is removed (offset, gain x100/92.5: white stays white). Auto: on with
+  NTSC, NTSC 4.43 and PAL-M (the system can not tell NTSC-J, which has no
+  setup).
+- Decoder diag.: `K±n`, the darkest luma of the picture in ADC codes above
+  the blank level (minimum of 16-sample averages in the active area of the
+  last field): with a black screen it shows the black level of the source.
+
+### Changed
+- Black level: back to the level in the burst gate (0.36 measured it in the
+  back porch too: the two read the same, no sync recovery offset).
+
 CVBS decoder 0.36
 -----------------
 

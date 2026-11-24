@@ -14,6 +14,9 @@ cvbs_decoder #(.SIDE_W(2)) dut (
     .side_i({HS, VS}), .cfg(cfg), .hc(hc), .inc(inc),
     .R_o(Ro), .G_o(Go), .B_o(Bo), .side_o(side_o), .status(status));
 integer fin, fout, fdbg, r, n;
+`ifdef K_DBG
+always @(posedge clk) if (dut.st_line == 9'd100) $fwrite(fdbg, "%0d %0d %0d %0d %0d\n", dut.h, dut.yA, dut.yE, dut.yB, dut.R_o);
+`endif
 `ifdef Z_DBG
 always @(posedge clk) if (dut.st_line == 9'd100) $fwrite(fdbg, "%0d %0d %0d %0d %0d\n", dut.h, dut.zI0, dut.zQ0, dut.zIo, dut.zQo);
 `endif

@@ -60,6 +60,7 @@ CVBS decoder menu
 | Saturation | 0–200% | |
 | Hue | ±30 deg | |
 | Contrast | 50–160% | |
+| NTSC 7.5 IRE | Auto, Off, On | NTSC setup: black 7.5 IRE above the blank level (NTSC-M, PAL-M; NTSC-J has none). On: removed (black back to black, gain x100/92.5 so that white stays white). Auto (default): on with NTSC, NTSC 4.43 and PAL-M. Turn it Off for a source without setup (darkest greys crushed) |
 | Brightness | ±31 | |
 | Sharpness | Off, 1-7 | luma peaking: sharper pixel edges (the luma of a composite signal is softened by the notch). No boost at DC or at the highest frequencies (no extra noise). Default Off |
 | Luma notch | Adaptive, Off, Simple | Adaptive (default): NTSC, the colour removed from the luma is compared with the line above: luma detail around the subcarrier frequency (fine pixels, thin outlines) changes phase from line to line and is kept, the colour is the same and is removed. Sharper outlines, no grey halo beside them (fully with 227.5 cycles per line, halved with NES / SNES, 227.33). PAL: as Simple. Simple: the notch of 0.35 and before. Off: full bandwidth luma (dot crawl visible) |
@@ -79,7 +80,7 @@ CVBS advanced menu
 | Line re-timing | On, Off | 27MHz xtal only: each line is re-timed on its sync trailing edge (fractional delay of the luma), so the picture does not shake. Off only for tests. Default On |
 | Ref. filter | Auto, Off, On | colour reference averaged over the lines (less line to line colour noise). Auto: On with the xtal clock, Off line-locked. Default Auto |
 | Adv. timing | | as in the OSSC firmware |
-| Diagnostics > Decoder diag. | | `Bn` burst level, `Ln/m` level in the burst gate / in the back porch before the picture (ADC codes; the black reference is the back porch one, unless they differ by more than 16), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
+| Diagnostics > Decoder diag. | | `Bn` burst level, `Ln` blank level (ADC code), `K±n` darkest luma of the picture in ADC codes above the blank level (show a black screen: ~0 = no setup, ~+9 at ADC gain 2 = NTSC 7.5 IRE setup; about -2 of measuring bias), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
 | Diagnostics > Sync diag. | | per second: `O` output frames, `F` input frames, `S` output resyncs (xtal clock: one per input frame) |
 | Diagnostics > Xtal timing | | `L` line period (27MHz clocks), `O` output line length (`O..>..`: being redone) |
 | Diagnostics > Event count. | | since power on: `P` setups, `U` register updates, `X` output resyncs out of place |
