@@ -207,7 +207,8 @@ int parse_control()
     alt_u8* pmcfg_ptr[] = { &pt_only, &tc.pm_240p, &tc.pm_240p, &tc.pm_384p, &tc.pm_480i, &tc.pm_480i, &tc.pm_480p, &tc.pm_480p, &pt_only, &tc.pm_1080i, &pt_only };
     alt_u8 valid_pm[] = { 0x1, 0x3f, 0x3f, 0x7, 0xf, 0xf, 0x7, 0x7, 0x1, 0x3, 0x1 };
 
-    avinput_t next_input = (cm.avinput == AV3_YPBPR) ? AV1_RGBs : (cm.avinput+1);
+    // CVBS firmware: AV2 composite / S-Video only
+    avinput_t next_input = (cm.avinput == AV2_RGsB) ? AV2_YPBPR : AV2_RGsB;
 
     if (remote_code)
         printf("RCODE: 0x%.4lx, %d\n", remote_code, remote_rpt);
@@ -230,15 +231,9 @@ int parse_control()
         i = REMOTE_MAX_KEYS;
 
     switch (i) {
-        case RC_BTN1: man_target_input = AV1_RGBs; break;
-        case RC_BTN4: man_target_input = AV1_RGsB; break;
-        case RC_BTN7: man_target_input = AV1_YPBPR; break;
+        // CVBS firmware: AV2 composite / S-Video only (AV1 / AV3 keys ignored)
         case RC_BTN2: man_target_input = AV2_YPBPR; break;
         case RC_BTN5: man_target_input = AV2_RGsB; break;
-        case RC_BTN3: man_target_input = AV3_RGBHV; break;
-        case RC_BTN6: man_target_input = AV3_RGBs; break;
-        case RC_BTN9: man_target_input = AV3_RGsB; break;
-        case RC_BTN0: man_target_input = AV3_YPBPR; break;
         case RC_MENU:
             menu_active = !menu_active;
             osd->osd_config.menu_active = menu_active;
@@ -471,7 +466,7 @@ Button_Check:
         if (pos != NULL) {
             *pos = 0;
             if (sscanf(uart_rx_buf, "input %u", &uart_rx_arg) == 1) {
-                if ((uart_rx_arg > AV_TESTPAT) && (uart_rx_arg <= AV3_YPBPR)) {
+                if ((uart_rx_arg == AV2_YPBPR) || (uart_rx_arg == AV2_RGsB)) {
                     man_target_input = uart_rx_arg;
                     dd_printf("Input %u selected\n", uart_rx_arg);
                 } else {

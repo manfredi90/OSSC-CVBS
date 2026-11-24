@@ -24,9 +24,10 @@ Inputs
 | AV2 Composite | composite video on the AV2 **Y** (green) jack |
 | AV2 S-Video   | S-Video **Y** on the AV2 Y (green) jack, **C** on the AV2 **Pb** (blue) jack |
 
-Remote control: button 5 selects AV2 Composite, button 2 AV2 S-Video. The
-other inputs keep working as 15kHz RGB passthrough; 31kHz and HD sources show
-the test pattern.
+Remote control: button 5 selects AV2 Composite, button 2 AV2 S-Video (the
+input button on the OSSC toggles them). The other inputs are not available in
+this firmware. Initial input (Settings opt.): AV2 Composite (default), AV2
+S-Video or Last used.
 
 
 How it works
@@ -54,7 +55,7 @@ CVBS decoder menu
 
 | Item | Values | |
 |------|--------|---|
-| Output | 15kHz, Line2x 1440, Line2x 720, Line3x 47kHz, Line4x 63kHz | 15kHz: as the source (CRT). Line2x 1440: 1440x480p / 1440x576p at 54MHz (every sample), sent as 480p / 576p with pixel repetition. Line2x 720: 720x480p / 720x576p at 27MHz, exactly CEA-861 (one sample out of 2; with the crystal clock the output clock is the crystal itself): try it if an HDMI TV drops a frame now and then in Line2x 1440. Line3x / Line4x: 720 wide, 786 / 1048 lines (NTSC) at 40.5 / 54MHz, not CEA modes (as the stock Line3x / Line4x). Saved with the settings; the 15kHz watchdog is off while a line multiplied mode is output: do not use those with 15kHz monitors (back to 15kHz with the remote) |
+| Output | 15kHz, Line2x 31kHz, Line3x 47kHz, Line4x 63kHz | 15kHz: as the source (CRT). Line2x: 720x480p / 720x576p at 27MHz, exactly CEA-861 (one sample out of 2; with the crystal clock the output clock is the crystal itself). Line3x / Line4x: 720 wide, 786 / 1048 lines (NTSC) at 40.5 / 54MHz, not CEA modes (as the stock Line3x / Line4x). The test pattern / NO SYNC screen is shown at the selected output too. Saved with the settings; the 15kHz watchdog is off while a line multiplied mode is selected: do not use those with 15kHz monitors (back to 15kHz with the remote) |
 | Color system | Auto, PAL, NTSC, PAL-60, NTSC 4.43, PAL-M, PAL-N | |
 | Saturation | 0–200% | |
 | Hue | ±30 deg | |

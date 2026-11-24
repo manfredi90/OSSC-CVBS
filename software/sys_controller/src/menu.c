@@ -109,7 +109,7 @@ static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
-static const char* const cv_out_desc[] = { "15kHz", "Line2x 1440", "Line2x 720", "Line3x 47kHz", "Line4x 63kHz" };
+static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line3x 47kHz", "Line4x 63kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 
@@ -126,6 +126,8 @@ static void pixels_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, LNG("%u 
 static void value_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", v); }
 static void ds_width_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d%%", 100+(alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void signed_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
+// CVBS firmware: AV2 composite / S-Video only, AV2_RGsB+1 = last used
+static void def_input_disp(alt_u8 v) { strncpy(menu_row2, (v <= AV2_RGsB) ? avinput_str[v] : "Last used", LCD_ROW_LEN+1); }
 static void cv_sharp_disp(alt_u8 v) { if (v) sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", (unsigned)v); else strncpy(menu_row2, "Off", LCD_ROW_LEN+1); }
 static void cv_pct5_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*5); }
 static void cv_pct2_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*2); }
@@ -271,11 +273,7 @@ MENU(menu_audio, P99_PROTECT({ \
 #define AUDIO_MENU { LNG("Audio options  >","ｵｰﾃﾞｨｵｵﾌﾟｼｮﾝ     >"),                  OPT_SUBMENU,            { .sub = { &menu_audio, NULL, NULL } } },
 
 MENU(menu_settings, P99_PROTECT({ \
-    { LNG("Initial input","ｼｮｷﾆｭｳﾘｮｸ"),          OPT_AVCONFIG_SELECTION, { .sel = { &ts.def_input,       OPT_WRAP, SETTING_ITEM(avinput_str) } } },
-    { "Autodetect input",                          OPT_AVCONFIG_SELECTION, { .sel = { &ts.auto_input,     OPT_WRAP, SETTING_ITEM(auto_input_desc) } } },
-    { "Auto AV1 Y/Gs",                          OPT_AVCONFIG_SELECTION, { .sel = { &ts.auto_av1_ypbpr,     OPT_WRAP, SETTING_ITEM(rgsb_ypbpr_desc) } } },
-    { "Auto AV2 Y/Gs",                          OPT_AVCONFIG_SELECTION, { .sel = { &ts.auto_av2_ypbpr,     OPT_WRAP, SETTING_ITEM(rgsb_ypbpr_desc) } } },
-    { "Auto AV3 Y/Gs",                          OPT_AVCONFIG_SELECTION, { .sel = { &ts.auto_av3_ypbpr,     OPT_WRAP, SETTING_ITEM(rgsb_ypbpr_desc) } } },
+    { LNG("Initial input","ｼｮｷﾆｭｳﾘｮｸ"),          OPT_AVCONFIG_NUMVALUE,  { .num = { (alt_u8*)&ts.def_input, OPT_WRAP, AV2_YPBPR, AV2_RGsB+1, def_input_disp } } },
     { "LCD BL timeout",                         OPT_AVCONFIG_SELECTION, { .sel = { &ts.lcd_bl_timeout,  OPT_WRAP, SETTING_ITEM(lcd_bl_timeout_desc) } } },
     { "OSD",                                    OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_enable,   OPT_WRAP,   SETTING_ITEM(osd_enable_desc) } } },
     { "OSD status disp.",                       OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_status_timeout,   OPT_WRAP,   SETTING_ITEM(osd_status_desc) } } },

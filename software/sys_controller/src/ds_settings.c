@@ -29,7 +29,7 @@
 // CVBS firmware: own magic (the downscaler / HD firmware settings in the same
 // sector have another format and are not loaded)
 #define DS_SETTINGS_MAGIC   0x4F534356  // "OSCV"
-#define DS_SETTINGS_VERSION 4     // 4: 0.6 (sharpness, chroma delay at the end of avconfig_t)
+#define DS_SETTINGS_VERSION 5     // 4: 0.6 (sharpness, chroma delay at the end of avconfig_t), 5: 0.35 (Output values)
                                   // 3: 0.3 (edge suppression, clamp position; older settings not loaded)
 #define V3_TC_LESS          2     // bytes added to avconfig_t in v4
 
@@ -82,6 +82,15 @@ int ds_settings_load() {
         }
     }
 
+    // v4 (0.6-0.34): same layout; Output 1 / 2 = Line2x 1440 / 720 (both
+    // Line2x now), 3 / 4 = Line3x / Line4x
+    if (!migrated && (blob.magic == DS_SETTINGS_MAGIC) && (blob.version == 4) &&
+        (blob.len == sizeof(ds_settings_blob_t)) && (blob.crc == blob_crc(&blob))) {
+        blob.tc.cv_line2x = (blob.tc.cv_line2x >= 3) ? (blob.tc.cv_line2x - 1) : (blob.tc.cv_line2x ? 1 : 0);
+        migrated = 1;
+        printf("DS settings: v4 migrated\n");
+    }
+
     if (!migrated &&
         ((blob.magic != DS_SETTINGS_MAGIC) ||
          (blob.version != DS_SETTINGS_VERSION) ||
@@ -114,8 +123,8 @@ int ds_settings_load() {
         tc.ds_flicker = 0;
     // test pattern design: not kept, Gray at start
     tc.ds_tp_sel = 0;
-    // CVBS output: 15kHz, Line2x 1440 / 720, Line3x, Line4x (kept)
-    if (tc.cv_line2x > 4)
+    // CVBS output: 15kHz, Line2x, Line3x, Line4x (kept)
+    if (tc.cv_line2x > 3)
         tc.cv_line2x = 0;
     if (tc.ds_out_range > 2)
         tc.ds_out_range = 0;
@@ -146,6 +155,10 @@ int ds_settings_load() {
     memcpy(&ts, &blob.ts, sizeof(settings_t));
     if (ts.phase_hotkey_enable > 1)
         ts.phase_hotkey_enable = 0;
+    // CVBS firmware: AV2 composite / S-Video only, no input autodetection
+    if ((ts.def_input < AV2_YPBPR) || (ts.def_input > AV2_RGsB+1))
+        ts.def_input = AV2_RGsB;
+    ts.auto_input = AUTO_OFF;
     memcpy(rc_keymap, blob.rc_keymap, sizeof(blob.rc_keymap));
     printf("DS settings loaded\n");
 

@@ -1180,31 +1180,26 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     if ((*group_ptr[mode_preset->group] == 0) && !cvbs_line2x(cc, mode_preset->group))
         mindiff_lm = MODE_PT;
 
-    // CVBS decoder, Line2x: every sample at ~27MHz as in the passthrough,
-    // output at ~54MHz (1440x480p / 1440x576p, pixels repeated 2x).
-    // Line2x 720: one sample out of 2 (h_skip 1, set by the TVP7002 PLL
-    // doubling in program_mode()), output at 27MHz: 720x480p / 720x576p as
-    // in CEA-861 (VIC 2/3, 17/18, no pixel repetition), and with the 27MHz
-    // crystal the output clock is the crystal itself (FPGA PLL bypassed unless
-    // FPGA PLL BW Low). For HDMI TVs that drop a frame now and then on the
-    // 54MHz 1440 wide signal (seen also with the stock firmware in Line2x).
-    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group) && (cc->cv_line2x == 1)) {
-        vmode_hv_mult(vm_in, 2, 1);
-        vmode_hv_mult(vm_out, 2, 1);
-    }
+    // CVBS decoder, Line2x: one sample out of 2 (h_skip 1, set by the
+    // TVP7002 PLL doubling in program_mode()), output at 27MHz: 720x480p /
+    // 720x576p as in CEA-861 (VIC 2/3, 17/18, no pixel repetition); with the
+    // 27MHz crystal the output clock is the crystal itself (FPGA PLL bypassed
+    // unless FPGA PLL BW Low). 0.32-0.34 also had a 1440 wide Line2x at
+    // 54MHz (every sample, sent as 480p with pixel repetition): no visible
+    // difference with composite / S-Video, a less standard signal.
 
     // CVBS decoder, Line3x / Line4x: one sample out of 2 (858 / 864 per
     // line, as Line2x 720), each line shown 3 / 4 times, output on the FPGA
     // PLL at 3/2 / 2 of the 27MHz ADC clock: 40.5 / 54MHz, 858 clocks per
     // output line (Line3x: 720 / 864 active of 786 / 936 lines, Line4x: 960 /
     // 1152 of 1048 / 1248). Not CEA modes (like the stock Line3x / Line4x).
-    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group) && (cc->cv_line2x >= 3)) {
-        vm_conf->y_rpt = cc->cv_line2x - 1;
+    if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group) && (cc->cv_line2x >= 2)) {
+        vm_conf->y_rpt = cc->cv_line2x;
         vm_conf->h_skip = 1;
         vm_conf->si_pclk_mult = 1;
         vm_conf->ds_pll_n = 3;      // PFD 9MHz, VCO 810MHz, out 40.5 / 54MHz
         vm_conf->ds_pll_m = 90;
-        vm_conf->ds_pll_c = (cc->cv_line2x == 3) ? 20 : 15;
+        vm_conf->ds_pll_c = (cc->cv_line2x == 2) ? 20 : 15;
     } else if (mindiff_lm >= MODE_L6_GEN_4_3)
         vm_conf->y_rpt = 5;
     else if (mindiff_lm >= MODE_L5_GEN_4_3)
@@ -1468,8 +1463,8 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         ds_pt_position(cc, vm_out, vm_conf);
 
     if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
-        vm_out->vic = (cc->cv_line2x >= 3) ? HDMI_Unknown : (((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60);
-        vm_conf->hdmitx_pixr_ifr = (cc->cv_line2x == 1);
+        vm_out->vic = (cc->cv_line2x >= 2) ? HDMI_Unknown : (((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60);
+        vm_conf->hdmitx_pixr_ifr = 0;
     }
 
     if (vm_out->vic == HDMI_Unknown)
@@ -1495,7 +1490,24 @@ void get_testpattern_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_ou
             break;
     }
     memcpy(vm_out, &video_modes_plm_default[i], sizeof(mode_data_t));
-    vmode_hv_mult(vm_out, 2, 1);    // 858 -> 1716 clocks at 27MHz
+    // CVBS firmware: the test pattern / safe screens at the selected output
+    // (858 clocks per line, 525 / 786 / 1048 lines at 27 / 40.5 / 54MHz),
+    // so that an HDMI TV is not switched to 240p when the source is off
+    switch (cc->cv_line2x) {
+    case 1:
+        vmode_hv_mult(vm_out, 1, 2);
+        vm_out->timings.v_total = 525;
+        vm_out->vic = HDMI_480p60;
+        break;
+    case 2:
+    case 3:
+        vmode_hv_mult(vm_out, 1, cc->cv_line2x+1);
+        vm_out->vic = HDMI_Unknown;
+        break;
+    default:
+        vmode_hv_mult(vm_out, 2, 1);    // 858 -> 1716 clocks at 27MHz
+        break;
+    }
     vm_out->ar.h = 4;
     vm_out->ar.v = 3;
     vm_conf->ds_csync = cc->ds_csync;

@@ -83,6 +83,7 @@ const settings_t ts_default = {
     .osd_status_timeout = 1,
     .osd_highlight_color = 4,
     .auto_av2_ypbpr = 1,
+    .def_input = AV2_RGsB,      // CVBS firmware: AV2 composite / S-Video only
 };
 
 alt_u8 profile_sel, profile_sel_menu, sd_profile_sel_menu, input_profiles[AV_LAST], lt_sel;
@@ -248,6 +249,9 @@ inline void TX_enable(tx_mode_t mode)
 #define DS_PLL_PCLK_MAX  66000000UL    // see pclk_5x in ossc.sdc
 static pll_config_t ds_pll_cfg;
 static uint8_t ds_pll_active;
+static uint8_t ds_pll_tp;               // custom configuration for the safe screen (CVBS Line3x)
+static const char *ds_safe_reason = "";
+void show_safe_screen(const char *reason);
 
 static void ds_pll_put(uint8_t *bits, int *pos, uint32_t val, int nbits) {
     int i;
@@ -298,7 +302,7 @@ int pll_reconfigure(uint8_t mult, uint32_t pclk_i_hz, uint8_t bwsel)
     static pll_config_t loaded_custom;
 
     if (ds_pll_active || (mult > 1) || ((bwsel == 1) && (pclk_i_hz < 40000000UL)) || (cm.avinput == AV_TESTPAT) || ds_safe_screen) {
-        if (ds_pll_active && (cm.avinput != AV_TESTPAT) && !ds_safe_screen)
+        if (ds_pll_active && (((cm.avinput != AV_TESTPAT) && !ds_safe_screen) || ds_pll_tp))
             id = DS_PLL_CUSTOM_ID;
         else if ((mult == 2) && (pclk_i_hz > 50000000UL))
             id = ((bwsel+1)*7) - 1;
@@ -541,6 +545,7 @@ status_t get_status(tvp_sync_input_t syncinput)
         int cv_changed = memcmp(&tc.cv_std, &cm.cc.cv_std, sizeof(avconfig_t) - offsetof(avconfig_t, cv_std)) ||
                          (tc.cv_sharp != cm.cc.cv_sharp);
         int ds_csync_changed = (tc.ds_csync != cm.cc.ds_csync);
+        int cv_out_changed = (tc.cv_line2x != cm.cc.cv_line2x);
         int ds_range_changed = (tc.ds_out_range != cm.cc.ds_out_range);
         int ds_tp_changed = (tc.ds_tp_sel != cm.cc.ds_tp_sel);
 
@@ -549,6 +554,9 @@ status_t get_status(tvp_sync_input_t syncinput)
 
         if (ds_csync_changed || ds_range_changed || ds_tp_changed || cv_changed)
             update_sc_config();
+        // safe screen shown at the selected CVBS output: redo it
+        if (ds_safe_screen && cv_out_changed)
+            show_safe_screen(ds_safe_reason);
         if (ds_range_changed) {
             hdmitx_rgb_limited = (tc.ds_out_range != 0);
             if (tc.tx_mode != TX_DVI)
@@ -779,14 +787,33 @@ void show_safe_screen(const char *reason)
     cm.id = -1;
 
     // test pattern generator + PLL reference = 27MHz, 15kHz watchdog on
-    sys_ctrl &= ~(VIDGEN_OFF | WD_BYPASS);
+    // (CVBS firmware: off with a line multiplied Output, the pattern is
+    // shown at that output)
+    sys_ctrl &= ~VIDGEN_OFF;
+    if (cm.cc.cv_line2x)
+        sys_ctrl |= WD_BYPASS;
+    else
+        sys_ctrl &= ~WD_BYPASS;
     IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, sys_ctrl);
     usleep(10);
 
     ds_pll_active = 0;
+    ds_pll_tp = 0;
     get_testpattern_mode(&cm.cc, &vmode_in, &vmode_out, &vm_conf);
     cm.pclk_o_hz = 27000000UL;
-    pll_reconfigure(1, cm.pclk_o_hz, 0);    // PLL 1x from 27MHz
+    if (cm.cc.cv_line2x == 2) {
+        // Line3x: 40.5MHz = 3/2 x 27MHz on the custom PLL configuration
+        ds_pll_make(3, 90, 20, &ds_pll_cfg);
+        ds_pll_active = ds_pll_tp = 1;
+        cm.pclk_o_hz = 40500000UL;
+        pll_reconfigure(1, cm.pclk_o_hz, 0);
+    } else if (cm.cc.cv_line2x == 3) {
+        cm.pclk_o_hz = 54000000UL;
+        pll_reconfigure(2, 27000000UL, 0);   // Line4x: PLL 2x from 27MHz
+    } else {
+        pll_reconfigure(1, cm.pclk_o_hz, 0);    // PLL 1x from 27MHz
+    }
+    ds_safe_reason = reason;
     update_osd_size(&vmode_out);
     update_sc_config();
     TX_SetPixelRepetition(0, 0);
@@ -1088,7 +1115,8 @@ void program_mode()
     cm.pclk_o_hz = calculate_pclk(pclk_i_hz, &vmode_out, &vm_conf);
     // native sampling: output on the FPGA PLL at an exact ratio of the ADC clock
     // (also the CVBS Line3x / Line4x output: 3/2 / 2 of the 27MHz ADC clock)
-    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || (cv_mode && (cm.cc.cv_line2x >= 3)));
+    ds_pll_tp = 0;
+    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || (cv_mode && (cm.cc.cv_line2x >= 2)));
     if (ds_pll_active) {
         ds_pll_make(vm_conf.ds_pll_n, vm_conf.ds_pll_m, vm_conf.ds_pll_c, &ds_pll_cfg);
         cm.pclk_o_hz = (uint32_t)(((uint64_t)pclk_i_hz*vm_conf.ds_pll_m)/((uint32_t)vm_conf.ds_pll_n*vm_conf.ds_pll_c));
@@ -1529,8 +1557,11 @@ void update_settings(int init_setup) {
         osd->osd_config.highlight_color = 2+ts.osd_highlight_color;
         refresh_osd();
     }
+    // CVBS firmware: AV2 composite / S-Video only; Initial input AV2_RGsB+1
+    // = last used
     if (init_setup)
-        target_input = (ts.def_input == AV_LAST) ? last_input : ts.def_input;
+        target_input = ((ts.def_input == AV2_YPBPR) || (ts.def_input == AV2_RGsB)) ? ts.def_input :
+                       (((last_input == AV2_YPBPR) || (last_input == AV2_RGsB)) ? last_input : AV2_RGsB);
 
     memcpy(&cs, &ts, sizeof(settings_t));
 }
@@ -1583,7 +1614,8 @@ int main(int argc, char **argv, char **envp)
         start_ts = alt_timestamp();
 
         // Auto input switching
-        if ((cs.auto_input != AUTO_OFF) && (cm.avinput != AV_TESTPAT) && !cm.sync_active && !menu_active
+        // CVBS firmware: no input autodetection (composite and S-Video share the Y input)
+        if (0 && (cs.auto_input != AUTO_OFF) && (cm.avinput != AV_TESTPAT) && !cm.sync_active && !menu_active
             && (alt_timestamp() >= auto_input_timestamp + 300 * (alt_timestamp_freq() >> 10)) && (auto_input_ctr < AUTO_MAX_COUNT)) {
 
             // Keep switching on the same physical input when set to Current input or a short time after losing sync.

@@ -1,6 +1,22 @@
 Changelog
 =========
 
+CVBS decoder 0.35
+-----------------
+
+### Changed
+- Output: 15kHz, Line2x 31kHz, Line3x 47kHz, Line4x 63kHz. Line2x is the
+  CEA 720x480p / 720x576p at 27MHz of 0.32-0.34 "Line2x 720"; the 1440 wide
+  Line2x at 54MHz is gone (no visible difference with composite / S-Video, a
+  less standard signal). Saved settings of 0.34 are converted (settings v5).
+- The test pattern / NO SYNC / Unsupported screens are shown at the selected
+  output (480p, 786 or 1048 lines) instead of 240p, so that an HDMI TV is not
+  switched to 240p when the source is off; shown again when Output changes.
+- Inputs: AV2 composite and AV2 S-Video only (remote keys 5 / 2, the input
+  button toggles them); AV1 / AV3 and the input autodetection are gone (the
+  autodetection could not tell composite from S-Video on the same Y input).
+  Initial input: AV2 Composite (default), AV2 S-Video or Last used.
+
 CVBS decoder 0.34
 -----------------
 
