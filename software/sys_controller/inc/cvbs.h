@@ -52,6 +52,9 @@ void cvbs_set_input(uint16_t samples_per_line, uint32_t totlines, uint8_t interl
 void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc);
 // Line2x test output selected and possible (decoder input, 15kHz SD mode)
 int cvbs_line2x(avconfig_t *cc, video_group group);
+void cvbs_set_ll_ilace(uint8_t on);
+int cvbs_ll_ilace();
+int cvbs_xtal(const avconfig_t *cc);
 // periodic: colour system detection. Returns 1 if the registers must be updated.
 int cvbs_update();
 // name of the colour system being decoded

@@ -1,6 +1,17 @@
 Changelog
 =========
 
+CVBS decoder 1.0.1
+------------------
+
+### Fixed
+- Interlaced sources (480i / 576i, e.g. Wii) on 15kHz CRTs with the 27MHz
+  crystal sample clock: fields on the same lines / inverted (the output
+  resync at every frame cut the last line short). These sources are now
+  sampled line-locked on the 15kHz output, whatever Sample clock says
+  (<Xtal timing> shows "Line-locked (i)"); 240p / 288p and Line2x / 3x / 4x
+  keep the crystal clock.
+
 CVBS decoder 1.0
 ----------------
 

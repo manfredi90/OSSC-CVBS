@@ -1006,7 +1006,7 @@ int cvbs_xtal_diag() {
         return 1;
     }
     if (!cvx_active) {
-        strncpy(func_ret_status, "Auto not active", LCD_ROW_LEN+1);
+        strncpy(func_ret_status, cvbs_ll_ilace() ? "Line-locked (i)" : "Auto not active", LCD_ROW_LEN+1);
         return 1;
     }
     lp = cvx_measure_lp();
@@ -1069,6 +1069,10 @@ void program_mode()
         show_safe_screen("  Unsupported");
         return;
     }
+    // interlaced source on the 15kHz output: line-locked (see cvbs_xtal)
+    cvbs_set_ll_ilace(cv_mode && !cm.progressive && !cvbs_line2x(&cm.cc, vmode_in.group));
+    cvx_active = 0;
+
     vmode_changed = !(cm.id == retval);
     cm.id = retval;
     vm_sel = cm.id;
@@ -1092,7 +1096,7 @@ void program_mode()
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
     // keeps the preset), the output is resynced at every input frame (FPGA).
-    if (cv_mode && cm.cc.cv_xtal && cm.totlines) {
+    if (cv_mode && cvbs_xtal(&cm.cc) && cm.totlines) {
         uint32_t lp = cvx_measure_lp();
         if (!lp)
             lp = cvx_lp_from(cm.pcnt_field, 1);     // not stable: checked again by cvx_check()

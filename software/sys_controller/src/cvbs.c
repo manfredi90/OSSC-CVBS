@@ -89,6 +89,21 @@ int cvbs_group_ok(video_group group) {
     return (group == GROUP_240P) || (group == GROUP_288P) || (group == GROUP_480I) || (group == GROUP_576I);
 }
 
+// 27MHz crystal sample clock in use: the setting, except for interlaced
+// sources (480i / 576i) on the 15kHz output, which are line-locked
+// (1.0.1: with the crystal the output resync at every frame cut the last
+// line short and 15kHz CRTs lost the field parity)
+static uint8_t cv_ll_ilace;
+void cvbs_set_ll_ilace(uint8_t on) {
+    cv_ll_ilace = on;
+}
+int cvbs_ll_ilace() {
+    return cv_ll_ilace;
+}
+int cvbs_xtal(const avconfig_t *cc) {
+    return cc->cv_xtal && !cv_ll_ilace;
+}
+
 int cvbs_line2x(avconfig_t *cc, video_group group) {
     return cv_mode && cc->cv_line2x && cvbs_group_ok(group);
 }
@@ -112,7 +127,7 @@ void cvbs_tvp_setup(uint8_t h_synclen_px, uint16_t h_samplerate, uint32_t refclk
 
     // sample clock: H-PLL (line-locked) or the 27MHz crystal on EXT_CLK (no
     // H-PLL jitter: the colour subcarrier phase stays steady along the line)
-    tvp_set_ext_pclk(cv_mode && cc->cv_xtal);
+    tvp_set_ext_pclk(cv_mode && cvbs_xtal(cc));
 
     if (!cv_mode)
         return;
@@ -152,7 +167,7 @@ void cvbs_tvp_setup(uint8_t h_synclen_px, uint16_t h_samplerate, uint32_t refclk
     tvp_writereg(TVP_CLAMPWIDTH, CV_CLAMP_WIDTH);
     tvp_writereg(TVP_ALCEN, 0x00);
 
-    printf("CVBS: %s, ADC gain %u, offset %d, clamp pos %d, %s clock\n", (cv_mode == 2) ? "S-Video" : "composite", (unsigned)cg, (int)cc->cv_adcofs - SIGNED_NUMVAL_ZERO, clamp_pos, cc->cv_xtal ? "27MHz xtal" : "H-PLL");
+    printf("CVBS: %s, ADC gain %u, offset %d, clamp pos %d, %s clock\n", (cv_mode == 2) ? "S-Video" : "composite", (unsigned)cg, (int)cc->cv_adcofs - SIGNED_NUMVAL_ZERO, clamp_pos, cvbs_xtal(cc) ? "27MHz xtal" : "H-PLL");
 }
 
 void cvbs_set_input(uint16_t samples_per_line, uint32_t totlines, uint8_t interlaced, uint32_t pcnt_field) {
@@ -226,7 +241,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
 
     // sample rate x64: the crystal (27MHz xtal sample clock), else from the
     // measured field period (27MHz clocks)
-    if (cc->cv_xtal) {
+    if (cvbs_xtal(cc)) {
         fs_x64 = (uint64_t)TVP_EXTCLK_HZ * 64;
         *inc = (uint32_t)((fsc_x64 << 32) / fs_x64);
     } else if (in_pcnt && in_totlines && in_samples) {
@@ -262,7 +277,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     // reference low-pass over lines: with the crystal clock the burst phase
     // is the same on every line (frequency loop); line-locked it moves
     if (cc->cv_reffilt == 0)
-        rf = cc->cv_xtal ? 1 : 0;
+        rf = cvbs_xtal(cc) ? 1 : 0;
     else
         rf = (cc->cv_reffilt == 2);
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
@@ -295,9 +310,9 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         (pal << 2) |
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
                         ((cc->cv_notch_off == 1) << 4) |
-                        ((cc->cv_xtal != 0) << 5) |
-                        ((uint32_t)(cc->cv_xtal != 0) << 7) |
-                        (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
+                        ((cvbs_xtal(cc) != 0) << 5) |
+                        ((uint32_t)(cvbs_xtal(cc) != 0) << 7) |
+                        (((cvbs_xtal(cc) != 0) && (cc->cv_retime_off == 0)) << 6) |
                         ((uint32_t)cc->cv_bgate << 8) |
                         (((uint32_t)bright & 0x3f) << 16) |
                         ((uint32_t)(cc->cv_edge & 3) << 22)) : 0;
