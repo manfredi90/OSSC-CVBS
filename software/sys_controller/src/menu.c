@@ -109,7 +109,7 @@ static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
-static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line2x 720", "Line3x 47kHz" };
+static const char* const cv_out_desc[] = { "15kHz", "Line2x 1440", "Line2x 720", "Line3x 47kHz", "Line4x 63kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 
@@ -285,20 +285,14 @@ MENU(menu_settings, P99_PROTECT({ \
     { "<Reset settings>",                       OPT_FUNC_CALL,          { .fun = { ds_settings_reset, NULL } } },
 }))
 
-MENU(menu_downscaler, P99_PROTECT({ \
-    { "Output",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_line2x,    OPT_WRAP,   SETTING_ITEM(cv_out_desc) } } },
-    { "Color system",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_std,       OPT_WRAP,   SETTING_ITEM(cv_std_desc) } } },
-    { "Saturation",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sat,        OPT_NOWRAP, 0, CV_SAT_MAX, cv_pct5_disp } } },
-    { "Hue",                                    OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_hue,        OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_HUE_RANGE, SIGNED_NUMVAL_ZERO+CV_HUE_RANGE, cv_deg_disp } } },
-    { "Contrast",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_contrast,   OPT_NOWRAP, CV_CONTRAST_MIN, CV_CONTRAST_MAX, cv_pct2_disp } } },
-    { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
-    { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
-    { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
-    { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
-    { "<Diagnostics   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
+MENU(menu_cvbs_diag, P99_PROTECT({ \
+    { "<Decoder diag. >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
     { "<Sync diag.    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_sync_diag, NULL } } },
     { "<Xtal timing   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_xtal_diag, NULL } } },
     { "<Event count.  >",                       OPT_FUNC_CALL,          { .fun = { cvbs_event_diag, NULL } } },
+}))
+
+MENU(menu_cvbs_adv, P99_PROTECT({ \
     { "ADC gain",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcgain,    OPT_NOWRAP, 0, 15, cv_gain_disp } } },
     { "ADC offset",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcofs,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE, SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE, signed_disp } } },
     { "Burst position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bgate,      OPT_NOWRAP, CV_BGATE_MIN, CV_BGATE_MAX, value_disp } } },
@@ -307,6 +301,19 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Line re-timing",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_retime_off, OPT_WRAP,  SETTING_ITEM(on_off_desc) } } },
     { "Ref. filter",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_reffilt,   OPT_WRAP,   SETTING_ITEM(cv_reffilt_desc) } } },
     { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },
+    { "Diagnostics    >",                       OPT_SUBMENU,            { .sub = { &menu_cvbs_diag, NULL, NULL } } },
+}))
+
+MENU(menu_downscaler, P99_PROTECT({ \
+    { "Output",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_line2x,    OPT_WRAP,   SETTING_ITEM(cv_out_desc) } } },
+    { "Color system",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_std,       OPT_WRAP,   SETTING_ITEM(cv_std_desc) } } },
+    { "Saturation",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sat,        OPT_NOWRAP, 0, CV_SAT_MAX, cv_pct5_disp } } },
+    { "Hue",                                    OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_hue,        OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_HUE_RANGE, SIGNED_NUMVAL_ZERO+CV_HUE_RANGE, cv_deg_disp } } },
+    { "Contrast",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_contrast,   OPT_NOWRAP, CV_CONTRAST_MIN, CV_CONTRAST_MAX, cv_pct2_disp } } },
+    { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
+    { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
+    { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
+    { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
     { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },
     { "H. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_hpos,       OPT_NOWRAP, DS_HPOS_MIN, DS_HPOS_MAX, signed_disp } } },
@@ -316,6 +323,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
 
 MENU(menu_main, P99_PROTECT({ \
     {     "CVBS decoder   >",                   OPT_SUBMENU,            { .sub = { &menu_downscaler, NULL, NULL } } },
+    {     "CVBS advanced  >",                   OPT_SUBMENU,            { .sub = { &menu_cvbs_adv, NULL, NULL } } },
     { LNG("Video in opt.  >","ﾀｲｵｳｴｲｿﾞｳ     >"),  OPT_SUBMENU,            { .sub = { &menu_vinput_opt, NULL, NULL } } },
     { LNG("Sync opt.      >","ﾄﾞｳｷｵﾌﾟｼｮﾝ    >"),  OPT_SUBMENU,            { .sub = { &menu_sync, NULL, NULL } } },
     { LNG("Output opt.    >","ｼｭﾂﾘｮｸｵﾌﾟｼｮﾝ  >"),  OPT_SUBMENU,            { .sub = { &menu_output, NULL, NULL } } },

@@ -1,6 +1,23 @@
 Changelog
 =========
 
+CVBS decoder 0.34
+-----------------
+
+### New
+- Output > Line4x 63kHz: as Line3x, each line shown 4 times, output at 54MHz
+  (2x the ADC clock), 858 clocks per line, 1048 / 1248 lines (960 / 1152
+  active). Not a CEA mode.
+
+### Changed
+- Output is saved with the settings (was a test option, 15kHz at every
+  boot). "Line2x 31kHz" is now "Line2x 1440".
+- Menu: the technical decoder items moved to a new main menu entry "CVBS
+  advanced" (ADC gain / offset, burst / clamp position, sample clock, line
+  re-timing, ref. filter, Adv. timing, Diagnostics submenu with Decoder diag.,
+  Sync diag., Xtal timing, Event count.). "CVBS decoder" keeps the user
+  settings.
+
 CVBS decoder 0.33
 -----------------
 
