@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 0.42
+-----------------
+
+### Changed
+- Output line fraction (0.41) on the 15kHz output only. Line2x / 3x / 4x:
+  whole lines as before (an HDMI TV shifted the lines one clock longer by a
+  pixel: wobbly outlines on the MiSTer menu and Mega Drive; the interlaced
+  fields are line doubled there, the resync cut is harmless).
+
 CVBS decoder 0.41
 -----------------
 

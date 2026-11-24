@@ -917,10 +917,17 @@ static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256) {
 // output line length with a fraction (0.41): whole part in *h (never below the
 // preset), fraction in 1/256 clock, +2/256 so that the output is never ahead
 // of the source (the resync then cuts a few clocks, not hundreds). Below the
-// preset (SNES ~1714.7): the preset, no fraction (as before).
+// preset (SNES ~1714.7): the preset, no fraction (as before). 15kHz output
+// only (CRTs: interlaced fields); Line2x / 3x / 4x: whole lines as before
+// (0.41 test: an HDMI TV shifted the lines one clock longer by a pixel).
+static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256);
 static uint8_t cvx_hfrac(uint16_t pre, uint32_t lp_x256, uint16_t *h) {
     uint64_t den = (uint64_t)cvx_pll_h_total;
     uint32_t lo = (uint32_t)(((uint64_t)pre * lp_x256) / den) + 2;    // output line x256
+    if (cm.cc.cv_line2x) {
+        *h = cvx_htot(pre, lp_x256);
+        return 0;
+    }
     if ((lo >> 8) < pre) {
         *h = pre;
         return 0;
@@ -934,6 +941,9 @@ static uint8_t cvx_hfrac(uint16_t pre, uint32_t lp_x256, uint16_t *h) {
 // a line period at a rounding step, e.g. PC Engine ~1716.2, must not toggle)
 static int cvx_htot_ok(uint32_t lp) {
     uint16_t h;
+    if (cm.cc.cv_line2x)
+        return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_ho >= cvx_htot(cvx_ho_pre, lp)) &&
+               (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho <= cvx_htot(cvx_ho_pre, lp + 64));
     cvx_hfrac(cvx_ho_pre, lp, &h);
     return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho == h);
 }
