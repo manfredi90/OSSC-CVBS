@@ -232,7 +232,7 @@ def main():
     s = st[-1]
     corr = ((s >> 27) & 0x1f)
     corr = corr - 32 if corr & 0x10 else corr
-    kk = (s >> 16) & 0xff
+    kk = 0
     print('status: burst %d blank %d black %+d kill %d alt %d corr_sat %d corr %d' % (
         s & 0xff, (s >> 8) & 0xff, kk - 256 if kk & 0x80 else kk, (s >> 24) & 1, (s >> 25) & 1, (s >> 26) & 1, corr))
     worst = 0

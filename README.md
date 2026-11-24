@@ -80,7 +80,7 @@ CVBS advanced menu
 | Line re-timing | On, Off | 27MHz xtal only: each line is re-timed on its sync trailing edge (fractional delay of the luma), so the picture does not shake. Off only for tests. Default On |
 | Ref. filter | Auto, Off, On | colour reference averaged over the lines (less line to line colour noise). Auto: On with the xtal clock, Off line-locked. Default Auto |
 | Adv. timing | | as in the OSSC firmware |
-| Diagnostics > Decoder diag. | | `Bn` burst level, `Ln` blank level (ADC code), `K±n` darkest luma of the picture in ADC codes above the blank level (show a black screen: ~0 = no setup, ~+9 at ADC gain 2 = NTSC 7.5 IRE setup; about -2 of measuring bias), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC), `3`: 3-line luma notch |
+| Diagnostics > Decoder diag. | | `Bn` burst level, `Ln` blank level (ADC code), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC), `3`: 3-line luma notch |
 | Diagnostics > Sync diag. | | per second: `O` output frames, `F` input frames, `S` output resyncs (xtal clock: one per input frame) |
 | Diagnostics > Xtal timing | | `L` line period (27MHz clocks), `O` output line length (`O..>..`: being redone) |
 | Diagnostics > Event count. | | since power on: `P` setups, `U` register updates, `X` output resyncs out of place |

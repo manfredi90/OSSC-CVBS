@@ -60,8 +60,7 @@ module cvbs_decoder #(
     output reg [7:0] G_o,
     output reg [7:0] B_o,
     output [SIDE_W-1:0] side_o,
-    // [7:0] burst level, [15:8] blank level, [23:16] darkest luma of the last
-    // field (signed, relative to the blank level),
+    // [7:0] burst level, [15:8] blank level, [23:16] (0),
     // [24] colour killer, [25] PAL alternation seen, [26] frequency loop at
     // (0), [31:27] (0)
     output reg [31:0] status
@@ -421,22 +420,16 @@ end
 // with the Z of the previous line, read as cl_mem
 (* ramstyle = "M9K" *) reg [31:0] cl2_mem [0:511];
 reg [31:0] cl2_q;
-reg signed [15:0] cl2_loI, cl2_loQ, cl2_hiI, cl2_hiQ;
+// (one value per group of 4 samples, not interpolated: logic space)
 reg signed [15:0] zIp, zQp;         // Z of two lines before
-wire signed [16:0] cl2_mI = cl2_loI + cl2_hiI;
-wire signed [16:0] cl2_mQ = cl2_loQ + cl2_hiQ;
 always @(posedge clk) begin
     cl2_q <= cl2_mem[cl_ra];
     if (h[1:0] == 2'd0)
         cl2_mem[h[10:2]] <= {zIo, zQo};
-    if (h_f == 2'd0) begin
-        cl2_loI <= cl2_hiI;
-        cl2_loQ <= cl2_hiQ;
-        cl2_hiI <= cl2_q[31:16];
-        cl2_hiQ <= cl2_q[15:0];
+    if (h_f == 2'd1) begin
+        zIp <= cl2_q[31:16];
+        zQp <= cl2_q[15:0];
     end
-    zIp <= (h_f == 2'd0) ? cl2_hiI : (h_f[1] ? cl2_mI[16:1] : cl2_loI);
-    zQp <= (h_f == 2'd0) ? cl2_hiQ : (h_f[1] ? cl2_mQ[16:1] : cl2_loQ);
 end
 
 // Z for the luma notch (remodulation) of the line being received, one clock
@@ -463,21 +456,22 @@ wire [15:0] nBI = zIo[15] ? -zIo : zIo;
 wire [15:0] nBQ = zQo[15] ? -zQo : zQo;
 wire [15:0] nCI = zIp[15] ? -zIp : zIp;
 wire [15:0] nCQ = zQp[15] ? -zQp : zQp;
-reg [16:0] nmA, nmB, nmC;
+reg [15:0] nmA, nmB, nmC;
 reg signed [16:0] nSI, nSQ;
-reg signed [17:0] n3I, n3Q;
-reg signed [15:0] nZI, nZQ;
+reg signed [15:0] nZI, nZQ, nPI, nPQ;
 always @(posedge clk) begin
-    nmA <= (nAI > nAQ) ? ({1'b0, nAI} + {2'b0, nAQ[15:1]}) : ({1'b0, nAQ} + {2'b0, nAI[15:1]});
-    nmB <= (nBI > nBQ) ? ({1'b0, nBI} + {2'b0, nBQ[15:1]}) : ({1'b0, nBQ} + {2'b0, nBI[15:1]});
-    nmC <= (nCI > nCQ) ? ({1'b0, nCI} + {2'b0, nCQ[15:1]}) : ({1'b0, nCQ} + {2'b0, nCI[15:1]});
+    nmA <= (nAI > nAQ) ? nAI : nAQ;
+    nmB <= (nBI > nBQ) ? nBI : nBQ;
+    nmC <= (nCI > nCQ) ? nCI : nCQ;
     nSI <= zI0 + zIo;
     nSQ <= zQ0 + zQo;
-    n3I <= zI0 + zIo + zIp;
-    n3Q <= zQ0 + zQo + zQp;
     nZI <= zI0;
     nZQ <= zQ0;
+    nPI <= zIp;
+    nPQ <= zQp;
 end
+wire signed [17:0] n3I = nSI + nPI;
+wire signed [17:0] n3Q = nSQ + nPQ;
 wire n_ab = ({1'b0, nmA} <= {nmB, 1'b0}) & ({1'b0, nmB} <= {nmA, 1'b0});
 wire n_ac = ({1'b0, nmA} <= {nmC, 1'b0}) & ({1'b0, nmC} <= {nmA, 1'b0});
 wire n_comb = ~pal & ~notch_simple & n_ab;
@@ -939,17 +933,7 @@ always @(posedge clk) begin
 end
 
 // ---------------------------------------------------------------------------
-// status: darkest luma of the last field, PAL alternation
-// darkest luma (relative to the blank level) in the active area of the last
-// field: minimum of the averages of 16-sample blocks of the luma before the
-// sharpness (yA): a black area of the source reads its black level (NTSC
-// setup: ~+9 codes at ADC gain 2); blocks across edges (notch ringing) are
-// not the darkest ones. Lines 24-250, h 300-1600.
-reg signed [14:0] k_sum;
-reg signed [14:0] k_min;
-reg [3:0] k_cnt;
-reg signed [7:0] k_l;
-wire k_act = (st_line > 9'd24) && (st_line < 9'd250) && (h > 12'd300) && (h < 12'd1600);
+// status: PAL alternation
 // colour killer for the status: sampled in the middle of the field (the
 // killer is briefly on after the vsync, where there is no burst, and the CPU
 // reads the status right after the vsync)
@@ -966,15 +950,7 @@ always @(posedge clk) begin
         st_line <= st_line + 1'b1;
     if ((hs0_prev & ~hs0) && (st_line == 9'd120))
         kill_st <= kill;
-    k_cnt <= k_cnt + 1'b1;
-    k_sum <= (k_cnt == 4'd0) ? $signed({{4{yA[10]}}, yA}) : (k_sum + yA);
-    if (vs_fall) begin
-        k_l <= ($signed(k_min[14:4]) > 11'sd127) ? 8'sd127 : (($signed(k_min[14:4]) < -11'sd128) ? -8'sd128 : k_min[11:4]);
-        k_min <= 15'sd16383;
-    end else if (k_act && (k_cnt == 4'd0) && (k_sum < k_min)) begin
-        k_min <= k_sum;
-    end
-    status <= {corr[21:17], 1'b0, alt_ok, kill_st, k_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
+    status <= {corr[21:17], 1'b0, alt_ok, kill_st, 8'h0, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
 end
 
 
@@ -986,8 +962,8 @@ initial begin
     Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
-    cl2_q = 0; cl2_loI = 0; cl2_loQ = 0; cl2_hiI = 0; cl2_hiQ = 0; zIp = 0; zQp = 0; cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
-    alt_cnt = 0; bad_cnt = 0; alt_ok = 0; st_line = 0; k_min = 0; k_l = 0; k_sum = 0; k_cnt = 0; kill_st = 1;
+    cl2_q = 0; zIp = 0; zQp = 0; cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
+    alt_cnt = 0; bad_cnt = 0; alt_ok = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
     se_tip = 0; se_thr2 = 0; se_ms = 0; se_arm = 0; se_found = 0; se_k = 0; se_wait = 0; se_n = 0; se_rem = 0; se_den = 0; se_q = 0; se_cnt = 0;

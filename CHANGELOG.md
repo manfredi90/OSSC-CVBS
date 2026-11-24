@@ -12,6 +12,8 @@ CVBS decoder 0.38
   period (`3` at the end of Decoder diag.). Three lines of similar colour
   magnitude: average of three; else the 2-line rule; else the plain notch.
   Second chroma line memory (Z of two lines before).
+- Decoder diag.: the `K` black level readout of 0.37 is gone (logic space
+  for the 3-line notch).
 
 CVBS decoder 0.37
 -----------------

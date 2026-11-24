@@ -55,7 +55,6 @@ uint8_t cv_mode;
 // decoder status (lt_status register)
 #define ST_BURST(s)     ((s) & 0xff)
 #define ST_BLANK(s)     (((s) >> 8) & 0xff)
-#define ST_BLACK(s)     (((s) >> 16) & 0xff)   // signed
 #define ST_KILL(s)      (((s) >> 24) & 1)
 #define ST_ALT(s)       (((s) >> 25) & 1)
 #define ST_CSAT(s)      (((s) >> 26) & 1)
@@ -353,8 +352,7 @@ int cvbs_update() {
 
 void cvbs_diag_str(char *s, int len) {
     uint32_t st = sc->lt_status.data;
-    // K: darkest luma of the picture, ADC codes above the blank level
-    sniprintf(s, len, "B%u L%u K%+d %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st), (int)(int8_t)ST_BLACK(st),
+    sniprintf(s, len, "B%u L%u %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st),
               ST_KILL(st) ? 'K' : (ST_ALT(st) ? 'P' : 'N'));
     if (notch_3l && (strlen(s) + 2 <= (unsigned)len))
         strcat(s, "3");
