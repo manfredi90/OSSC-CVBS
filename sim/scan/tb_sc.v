@@ -53,9 +53,9 @@ initial begin
     if (!$value$plusargs("RESYNC=%d", RESYNC)) RESYNC = 1;
     f = $fopen("sc_out.txt", "w");
     // power-up state (registers start at 0 in the FPGA)
-    dut.h_cnt = 0; dut.v_cnt = 0; dut.dst_fid = 0; dut.src_fid = 0; dut.sl_lag = 0; dut.sl_lag2 = 0; dut.sl_cut = 0;
+    dut.h_cnt = 0; dut.v_cnt = 0; dut.dst_fid = 0; dut.src_fid = 0; dut.fl_drop = 0; dut.fl_ins = 0;
     dut.frame_change_sync1_reg = 0; dut.frame_change_sync2_reg = 0; dut.frame_change_prev = 0; dut.frame_change_resync = 0;
-    dut.in_field = 0; dut.ds_resync_cnt = 0; dut.sl_cap = 0; dut.resync_strobe = 0;
+    dut.in_field = 0; dut.ds_resync_cnt = 0; dut.fl_cap = 0; dut.resync_strobe = 0;
     acc = 64'd1000 << 8;
 end
 always @(posedge clk) begin

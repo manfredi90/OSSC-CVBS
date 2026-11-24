@@ -16,3 +16,19 @@ Plusargs: LP (line period x256), LINES (per input frame), NF (frames), JIT
 (input frame start jitter, clocks), HTOT / HACT / HSL / HBP, VTOT / VACT / VSL
 / VBP, ILACE, RESYNC. The line buffer, the test pattern and the multipliers
 are stubs (no picture data).
+
+Line buffer simulation
+----------------------
+
+`tb_lb.v` with a behavioral line buffer (`stubs.v`: 2 lines, 4 for input
+lines up to 1024 samples): input lines tagged with their field / line
+number (frontend timing: frame change at the start of input line 1, field B
+263 lines later), output picture line reads logged to `lb_out.txt`;
+`anlb.py` checks that every output line shows one whole input line, in
+order (bob: the first line may be the previous field's last one), and the
+data age. `runall.sh` runs 15kHz (480i, 240p, 576i, 288p) and Line2x / 3x /
+4x cases with real and worst-case line periods.
+
+    python3 mkcopy.py
+    verilator --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module tb -I../../rtl tb_lb.v sc_sim.v stubs.v -o tblb
+    NF=24 ./runall.sh

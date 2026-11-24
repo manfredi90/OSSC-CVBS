@@ -903,22 +903,29 @@ static uint32_t cvx_measure_lp() {
     return 0;
 }
 
-// line length for a preset h_total: rounded up (output lines never shorter
-// than the input ones: the output would read lines before they are written)
-// and never below the preset (tests of 0.20 / 0.21: SNES ~1714 clocks per
-// line, no picture with a shorter output line, fine with the preset)
+// line length for a preset h_total: rounded up and never below the preset
+// (frontend: tests of 0.20 / 0.21)
 static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256) {
     uint64_t den = (uint64_t)cvx_pll_h_total << 8;
     uint16_t h = (uint16_t)(((uint64_t)pre * lp_x256 + den - 1) / den);
     return (h > pre) ? h : pre;
 }
 
-// applied line lengths still right for the line period lp: not too short,
-// not longer than needed by more than 1/4 clock per input line (hysteresis:
-// a line period at a rounding step, e.g. PC Engine ~1716.2, must not toggle)
+// output line length: the nearest whole number of clocks to the source line
+// (0.45: the output frame lock adds / takes out whole lines, FPGA; the
+// output may run ahead of the input, 0.20-0.44 rounded up)
+static uint16_t cvx_htot_out(uint16_t pre, uint32_t lp_x256) {
+    uint64_t den = (uint64_t)cvx_pll_h_total << 8;
+    return (uint16_t)(((uint64_t)pre * lp_x256 + den/2) / den);
+}
+
+// applied line lengths still right for the line period lp, with a
+// hysteresis of 1/8 clock per input line (a line period at a rounding step,
+// e.g. PC Engine ~1716.2, must not toggle; the output frame lock allows up
+// to ~0.6 clock per line, see the simulation in sim/scan)
 static int cvx_htot_ok(uint32_t lp) {
-    return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_ho >= cvx_htot(cvx_ho_pre, lp)) &&
-           (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho <= cvx_htot(cvx_ho_pre, lp + 64));
+    return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) &&
+           (cvx_ho >= cvx_htot_out(cvx_ho_pre, lp - 32)) && (cvx_ho <= cvx_htot_out(cvx_ho_pre, lp + 32));
 }
 
 // main loop: line period over 16 samples 20ms apart (~0.3s, non-blocking);
@@ -1018,7 +1025,7 @@ int cvbs_xtal_diag() {
         sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
                   (unsigned)cvx_ho);
     else
-        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, lp));
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)cvx_htot_out(cvx_ho_pre, lp));
     return 1;
 }
 
@@ -1091,7 +1098,7 @@ void program_mode()
     // CVBS decoder on the 27MHz xtal clock: a line is not a whole number of
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
-    // keeps the preset), the output is resynced at every input frame (FPGA).
+    // keeps the preset), the output frame follows the input in whole lines (FPGA).
     if (cv_mode && cm.cc.cv_xtal && cm.totlines) {
         uint32_t lp = cvx_measure_lp();
         if (!lp)
@@ -1101,7 +1108,7 @@ void program_mode()
         cvx_ho_pre = vmode_out.timings.h_total;
         cvx_lp_x256 = cvx_lp_now = lp;
         cvx_hi = vmode_in.timings.h_total = cvx_htot(cvx_hi_pre, lp);
-        cvx_ho = vmode_out.timings.h_total = cvx_htot(cvx_ho_pre, lp);
+        cvx_ho = vmode_out.timings.h_total = cvx_htot_out(cvx_ho_pre, lp);
         cvx_active = 1;
         printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 100) >> 8),
                (unsigned)cvx_hi, (unsigned)cvx_ho);

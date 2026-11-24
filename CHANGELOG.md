@@ -1,6 +1,32 @@
 Changelog
 =========
 
+CVBS decoder 0.45
+-----------------
+
+### Fixed
+- 27MHz crystal clock, 15kHz CRTs: bent top of the picture with 0.44 (the
+  shortened back porch lines disturbed the horizontal flywheel). Frame lock
+  with whole lines: all output lines (blanking included) have the same
+  length, the nearest whole number of clocks to the source line; at every
+  input frame start the output position is checked and, when it is more
+  than half a line off, the next front porch gets one line more or one line
+  less. The picture keeps its place after the vsync and the vsync its place
+  in the line (480i / 576i field parity). E.g. Wii 480i: one frame of 524 /
+  526 lines every ~3s; SNES 240p: one frame of 261 / 263 lines every ~0.4s.
+- Line2x / 3x / 4x of 480i / 576i sources (bob): a lock found without a
+  resync (e.g. at power-up) could have the other source field parity (torn
+  lines). The lock now also checks it.
+
+### Changed
+- Line2x / 3x / 4x: 4-line buffer (input lines of 720 samples) and the
+  output frame starts one input line later: these modes read a line 2-4
+  times faster than it is written, 2 lines left too little room for the
+  frame lock.
+- sim/scan: line buffer simulation (tb_lb.v, anlb.py, runall.sh): which
+  input line every output picture line shows, for 15kHz and Line2x-4x
+  sources and line periods, worst cases included.
+
 CVBS decoder 0.44
 -----------------
 
