@@ -452,12 +452,8 @@ Prof_Hotkey_Prompt:
 Button_Check:
     if (btn_code & PB0_BIT)
         man_target_input = next_input;
-    // Downscaler firmware: 2nd button = output mode / format (scanlines
-    // are not available)
-    if (pb1_event == PB1_SHORT)
-        tc.ds_480i = !tc.ds_480i;
-    else if (pb1_event == PB1_LONG)
-        tc.ds_720p_ar = (tc.ds_720p_ar < 2) ? (tc.ds_720p_ar + 1) : 0;
+    // CVBS firmware: the 2nd button has no function (in the Downscaler
+    // firmware: output mode / HD format, settings unused here)
 
     // Parse UART RX buffer
     if (uart_rx_ret > 0) {

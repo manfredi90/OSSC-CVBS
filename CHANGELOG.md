@@ -6,6 +6,9 @@ CVBS decoder 0.39
 
 ### Changed
 - Edge color sup.: default Low (was Medium, a bit too strong).
+- The 2nd button on the OSSC has no function (it changed settings of the
+  Downscaler firmware, unused here, and redid the mode setup).
+- README rewritten with the structure of the Downscaler / Downscaler HD ones.
 
 CVBS decoder 0.38
 -----------------
