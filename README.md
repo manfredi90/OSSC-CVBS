@@ -97,6 +97,12 @@ Installation
    OSSC outputs the test pattern until a source is found.
 4. Press button 5 on the remote control for **AV2 Composite** or button 2 for
    **AV2 S-Video**.
+5. In the **CVBS decoder** menu, select the **Output** for your display:
+   15kHz for CRTs and 15kHz monitors, Line2x / Line3x / Line4x for HDMI TVs
+   (see **Safety**).
+6. Select the sync type with **CSync on HSYNC**: Off (H+V) for HDMI TVs, XOR /
+   AND / Standard for RGBS monitors through an HDMI→VGA DAC. Then save with
+   **Settings opt. → Save settings**.
 
 Buttons on the OSSC: the 1st one switches between AV2 Composite and AV2
 S-Video; the 2nd one has no function in this firmware. The other inputs (AV1,
