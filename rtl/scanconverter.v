@@ -67,6 +67,7 @@ module scanconverter (
     input lb_rgb,               // line buffer layout 3: RGB, one pixel per word
     input [12:0] ds_hofs,       // output position at the input frame start (clocks, 0 = line start)
     input resync_always,        // resync the output at every input frame (input clock not locked to the source)
+    input [7:0] h_frac,         // output line length fraction (1/256 clock): some lines 1 clock longer
     input ext_sync_mode,
     input ext_frame_change_i,
     input [7:0] ext_R_i,
@@ -470,6 +471,19 @@ always @(posedge PCLK_OUT_i) begin
     end
 end
 
+// Output line length with a fraction (CVBS 27MHz crystal clock): the line
+// period of the source is not a whole number of clocks. With whole lines the
+// output frame was longer than the input one by up to a clock per line, and
+// the resync at every input frame cut the last line short by hundreds of
+// clocks (Wii 480i: 1716.0 clocks per line, output 1717: ~525 clocks per
+// frame, a third of a line right before the vsync of the first field: 15kHz
+// CRTs saw the fields swapped or lost the sync). Lines of H_TOTAL clocks,
+// one clock longer at a rate of h_frac/256 (accumulator restarted at every
+// resync): the average follows the source, the resync cuts a few clocks.
+reg [7:0] hf_acc;
+reg h_ext;
+wire h_end = h_ext ? (h_cnt == H_TOTAL) : (h_cnt == H_TOTAL-1);
+
 // H/V counters
 always @(posedge PCLK_OUT_i) begin
     if (ext_sync_mode & ext_frame_change_i) begin
@@ -479,12 +493,15 @@ always @(posedge PCLK_OUT_i) begin
     end else if (~ext_sync_mode & frame_change_resync) begin
         h_cnt <= ds_hofs;
         v_cnt <= V_STARTLINE;
+        hf_acc <= 8'h0;
+        h_ext <= 1'b0;
         bfi_frame <= 0;
         src_fid <= (~interlaced_in_i | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         dst_fid <= (~V_INTERLACED | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         resync_strobe <= 1'b1;
     end else begin
-        if (h_cnt == H_TOTAL-1) begin
+        if (h_end) begin
+            {h_ext, hf_acc} <= {1'b0, hf_acc} + {1'b0, h_frac};
             if ((~V_INTERLACED & (v_cnt == V_TOTAL-1)) |
                 (V_INTERLACED & (dst_fid == FID_ODD) & (v_cnt == V_TOTAL)) |
                 (V_INTERLACED & (dst_fid == FID_EVEN) & (v_cnt == V_TOTAL-1)))

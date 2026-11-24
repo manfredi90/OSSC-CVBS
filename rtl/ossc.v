@@ -227,53 +227,6 @@ always @(posedge TVP_PCLK_i) begin
     TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
 end
 
-// Own vsync with the 27MHz crystal clock: without the H-PLL the TVP7002 vsync
-// output loses the half-line offset between the fields of interlaced sources
-// (480i / 576i: fields swapped or no picture on 15kHz CRTs; removed in 0.30,
-// back in 0.40). As in a TV, the vertical sync is taken from
-// the composite sync (SOG, active low): a sync pulse longer than 300 clocks
-// (11us, 1/6 line; hsync 4.7us) is a broad pulse. Vsync from the first one
-// (300 clocks into its half line: odd and even fields keep their half-line
-// offset) until 1.25 lines (2150 clocks) without one; fixed lengths, not
-// from the flywheel (0.24: a flywheel locked to a wrong length gave a
-// threshold below the hsync width, vsync stuck, no frame starts),
-// with the polarity of the TVP7002 vsync output (its majority level is the
-// inactive one).
-reg [10:0] vd_low;
-reg [12:0] vd_since;
-reg vd_act;
-reg [15:0] vd_pol_acc;
-wire vd_en = fw_en;
-wire vd_inact = vd_pol_acc[15];         // inactive (majority) level of the TVP vsync
-wire TVP_VS_own = vd_act ? ~vd_inact : vd_inact;
-always @(posedge TVP_PCLK_i) begin
-    if (TVP_SOG_sync2_reg)
-        vd_low <= 11'h0;
-    else if (vd_low != 11'h7ff)
-        vd_low <= vd_low + 1'b1;
-    if (vd_low == 11'd300) begin
-        vd_act <= 1'b1;
-        vd_since <= 13'h0;
-    end else begin
-        if (vd_since != 13'h1fff)
-            vd_since <= vd_since + 1'b1;
-        if (vd_since > 13'd2150)
-            vd_act <= 1'b0;
-    end
-    // majority level of the TVP vsync (saturating up / down count)
-    if (TVP_VS_sync2_reg) begin
-        if (vd_pol_acc != 16'hffff) vd_pol_acc <= vd_pol_acc + 1'b1;
-    end else begin
-        if (vd_pol_acc != 16'h0) vd_pol_acc <= vd_pol_acc - 1'b1;
-    end
-end
-wire TVP_VS_fe = vd_en ? TVP_VS_own : TVP_VS_sync2_reg;
-reg TVP_VSo_s1, TVP_VSo_s2;
-always @(posedge clk27) begin
-    TVP_VSo_s1 <= TVP_VS_own;
-    TVP_VSo_s2 <= TVP_VSo_s1;
-end
-wire vd_en27 = sl_config2[8] & sl_config2[13];
 
 // TVP7002 RGB digitizer
 always @(posedge TVP_PCLK_i) begin
@@ -312,9 +265,9 @@ tvp7002_frontend u_tvp_frontend (
     .G_i(TVP_G),
     .B_i(TVP_B),
     .HS_i(TVP_HS),
-    .VS_i(TVP_VS_fe),
+    .VS_i(TVP_VS_sync2_reg),
     .HSYNC_i(TVP_HSYNC_sync2_reg),
-    .VSYNC_i(vd_en27 ? TVP_VSo_s2 : TVP_VSYNC_sync2_reg),
+    .VSYNC_i(TVP_VSYNC_sync2_reg),
     .DE_i(1'b0),
     .FID_i(1'b0),
     .sogref_update_i(TVP_SOG_prev & ~TVP_SOG_sync2_reg),
@@ -689,6 +642,7 @@ scanconverter #(
     .xy_out_config(xy_out_config),
     .xy_out_config2(xy_out_config2),
     .hv_ext_config(sl_config2),
+    .h_frac(misc_config[23:16]),     // CVBS xtal: output line length fraction (stock shadow mask interval bits)
     .misc_config(misc_config_sc),
     .sl_config(32'h0),
     .sl_config2(32'h0),

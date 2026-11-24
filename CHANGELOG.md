@@ -1,20 +1,30 @@
 Changelog
 =========
 
-CVBS decoder 0.40
+CVBS decoder 0.41
 -----------------
 
 ### Fixed
-- Interlaced sources (480i / 576i) with the 27MHz crystal clock: fields
-  swapped (Standard csync) or no picture (other sync types) on 15kHz CRTs.
-  0.30 had removed the vsync taken from the composite sync (broad pulses),
-  which keeps the half-line offset between the two fields; the TVP7002 vsync
-  output loses it without the H-PLL. Back for the crystal clock (Line-locked
-  was not affected).
+- Interlaced sources (480i / 576i) with the 27MHz crystal clock on 15kHz
+  CRTs: fields swapped (Standard csync) or no picture (other sync types).
+  The output line was a whole number of clocks, up to one clock longer than
+  the source line (Wii 480i: 1716.0 clocks per line, output 1717), and the
+  resync at every input frame cut the last line short by the difference
+  accumulated over the frame (~525 clocks, a third of a line, right before
+  the vsync of the first field: the CRT could not tell the fields apart).
+  Now the output line has a fraction: lines of N clocks, one clock longer at
+  the rate of the fraction (1/256 clock steps, from the measured line period,
+  updated while it runs, +2/256 so that the output never gets ahead of the
+  source). The resync cuts only a few clocks. The active picture of every
+  line is unchanged (the extra clock is in the horizontal blanking). Sources
+  with lines shorter than the preset (SNES ~1714.7 clocks) keep the preset.
+- Xtal timing: `O` shows the output line length with its fraction
+  (O1716.03).
 
 ### Removed
-- Event count.: the `X` counter (resyncs out of place), logic space for the
-  fix above.
+- Event count.: the `X` counter (resyncs out of place), logic space.
+- (0.40 test: vsync from the composite sync with the crystal clock: no
+  sync; not the cause, removed again.)
 
 CVBS decoder 0.39
 -----------------

@@ -114,8 +114,7 @@ typedef union {
         uint8_t reverse_lpf_rsv:1;
         uint8_t lumacode_mode:3;
         uint8_t shmask_enable:1;
-        uint8_t shmask_iv_x:4;
-        uint8_t shmask_iv_y:4;
+        uint8_t cv_hfrac:8;     // CVBS xtal: output line length fraction (1/256 clock; stock shadow mask intervals)
         uint8_t panasonic_hack:1;
         uint8_t ds_vdec:2;      // downscaler: store 1 of every (ds_vdec+1) input lines
         uint8_t ds_csync:2;     // downscaler: CSync on HSYNC (0=off, 1=XOR, 2=AND, 3=standard)
