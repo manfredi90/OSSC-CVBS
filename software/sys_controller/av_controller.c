@@ -571,7 +571,6 @@ static uint16_t cvx_n_setup, cvx_n_update;    // diagnostics: setups / register 
 
 // CVBS xtal clock (see cvx_measure_lp)
 static uint8_t cvx_active;
-static uint8_t cvx_hf;              // output line length fraction (1/256 clock)
 
 void update_sc_config()
 {
@@ -671,7 +670,7 @@ void update_sc_config()
     misc_config.tp_sel = avconfig->ds_tp_sel;         // test pattern design
     hdmitx_rgb_limited = (avconfig->ds_out_range != 0);  // AVI InfoFrame (set with the next InfoFrame update)
     misc_config.shmask_enable = (avconfig->shmask_mode != 0);
-    misc_config.cv_hfrac = cvx_active ? cvx_hf : 0;    // CVBS xtal: output line length fraction
+    misc_config.cv_hfrac = 0;      // (stock shadow mask interval bits, unused)
     misc_config.lumacode_mode = lc_cfg_arr[avconfig->lumacode_mode].mode;
     misc_config.panasonic_hack = avconfig->panasonic_hack;
     misc_config.ds_vdec = vm_conf.ds_vdec & 3;     // bit 2 in sl_config
@@ -817,7 +816,7 @@ void show_safe_screen(const char *reason)
         pll_reconfigure(1, cm.pclk_o_hz, 0);    // PLL 1x from 27MHz
     }
     ds_safe_reason = reason;
-    cvx_active = 0;         // test pattern: whole output lines (no fraction)
+    cvx_active = 0;
     update_osd_size(&vmode_out);
     update_sc_config();
     TX_SetPixelRepetition(0, 0);
@@ -914,38 +913,12 @@ static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256) {
     return (h > pre) ? h : pre;
 }
 
-// output line length with a fraction (0.41): whole part in *h (never below the
-// preset), fraction in 1/256 clock, +2/256 so that the output is never ahead
-// of the source (the resync then cuts a few clocks, not hundreds). Below the
-// preset (SNES ~1714.7): the preset, no fraction (as before). 15kHz output
-// only (CRTs: interlaced fields); Line2x / 3x / 4x: whole lines as before
-// (0.41 test: an HDMI TV shifted the lines one clock longer by a pixel).
-static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256);
-static uint8_t cvx_hfrac(uint16_t pre, uint32_t lp_x256, uint16_t *h) {
-    uint64_t den = (uint64_t)cvx_pll_h_total;
-    uint32_t lo = (uint32_t)(((uint64_t)pre * lp_x256) / den) + 2;    // output line x256
-    if (cm.cc.cv_line2x) {
-        *h = cvx_htot(pre, lp_x256);
-        return 0;
-    }
-    if ((lo >> 8) < pre) {
-        *h = pre;
-        return 0;
-    }
-    *h = (uint16_t)(lo >> 8);
-    return (uint8_t)(lo & 0xff);
-}
-
 // applied line lengths still right for the line period lp: not too short,
 // not longer than needed by more than 1/4 clock per input line (hysteresis:
 // a line period at a rounding step, e.g. PC Engine ~1716.2, must not toggle)
 static int cvx_htot_ok(uint32_t lp) {
-    uint16_t h;
-    if (cm.cc.cv_line2x)
-        return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_ho >= cvx_htot(cvx_ho_pre, lp)) &&
-               (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho <= cvx_htot(cvx_ho_pre, lp + 64));
-    cvx_hfrac(cvx_ho_pre, lp, &h);
-    return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho == h);
+    return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_ho >= cvx_htot(cvx_ho_pre, lp)) &&
+           (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) && (cvx_ho <= cvx_htot(cvx_ho_pre, lp + 64));
 }
 
 // main loop: line period over 16 samples 20ms apart (~0.3s, non-blocking);
@@ -980,14 +953,7 @@ static void cvx_check() {
     }
     cvx_lp_now = cvx_lp_from(sum, 16);
     if (cvx_htot_ok(cvx_lp_now)) {
-        uint16_t h;
-        uint8_t f = cvx_hfrac(cvx_ho_pre, cvx_lp_now, &h);
         bad = 0;
-        // output line fraction: follows the line period (register update only)
-        if ((f > cvx_hf + 1) || (f + 1 < cvx_hf)) {
-            cvx_hf = f;
-            update_sc_config();
-        }
     } else if (++bad >= 2) {
         bad = 0;
         cvx_redo_cnt++;
@@ -1048,16 +1014,11 @@ int cvbs_xtal_diag() {
         strncpy(func_ret_status, "Not stable", LCD_ROW_LEN+1);
         return 1;
     }
-    // O: output line length applied, with its fraction (O1716.03); "O..>..":
-    // whole part wrong for the line period now, the setup is redone
-    if (cvx_htot_ok(lp)) {
-        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u.%02u", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
-                  (unsigned)cvx_ho, (unsigned)((cvx_hf * 100) >> 8));
-    } else {
-        uint16_t h;
-        cvx_hfrac(cvx_ho_pre, lp, &h);
-        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)h);
-    }
+    if (cvx_htot_ok(lp))
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
+                  (unsigned)cvx_ho);
+    else
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, lp));
     return 1;
 }
 
@@ -1140,11 +1101,10 @@ void program_mode()
         cvx_ho_pre = vmode_out.timings.h_total;
         cvx_lp_x256 = cvx_lp_now = lp;
         cvx_hi = vmode_in.timings.h_total = cvx_htot(cvx_hi_pre, lp);
-        cvx_hf = cvx_hfrac(cvx_ho_pre, lp, &cvx_ho);
-        vmode_out.timings.h_total = cvx_ho;
+        cvx_ho = vmode_out.timings.h_total = cvx_htot(cvx_ho_pre, lp);
         cvx_active = 1;
-        printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u+%u/256\n", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 100) >> 8),
-               (unsigned)cvx_hi, (unsigned)cvx_ho, (unsigned)cvx_hf);
+        printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 100) >> 8),
+               (unsigned)cvx_hi, (unsigned)cvx_ho);
     }
 
     // Tweak infoframe pixel repetition indicator if passing thru horizontally multiplied mode

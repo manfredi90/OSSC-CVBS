@@ -1,6 +1,21 @@
 Changelog
 =========
 
+CVBS decoder 0.43
+-----------------
+
+### Fixed
+- Interlaced sources (480i / 576i) with the 27MHz crystal clock on 15kHz
+  CRTs (fields swapped or no picture), without the line length fraction of
+  0.41 / 0.42 (an HDMI TV shifted the lines one clock longer: wobbly
+  outlines). Whole output lines on every output as in 0.39; the vsync now
+  starts 4 lines after the resync point in interlaced modes too, as it
+  already did in progressive ones since 0.29 (one rule for all modes): the
+  line cut short by the resync is no longer right before the vsync of the
+  first field, there are full lines between them. Both fields' vsyncs move
+  by the same 4 lines (the second field keeps its half-line offset).
+- Xtal timing: `O` back to the whole output line length.
+
 CVBS decoder 0.42
 -----------------
 

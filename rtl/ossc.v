@@ -642,7 +642,6 @@ scanconverter #(
     .xy_out_config(xy_out_config),
     .xy_out_config2(xy_out_config2),
     .hv_ext_config(sl_config2),
-    .h_frac(misc_config[23:16]),     // CVBS xtal: output line length fraction (stock shadow mask interval bits)
     .misc_config(misc_config_sc),
     .sl_config(32'h0),
     .sl_config2(32'h0),

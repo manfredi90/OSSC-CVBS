@@ -67,7 +67,6 @@ module scanconverter (
     input lb_rgb,               // line buffer layout 3: RGB, one pixel per word
     input [12:0] ds_hofs,       // output position at the input frame start (clocks, 0 = line start)
     input resync_always,        // resync the output at every input frame (input clock not locked to the source)
-    input [7:0] h_frac,         // output line length fraction (1/256 clock): some lines 1 clock longer
     input ext_sync_mode,
     input ext_frame_change_i,
     input [7:0] ext_R_i,
@@ -151,7 +150,9 @@ wire [8:0] V_BACKPORCH = hv_out_config3[12:4];
 
 wire [10:0] V_STARTLINE = hv_out_config3[23:13];
 
-localparam [10:0] VS_OFS = 11'd4;   // vsync offset with resync_always (lines)
+localparam [10:0] VS_OFS = 11'd4;
+wire vs_o_on = resync_always;
+wire [10:0] vs_o = vs_o_on ? VS_OFS : 11'd0;   // vsync offset with resync_always (lines)
 wire [10:0] V_STARTLINE_PREV = (V_STARTLINE == 0) ? (V_TOTAL-1) : (V_STARTLINE-1);
 // output field parity at V_STARTLINE and at the line before it
 wire FID_START = (V_STARTLINE < (V_TOTAL/2)) ? FID_ODD : FID_EVEN;
@@ -471,19 +472,6 @@ always @(posedge PCLK_OUT_i) begin
     end
 end
 
-// Output line length with a fraction (CVBS 27MHz crystal clock): the line
-// period of the source is not a whole number of clocks. With whole lines the
-// output frame was longer than the input one by up to a clock per line, and
-// the resync at every input frame cut the last line short by hundreds of
-// clocks (Wii 480i: 1716.0 clocks per line, output 1717: ~525 clocks per
-// frame, a third of a line right before the vsync of the first field: 15kHz
-// CRTs saw the fields swapped or lost the sync). Lines of H_TOTAL clocks,
-// one clock longer at a rate of h_frac/256 (accumulator restarted at every
-// resync): the average follows the source, the resync cuts a few clocks.
-reg [7:0] hf_acc;
-reg h_ext;
-wire h_end = h_ext ? (h_cnt == H_TOTAL) : (h_cnt == H_TOTAL-1);
-
 // H/V counters
 always @(posedge PCLK_OUT_i) begin
     if (ext_sync_mode & ext_frame_change_i) begin
@@ -493,15 +481,12 @@ always @(posedge PCLK_OUT_i) begin
     end else if (~ext_sync_mode & frame_change_resync) begin
         h_cnt <= ds_hofs;
         v_cnt <= V_STARTLINE;
-        hf_acc <= 8'h0;
-        h_ext <= 1'b0;
         bfi_frame <= 0;
         src_fid <= (~interlaced_in_i | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         dst_fid <= (~V_INTERLACED | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         resync_strobe <= 1'b1;
     end else begin
-        if (h_end) begin
-            {h_ext, hf_acc} <= {1'b0, hf_acc} + {1'b0, h_frac};
+        if (h_cnt == H_TOTAL-1) begin
             if ((~V_INTERLACED & (v_cnt == V_TOTAL-1)) |
                 (V_INTERLACED & (dst_fid == FID_ODD) & (v_cnt == V_TOTAL)) |
                 (V_INTERLACED & (dst_fid == FID_EVEN) & (v_cnt == V_TOTAL-1)))
@@ -550,7 +535,7 @@ end
 reg cs_half_a, cs_even_a, cs_half_b;
 reg signed [13:0] cs_flen_a;
 reg [12:0] cs_hpos_a;
-reg signed [11:0] cs_v_a;   // line from the vsync start (VS_OFS later with resync_always)
+reg signed [11:0] cs_v_a;   // line from the vsync start (vs_o)
 reg signed [13:0] cs_pcur_b, cs_pnext_b;
 reg cs_lt_vs_b, cs_lt_eq_b, cs_lt_hs_b, cs_lt_vs_c, cs_lt_eq_c, cs_lt_hs_c;
 reg cs_vs_c, cs_eq_c;
@@ -561,7 +546,7 @@ always @(posedge PCLK_OUT_i) begin
     // stage A (same time as pipeline stage 1)
     cs_half_a <= (h_cnt >= (H_TOTAL/2));
     cs_hpos_a <= (h_cnt >= (H_TOTAL/2)) ? (h_cnt - (H_TOTAL/2)) : h_cnt;
-    cs_v_a <= $signed({1'b0, v_cnt}) - ((resync_always & ~V_INTERLACED) ? $signed({1'b0, VS_OFS}) : 12'sd0);
+    cs_v_a <= $signed({1'b0, v_cnt}) - $signed({1'b0, vs_o});
     cs_even_a <= V_INTERLACED & ~ds_i2p & (dst_fid == FID_EVEN);
     // field length in half lines (480i: 262.5 lines; 480i -> 240p: 263 / 262)
     cs_flen_a <= ds_i2p ? $signed({2'b00, V_TOTAL + {10'h0, (dst_fid == FID_ODD)}, 1'b0}) :
@@ -585,21 +570,24 @@ end
 always @(posedge PCLK_OUT_i) begin
     HSYNC_pp[1] <= (h_cnt < H_SYNCLEN) ? 1'b0 : 1'b1;
     if (ds_i2p)
-        VSYNC_pp[1] <= (v_cnt < V_SYNCLEN) ? 1'b0 : 1'b1;     // 480i -> 240p: both fields at a line start
-    else if (resync_always & ~V_INTERLACED)
-        // resync at every input frame (CVBS xtal clock): the line before
-        // the resync point (v_cnt 0) is cut short. With the vsync right after
-        // it, the vsync edge came a fraction of a line after the previous
-        // hsync (up to ~half a line, depending on the source: SNES, PC
-        // Engine); with separate H / V syncs HDMI sinks could take it as an
-        // interlaced field and pick a wrong mode (picture moved / stretched
-        // at random, fine with csync). Vsync moved VS_OFS lines later: only
-        // full lines before it.
-        VSYNC_pp[1] <= ((v_cnt >= VS_OFS) & (v_cnt < VS_OFS+V_SYNCLEN)) ? 1'b0 : 1'b1;
+        VSYNC_pp[1] <= ((v_cnt >= vs_o) & (v_cnt < vs_o+V_SYNCLEN)) ? 1'b0 : 1'b1;     // 480i -> 240p: both fields at a line start
+    // Vsync vs_o lines after the frame start: 0, or VS_OFS with a resync at
+    // every input frame (CVBS xtal clock). There the line before the resync
+    // point is cut short (by the difference accumulated over the frame:
+    // SNES ~340 clocks, Wii 480i ~525); with the vsync right after it, HDMI
+    // sinks with separate syncs took the vsync edge for an interlaced field
+    // (0.29), and 15kHz CRTs could not tell the fields of 480i / 576i apart
+    // (fields swapped, or no picture: 0.41). With vs_o, full lines between
+    // the cut and the vsync, in progressive and interlaced modes alike. The
+    // even field's vsync starts half a line earlier (in the last line of the
+    // odd field with vs_o = 0, in its own line vs_o-1 otherwise).
+    else if (~V_INTERLACED)
+        VSYNC_pp[1] <= ((v_cnt >= vs_o) & (v_cnt < vs_o+V_SYNCLEN)) ? 1'b0 : 1'b1;
     else if (dst_fid == FID_ODD)
-        VSYNC_pp[1] <= ((v_cnt < V_SYNCLEN) | ((v_cnt == V_TOTAL) & (h_cnt >= (H_TOTAL/2)))) ? 1'b0 : 1'b1;
+        VSYNC_pp[1] <= (((v_cnt >= vs_o) & (v_cnt < vs_o+V_SYNCLEN)) | (~vs_o_on & (v_cnt == V_TOTAL) & (h_cnt >= (H_TOTAL/2)))) ? 1'b0 : 1'b1;
     else
-        VSYNC_pp[1] <= ((v_cnt < V_SYNCLEN-1) | ((v_cnt == V_SYNCLEN-1) & (h_cnt < (H_TOTAL/2)))) ? 1'b0 : 1'b1;
+        VSYNC_pp[1] <= ((vs_o_on & (v_cnt == vs_o-1'b1) & (h_cnt >= (H_TOTAL/2))) | ((v_cnt >= vs_o) & (v_cnt < vs_o+V_SYNCLEN-1'b1)) |
+                        ((v_cnt == vs_o+V_SYNCLEN-1'b1) & (h_cnt < (H_TOTAL/2)))) ? 1'b0 : 1'b1;
     DE_pp[1] <= (h_cnt >= H_SYNCLEN+H_BACKPORCH) & (h_cnt < H_SYNCLEN+H_BACKPORCH+H_ACTIVE-panasonic_adjust) & (v_cnt >= V_SYNCLEN+V_BACKPORCH) & (v_cnt < V_SYNCLEN+V_BACKPORCH+V_ACTIVE);
 
     if (h_avidstart) begin
