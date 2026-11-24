@@ -448,9 +448,8 @@ videogen vg0 (
 // every input frame start the output position is compared with the resync
 // point (V_STARTLINE, line start), in half output lines (fl_p, positive =
 // output early): within half a line nothing changes; later, the next front
-// porch has one line less (the line after the first front porch line is
-// skipped), earlier, one line more (the first front porch line is
-// repeated). Whole lines before the vsync: the picture keeps its place after
+// porch has one line less (its first line is skipped), earlier, one line
+// more (its first line is repeated); front porches of 2 lines or more. Whole lines before the vsync: the picture keeps its place after
 // the vsync and the vsync its place in the line (480i / 576i field parity).
 // More than Y_RPT+1 lines away (15kHz: 1 line, the 2-line buffer; Line2x-4x
 // 4-line buffer, see linebuf_top): resync (cut, to lock).
@@ -458,52 +457,48 @@ videogen vg0 (
 // parity lost), 0.41 changed the picture line lengths by a clock (some HDMI
 // TVs: wobbly outlines), 0.44 shortened the back porch lines (15kHz CRTs:
 // bent top of the picture, horizontal flywheel disturbed).
-wire [10:0] FL_V_ODD = V_TOTAL + 1'b1;       // odd field lines (interlaced)
-wire [11:0] FL_FLEN = V_INTERLACED ? {V_TOTAL, 1'b1} : {1'b0, V_TOTAL};
-wire [11:0] FL_REF = {1'b0, V_STARTLINE} + ((V_INTERLACED & (FID_START == FID_EVEN)) ? {1'b0, FL_V_ODD} : 12'h0);
-reg [11:0] fl_pos;                  // output line in the frame (interlaced: odd field first)
-reg signed [12:0] fl_d;             // output line - resync line, modulo the frame
-reg signed [6:0] fl_dw;             // the same, in the lock range
-reg fl_in, fl_h1, fl_h2, fl_half, fl_s1, fl_s2, fl_s3, fl_dneg;
+// output line - resync line (fl_c0) and the same across the field / frame
+// boundary before (fl_ca) / after (fl_cb) the resync point's field: the one
+// within -8..7 lines (fl_dw)
+wire fl_odd_x = V_INTERLACED & (dst_fid == FID_ODD);
+wire fl_odd_s = V_INTERLACED & (FID_START == FID_ODD);
+wire fl_other = ~V_INTERLACED | (dst_fid != FID_START);     // other field (or progressive)
+wire fl_same = ~V_INTERLACED | (dst_fid == FID_START);      // resync point's field
+reg signed [11:0] fl_c0, fl_ca, fl_cb;
+reg signed [3:0] fl_dw;
+reg fl_in, fl_h1, fl_half, fl_s1, fl_s2, fl_o1, fl_m1, fl_dneg;
+function win8;          // -8..7
+    input [11:0] x;
+    win8 = (x[11:3] == 9'h0) | (x[11:3] == 9'h1ff);
+endfunction
 // progressive output of an interlaced source (bob): the source field parity
 // at the resync point as set by a resync (one more check of the lock: a
 // lock found without resync, e.g. at power-up, can have the other parity)
 wire FL_SRC = (V_STARTLINE < (V_TOTAL/2)) ? FID_ODD : FID_EVEN;
-wire fl_src_ok = ~interlaced_in_i | V_INTERLACED | (fl_s3 == (FL_SRC ^ ((fl_dw >= 7'sd0) == fl_dneg)));
-wire signed [7:0] fl_p = {fl_dw, fl_half};   // half lines
-wire signed [6:0] FL_R = $signed({{3{Y_RPT[3]}}, Y_RPT});
-wire fl_lock = fl_in & fl_src_ok & (fl_dw >= -FL_R - 7'sd1) & (fl_dw <= FL_R);
+wire fl_src_ok = ~interlaced_in_i | V_INTERLACED | (fl_s2 == (FL_SRC ^ ((fl_dw >= 4'sd0) == fl_dneg)));
+wire signed [4:0] fl_p = {fl_dw, fl_half};   // half lines
+wire signed [3:0] FL_R = Y_RPT;
+wire fl_lock = fl_in & fl_src_ok & (fl_dw >= -FL_R - 4'sd1) & (fl_dw <= FL_R);
 reg fl_cap;                         // input frame start in lock
 reg fl_drop, fl_ins;                // one line less / more in the next front porch
-wire [10:0] FL_V_LAST = (V_INTERLACED & (dst_fid == FID_ODD)) ? V_TOTAL : V_TOTAL - 1'b1;
+wire [10:0] FL_V_LAST = fl_odd_x ? V_TOTAL : V_TOTAL - 1'b1;
 wire [10:0] FL_V_ADJ = V_SYNCLEN + V_BACKPORCH + V_ACTIVE;     // first front porch line
-wire fl_at = (v_cnt == FL_V_ADJ) & (FL_V_ADJ < FL_V_LAST);
-wire fl_skip = fl_at & fl_drop & (FL_V_ADJ + 1'b1 < FL_V_LAST);
-// the skipped line is the last one of the field: the field ends here (not the
-// odd field of interlaced modes, its last line starts the vsync: next field)
-wire fl_end = fl_at & fl_drop & (FL_V_ADJ + 1'b1 == FL_V_LAST) & ~(V_INTERLACED & (dst_fid == FID_ODD));
-wire fl_rep = fl_at & fl_ins;
+wire fl_fp2 = (FL_V_ADJ < FL_V_LAST);                           // 2 front porch lines or more
+wire fl_skip = fl_drop & fl_fp2 & (v_cnt + 1'b1 == FL_V_ADJ);   // last picture line: next one skipped
+wire fl_rep = fl_ins & fl_fp2 & (v_cnt == FL_V_ADJ);            // first front porch line repeated
 always @(posedge PCLK_OUT_i) begin
-    fl_pos <= {1'b0, v_cnt} + ((V_INTERLACED & (dst_fid == FID_EVEN)) ? {1'b0, FL_V_ODD} : 12'h0);
+    fl_c0 <= $signed({1'b0, v_cnt}) - $signed({1'b0, V_STARTLINE});
+    fl_ca <= $signed({1'b0, v_cnt}) - $signed({1'b0, V_STARTLINE}) - $signed({1'b0, V_TOTAL}) - fl_odd_x;
+    fl_cb <= $signed({1'b0, v_cnt}) - $signed({1'b0, V_STARTLINE}) + $signed({1'b0, V_TOTAL}) + fl_odd_s;
+    fl_o1 <= fl_other;
+    fl_m1 <= fl_same;
     fl_s1 <= src_fid;
     fl_s2 <= fl_s1;
-    fl_s3 <= fl_s2;
-    fl_dneg <= (fl_d < 13'sd0);
     fl_h1 <= (h_cnt >= (H_TOTAL/2));     // (delayed as fl_dw)
-    fl_h2 <= fl_h1;
-    fl_half <= fl_h2;
-    fl_d <= $signed({1'b0, fl_pos}) - $signed({1'b0, FL_REF});
-    // nearest: d, d + frame or d - frame
-    if (fl_d < -$signed({1'b0, FL_FLEN[11:1]})) begin
-        fl_dw <= 7'(fl_d + $signed({1'b0, FL_FLEN}));
-        fl_in <= ((fl_d + $signed({1'b0, FL_FLEN})) < 13'sd64);
-    end else if (fl_d >= $signed({1'b0, FL_FLEN[11:1]})) begin
-        fl_dw <= 7'(fl_d - $signed({1'b0, FL_FLEN}));
-        fl_in <= ((fl_d - $signed({1'b0, FL_FLEN})) >= -13'sd64);
-    end else begin
-        fl_dw <= 7'(fl_d);
-        fl_in <= (fl_d < 13'sd64) & (fl_d >= -13'sd64);
-    end
+    fl_half <= fl_h1;
+    fl_dneg <= fl_c0[11];
+    fl_in <= (fl_m1 & win8(fl_c0)) | (fl_o1 & (win8(fl_ca) | win8(fl_cb)));
+    fl_dw <= (fl_m1 & win8(fl_c0)) ? fl_c0[3:0] : (win8(fl_ca) ? fl_ca[3:0] : fl_cb[3:0]);
 end
 
 // Frame change strobe synchronization
@@ -560,11 +555,9 @@ always @(posedge PCLK_OUT_i) begin
             fl_ins <= (fl_p > 8'sd0);
         end
         if (h_cnt == H_TOTAL - 1'b1) begin
-            if ((v_cnt == FL_V_LAST) | fl_end) begin
+            if (v_cnt == FL_V_LAST) begin
                 v_cnt <= 0;
                 v_avidstart <= (V_SYNCLEN+V_BACKPORCH-1'b1 == 0);
-                if (fl_end)
-                    fl_drop <= 1'b0;
                 src_fid <= interlaced_in_i ? (src_fid ^ 1'b1) : FID_ODD;
                 dst_fid <= V_INTERLACED ? (dst_fid ^ 1'b1) : FID_ODD;
                 resync_strobe <= 1'b0;
