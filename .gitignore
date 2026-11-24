@@ -32,3 +32,6 @@ software/sys_controller/mem_init/chunks/
 software/sys_controller/mem_init/flash.bin
 software/sys_controller/mem_init/flash.hex
 ci_logs/
+sim/scan/obj_dir/
+sim/scan/sc_sim.v
+sim/scan/sc_out.txt

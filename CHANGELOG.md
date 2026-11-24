@@ -1,6 +1,32 @@
 Changelog
 =========
 
+CVBS decoder 0.44
+-----------------
+
+### Fixed
+- Interlaced sources (480i / 576i) with the 27MHz crystal clock on 15kHz
+  CRTs: 0.43 still showed the two fields on the same lines (the CRT's
+  horizontal flywheel was still off after the line cut short, 4 lines before
+  the vsync). Soft frame lock: when the input frame starts within the last
+  2 lines of the output frame, there is no resync any more; the output
+  finishes its frame and the lag (up to ~a clock per line of the frame) is
+  made up in the next frame, by shortening the back porch lines after the
+  vsync by up to 64 clocks each (half in each field of interlaced modes),
+  stopping 3 lines before the picture. No line cut short before a vsync,
+  the picture lines all the same length, the output never ahead of the
+  input; same rule for every mode and output. A resync (line cut) only to
+  lock, at the start or when the source changes.
+- Simulated before the build (`sim/scan`: scanconverter timing with
+  480i / 576i / 240p / 288p and Line2x sources, input jitter): one resync at
+  the start, then the vsync at a line start / half a line in alternate
+  fields, equal field lengths, all picture lines and the lines before the
+  vsync of the same length.
+
+### Changed
+- Sync diag.: `S` counts the resyncs (line cuts) only: 0 per second once
+  locked (was one per input frame).
+
 CVBS decoder 0.43
 -----------------
 

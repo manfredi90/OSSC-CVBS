@@ -444,6 +444,40 @@ videogen vg0 (
 );
 
 
+// Soft frame lock (resync_always: CVBS 27MHz crystal clock, output clock not
+// locked to the source). The output lines are a whole number of clocks, at
+// least as long as the source lines (the output never reads a line before it
+// is written), so the output frame ends up to ~a clock per line later than
+// the input one. 0.20-0.40 resynced at every input frame, cutting the last
+// line short by the difference (Wii 480i ~525 clocks, a third of a line):
+// HDMI sinks with separate syncs misread the vsync after it (0.29: vsync 4
+// lines later), 15kHz CRTs lost the field parity of 480i / 576i (their
+// horizontal flywheel was still off when the first field's vsync came: both
+// fields on the same lines). 0.44: when the input frame starts within the
+// last 2 lines of the output frame (or just after its start), no resync:
+// the lag (clocks left in the output frame) is made up in the next frame by
+// shortening the back porch lines after the vsync, by up to SL_MAX clocks
+// each, stopping 3 lines before the picture. No line cut short before the
+// vsync, the picture lines all the same length, the output never ahead of
+// the input. A resync (cut) only to lock (start, source change). Both
+// fields of interlaced modes have their back porch lines.
+localparam [12:0] SL_MAX = 13'd64;
+wire [10:0] SL_V_LAST2 = (V_STARTLINE_PREV == 0) ? V_TOTAL-1 : V_STARTLINE_PREV-1;
+wire sl_fprev = ~V_INTERLACED | (dst_fid == FID_PREV);
+wire sl_last1 = (ds_hofs == 13'h0) & sl_fprev & (v_cnt == V_STARTLINE_PREV);
+wire sl_last2 = (ds_hofs == 13'h0) & sl_fprev & (v_cnt == SL_V_LAST2) & (V_STARTLINE_PREV != 0);
+wire sl_wrap = (ds_hofs == 13'h0) & (~V_INTERLACED | (dst_fid == FID_START)) & (v_cnt == V_STARTLINE) & (h_cnt < 13'd256);
+wire sl_lock = sl_last1 | sl_last2 | sl_wrap;
+wire [12:0] sl_lag_now = sl_wrap ? 13'h0 : ((sl_last1 ? 13'h0 : H_TOTAL) + (H_TOTAL - 1'b1 - h_cnt));
+reg [12:0] sl_lag;          // clocks still to make up
+reg [12:0] sl_lag2;         // interlaced: half of the lag, for the second field
+reg sl_cap;                 // input frame start in soft lock (lag in sl_lag_cap)
+reg [12:0] sl_lag_cap;
+reg [12:0] sl_cut;          // shortening of the current line
+wire [10:0] SL_Z0 = vs_o + V_SYNCLEN + 1'b1;          // first line after the vsync + 1
+wire [10:0] SL_Z1 = V_SYNCLEN + V_BACKPORCH - 2'd3;    // 3 lines before the picture
+wire sl_zone = resync_always & (v_cnt >= SL_Z0) & (v_cnt < SL_Z1);
+
 // Frame change strobe synchronization
 always @(posedge PCLK_OUT_i) begin
     frame_change_sync1_reg <= frame_change_i;
@@ -453,13 +487,20 @@ always @(posedge PCLK_OUT_i) begin
     // aligned = output is at the frame start position (with the right field
     // parity for interlaced output, otherwise e.g. the 480i field order could
     // never change)
+    // resync_always (CVBS xtal clock): output within 2 lines before its frame
+    // start (or just past it): soft lock, no resync (see sl_credit below)
     frame_change_resync <= ~frame_change_prev & frame_change &
-                           (resync_always | ~(((ds_hofs == 13'h0) & (v_cnt == V_STARTLINE_PREV) & (h_cnt > H_TOTAL-128) & (~V_INTERLACED | (dst_fid == FID_PREV))) |
+                           (resync_always ? ~sl_lock :
+                            ~(((ds_hofs == 13'h0) & (v_cnt == V_STARTLINE_PREV) & (h_cnt > H_TOTAL-128) & (~V_INTERLACED | (dst_fid == FID_PREV))) |
                              ((ds_hofs == 13'h0) & (v_cnt == V_STARTLINE) & (h_cnt < 128) & (~V_INTERLACED | (dst_fid == FID_START))) |
                              ((ds_hofs != 13'h0) & (v_cnt == V_STARTLINE) & (h_cnt >= ds_hofs-13'd128) & (h_cnt < ds_hofs+13'd128) & (~V_INTERLACED | (dst_fid == FID_START))))) &
                            (~ds_ilace | (in_field ^ ds_fswap));    // 480i: frame shown in the odd field
     if (~frame_change_prev & frame_change)
         in_field <= ds_ilace ? ~in_field : 1'b0;
+    // soft lock: the lag of the output at the input frame start, to be made
+    // up in the back porch lines of the next frame
+    sl_cap <= ~frame_change_prev & frame_change & resync_always & sl_lock;
+    sl_lag_cap <= sl_lag_now;
 
     // diagnostics: number of output resyncs, input frame period (low bits)
     if (frame_change_resync)
@@ -481,18 +522,36 @@ always @(posedge PCLK_OUT_i) begin
     end else if (~ext_sync_mode & frame_change_resync) begin
         h_cnt <= ds_hofs;
         v_cnt <= V_STARTLINE;
+        sl_cut <= 13'h0;
+        sl_lag <= 13'h0;
+        sl_lag2 <= 13'h0;
         bfi_frame <= 0;
         src_fid <= (~interlaced_in_i | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         dst_fid <= (~V_INTERLACED | (V_STARTLINE < (V_TOTAL/2))) ? FID_ODD : FID_EVEN;
         resync_strobe <= 1'b1;
     end else begin
-        if (h_cnt == H_TOTAL-1) begin
+        if (h_cnt == 13'd2) begin
+            sl_cut <= ~sl_zone ? 13'h0 : ((sl_lag > SL_MAX) ? SL_MAX : sl_lag);
+        end else if (h_cnt == 13'd3) begin
+            sl_lag <= sl_lag - sl_cut;
+        end
+        // interlaced: half of the lag in each field (same field lengths)
+        if (sl_cap) begin
+            sl_lag <= V_INTERLACED ? (sl_lag_cap >> 1) : sl_lag_cap;
+            sl_lag2 <= V_INTERLACED ? (sl_lag_cap - (sl_lag_cap >> 1)) : 13'h0;
+        end
+        if (h_cnt == H_TOTAL - 1'b1 - sl_cut) begin
+            sl_cut <= 13'h0;
             if ((~V_INTERLACED & (v_cnt == V_TOTAL-1)) |
                 (V_INTERLACED & (dst_fid == FID_ODD) & (v_cnt == V_TOTAL)) |
                 (V_INTERLACED & (dst_fid == FID_EVEN) & (v_cnt == V_TOTAL-1)))
             begin
                 v_cnt <= 0;
                 v_avidstart <= (V_SYNCLEN+V_BACKPORCH-1'b1 == 0);
+                if (dst_fid == FID_ODD) begin
+                    sl_lag <= sl_lag + sl_lag2;
+                    sl_lag2 <= 13'h0;
+                end
                 src_fid <= interlaced_in_i ? (src_fid ^ 1'b1) : FID_ODD;
                 dst_fid <= V_INTERLACED ? (dst_fid ^ 1'b1) : FID_ODD;
                 resync_strobe <= 1'b0;

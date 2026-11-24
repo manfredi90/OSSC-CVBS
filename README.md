@@ -149,7 +149,7 @@ Technical settings: the defaults are right for most sources.
 | Ref. filter | Auto, Off, On | colour reference averaged over the lines (less line to line colour noise). Auto (default): On with the xtal clock, Off line-locked |
 | Adv. timing | | as in the official firmware |
 | Diagnostics > Decoder diag. | | `Bn` burst level, `Ln` blank level (ADC code), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC), `3`: 3-line luma notch |
-| Diagnostics > Sync diag. | | per second: `O` output frames, `F` input frames, `S` output resyncs (xtal clock: one per input frame) |
+| Diagnostics > Sync diag. | | per second: `O` output frames, `F` input frames, `S` output resyncs (0 once locked) |
 | Diagnostics > Xtal timing | | `L` line period (27MHz clocks), `O` output line length (`O..>..`: being redone) |
 | Diagnostics > Event count. | | since power on: `P` setups, `U` register updates |
 
