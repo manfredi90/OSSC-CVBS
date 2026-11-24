@@ -1,6 +1,29 @@
 Changelog
 =========
 
+CVBS decoder 0.36
+-----------------
+
+### Changed
+- Luma notch: Adaptive (new default), Off, Simple. The notch removes the
+  colour from the luma around the subcarrier frequency, and with it the
+  luma detail there: thin outlines of NES / SNES / MiSTer pixel art got
+  blurred, with a dark grey ghost pixel beside them. Adaptive (NTSC): the
+  colour estimate is compared with the line above at the same position;
+  the colour of the source is the same from line to line, luma detail is
+  not (its phase turns by 180 degrees per line, 120 on NES / SNES): with
+  similar magnitudes the two lines are averaged, the luma detail cancels
+  (halved on NES / SNES) and stays in the luma. Horizontal edges between
+  colours, and PAL: the plain notch (Simple). No extra line memory.
+- Black level: measured in the back porch after the clamp, just before the
+  picture, instead of during the burst gate. On real sources the level
+  ~1.5us after the sync was ~7-8 ADC codes below the black of the picture
+  (brightness -6 was needed to match RGB, also with S-Video); the
+  simulation showed no offset. The burst gate level is still used when the
+  two differ by more than 16 codes (picture or border in the back porch).
+- Decoder diag.: `L` shows both levels (burst gate / back porch) instead of
+  the peak code.
+
 CVBS decoder 0.35
 -----------------
 

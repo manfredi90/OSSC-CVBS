@@ -62,7 +62,7 @@ CVBS decoder menu
 | Contrast | 50–160% | |
 | Brightness | ±31 | |
 | Sharpness | Off, 1-7 | luma peaking: sharper pixel edges (the luma of a composite signal is softened by the notch). No boost at DC or at the highest frequencies (no extra noise). Default Off |
-| Luma notch | On, Off | Off: full bandwidth luma (dot crawl visible) |
+| Luma notch | Adaptive, Off, Simple | Adaptive (default): NTSC, the colour removed from the luma is compared with the line above: luma detail around the subcarrier frequency (fine pixels, thin outlines) changes phase from line to line and is kept, the colour is the same and is removed. Sharper outlines, no grey halo beside them (fully with 227.5 cycles per line, halved with NES / SNES, 227.33). PAL: as Simple. Simple: the notch of 0.35 and before. Off: full bandwidth luma (dot crawl visible) |
 | Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing (cross-colour) at black / white edges, slightly softer colour edges, dark bands at edges between colours of very different brightness at high settings. Always off with S-Video. Default Medium |
 | CSync on HSYNC, HDMI range, H. / V. position | | as in the OSSC Downscaler firmware (CSync: Off (H+V, default, HDMI TVs), XOR, AND, Standard (equalizing pulses + serrated vsync, for picky CRTs)) |
 
@@ -79,7 +79,7 @@ CVBS advanced menu
 | Line re-timing | On, Off | 27MHz xtal only: each line is re-timed on its sync trailing edge (fractional delay of the luma), so the picture does not shake. Off only for tests. Default On |
 | Ref. filter | Auto, Off, On | colour reference averaged over the lines (less line to line colour noise). Auto: On with the xtal clock, Off line-locked. Default Auto |
 | Adv. timing | | as in the OSSC firmware |
-| Diagnostics > Decoder diag. | | `Bn` burst level, `Ln` blank level (ADC code), `Pn` highest ADC code in the picture (255: white clipped, lower the ADC gain), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
+| Diagnostics > Decoder diag. | | `Bn` burst level, `Ln/m` level in the burst gate / in the back porch before the picture (ADC codes; the black reference is the back porch one, unless they differ by more than 16), then `K` colour killer / `P` PAL burst alternation / `N` none (NTSC) |
 | Diagnostics > Sync diag. | | per second: `O` output frames, `F` input frames, `S` output resyncs (xtal clock: one per input frame) |
 | Diagnostics > Xtal timing | | `L` line period (27MHz clocks), `O` output line length (`O..>..`: being redone) |
 | Diagnostics > Event count. | | since power on: `P` setups, `U` register updates, `X` output resyncs out of place |

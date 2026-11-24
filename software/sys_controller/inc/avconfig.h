@@ -193,7 +193,7 @@ typedef struct {
     alt_u8 cv_bright;       // brightness (SIGNED_NUMVAL_ZERO = 0)
     alt_u8 cv_adcgain;      // TVP7002 coarse gain 0-15 (gain 0.5 + n/10)
     alt_u8 cv_bgate;        // burst gate start (samples from the hsync leading edge)
-    alt_u8 cv_notch_off;    // 0 = luma notch on
+    alt_u8 cv_notch_off;    // luma notch: 0 = adaptive (NTSC: previous line compared), 1 = off, 2 = simple
     alt_u8 cv_retime_off;   // 0 = luma re-timed on the sync edge with the 27MHz xtal clock (0.14; was 0.12 ref. interp., frequency loop)
     alt_u8 cv_adcofs;       // Y blank level: mid-level clamp (ADC code 128) + coarse offset, x1 code (SIGNED_NUMVAL_ZERO = 0)
     alt_u8 cv_edge;         // chroma suppression at luma edges: 0 off, 1-3

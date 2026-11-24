@@ -52,14 +52,16 @@ module cvbs_decoder #(
     // edges (0 off, 1-3)
     input [23:0] cfg,
     // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [10]
-    // reference low-pass over lines (1/8), [13:11] sharpness (0-7)
+    // reference low-pass over lines (1/8), [13:11] sharpness (0-7), [14]
+    // simple luma notch (no line comparison)
     input [31:0] hc,
     input [31:0] inc,           // DDS increment (2^32 = sample rate)
     output reg [7:0] R_o,
     output reg [7:0] G_o,
     output reg [7:0] B_o,
     output [SIDE_W-1:0] side_o,
-    // [7:0] burst level, [15:8] blank level, [23:16] peak code (last field),
+    // [7:0] burst level, [15:8] blank level in the burst gate, [23:16] back
+    // porch level,
     // [24] colour killer, [25] PAL alternation seen, [26] frequency loop at
     // (0), [31:27] (0)
     output reg [31:0] status
@@ -84,6 +86,7 @@ wire nonotch  = cfg[4];
 wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal clock)
 wire rflt = hc[10];             // reference low-pass over lines (1/8)
 wire [2:0] sharp = hc[13:11];   // sharpness 0-7
+wire notch_simple = hc[14];      // luma notch without the previous line
 wire [7:0] bstart = cfg[15:8];
 wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
@@ -125,10 +128,10 @@ always @(posedge clk) begin
 end
 
 // x0 delayed (x0d[k] = x0 k clocks earlier)
-reg [7:0] x0d [1:26];
+reg [7:0] x0d [1:27];
 always @(posedge clk) begin
     x0d[1] <= x0;
-    for (i=2; i<=26; i=i+1)
+    for (i=2; i<=27; i=i+1)
         x0d[i] <= x0d[i-1];
 end
 
@@ -227,7 +230,7 @@ wire signed [2:0] d_rnd = d_r7 >>> 4;
 wire [11:0] h_cr = h + 12'd2 + {{9{d_rnd[2]}}, d_rnd};
 // (luma 8 samples ahead of the chroma: the edge detection of stage E looks
 // ahead, no chroma delay line)
-wire [11:0] h_yr = h + 12'd11 + {{10{d_line[5]}}, d_line[5:4]};
+wire [11:0] h_yr = h + 12'd12 + {{10{d_line[5]}}, d_line[5:4]};
 
 // ---------------------------------------------------------------------------
 // blank level: x0 is first filtered by a 6-sample box (about one subcarrier
@@ -250,7 +253,6 @@ reg [11:0] bl_line;     // mean of the gate, 4 fractional bits
 reg [7:0] blank = 8'd60;
 wire signed [12:0] bl_diff = $signed({1'b0, bl_line}) - $signed({1'b0, blank_f});
 wire [11:0] bl_step = {{3{bl_diff[12]}}, bl_diff[11:3]};
-wire signed [12:0] bl_err = $signed({1'b0, blank_f}) - $signed({1'b0, blank, 4'h0});
 wire [22:0] bl_scaled = bl_acc * 7'd91;     // x16/180
 always @(posedge clk) begin
     bx_a <= x0d[1] + x0d[2] + x0d[3];
@@ -267,6 +269,42 @@ always @(posedge clk) begin
     end
     if (bl_upd)     // blank_f += (line*16 - blank_f) / 8
         blank_f <= blank_f + bl_step;
+end
+
+// back porch level after the TVP7002 clamp (default: clamp right after the
+// burst), just before the active video: 10 positions of the 6-sample box,
+// 70-80 samples after the burst gate start (NTSC: ~8.5-9.1us from the
+// hsync leading edge; NES: black until 9.1us). The level during the burst
+// gate, ~1.5us after the sync, was ~7-8 codes below the black of the picture
+// (MiSTer composite and S-Video, NES / SNES: brightness -6 to match RGB),
+// no such difference in the simulation: the signal still recovering from
+// the sync pulse. The back porch level is used when it is within 16 codes
+// of the burst gate level (else a picture or border there: burst gate).
+wire gate_bp = (h >= {4'h0, bstart} + 12'd70) && (h < {4'h0, bstart} + 12'd80);
+reg gate_bp_prev;
+reg [13:0] bp_acc;
+reg bp_upd;
+reg [11:0] bp_f = 12'd960;
+reg [11:0] bp_line;
+wire signed [12:0] bp_diff = $signed({1'b0, bp_line}) - $signed({1'b0, bp_f});
+wire [11:0] bp_step = {{3{bp_diff[12]}}, bp_diff[11:3]};
+wire [22:0] bp_scaled = bp_acc * 9'd273;     // x16/60
+wire signed [12:0] bp_gate_d = $signed({1'b0, bp_f}) - $signed({1'b0, blank_f});
+wire bp_ok = (bp_gate_d < 13'sd256) && (bp_gate_d > -13'sd256);
+wire [11:0] black_f = bp_ok ? bp_f : blank_f;
+wire signed [12:0] bl_err = $signed({1'b0, black_f}) - $signed({1'b0, blank, 4'h0});
+always @(posedge clk) begin
+    gate_bp_prev <= gate_bp;
+    bp_upd <= 1'b0;
+    if (gate_bp) begin
+        bp_acc <= bp_acc + bx6;
+    end else if (gate_bp_prev) begin
+        bp_line <= bp_scaled[21:10];
+        bp_acc <= 14'h0;
+        bp_upd <= 1'b1;
+    end
+    if (bp_upd)
+        bp_f <= bp_f + bp_step;
 end
 
 // ---------------------------------------------------------------------------
@@ -336,11 +374,11 @@ always @(posedge clk) begin
     pQ <= flush_p ? 11'sd0 : -pQ_full[18:8];
 end
 
-// sin/cos delayed to the Z stage (13 clocks after sc_q)
-reg [19:0] scd [1:13];
+// sin/cos delayed to the Z stage (13 clocks after sc_q), +1 for the notch
+reg [19:0] scd [1:14];
 always @(posedge clk) begin
     scd[1] <= sc_q;
-    for (i=2; i<=13; i=i+1)
+    for (i=2; i<=14; i=i+1)
         scd[i] <= scd[i-1];
 end
 wire signed [9:0] sin_z0 = scd[13][19:10];
@@ -385,11 +423,6 @@ end
 wire signed [15:0] zI0 = b8I[19:4];  // Z stage (burst measurement)
 wire signed [15:0] zQ0 = b8Q[19:4];
 
-// Z stage for the luma notch (remodulation) of the line being received
-wire signed [15:0] zI = zI0;
-wire signed [15:0] zQ = zQ0;
-wire signed [9:0] sin_z = sin_z0;
-wire signed [9:0] cos_z = cos_z0;
 
 // line memory of the chroma (Z, one sample in 4, 512 x 32): written at the Z
 // stage, read one line later at the same h, linearly interpolated
@@ -416,6 +449,36 @@ always @(posedge clk) begin
     zIo <= (h_f == 2'd0) ? cl_hiI : (h_f[1] ? cl_mI[16:1] : cl_loI);
     zQo <= (h_f == 2'd0) ? cl_hiQ : (h_f[1] ? cl_mQ[16:1] : cl_loQ);
 end
+
+// Z for the luma notch (remodulation) of the line being received, one clock
+// after the Z stage. NTSC: compared with the Z of the previous line at the
+// same position (zIo / zQo, from the chroma line memory, aligned within a
+// sample). The colour of the source is the same from line to line (the DDS
+// follows the subcarrier, Z is in baseband), luma detail around the
+// subcarrier frequency is not: its phase turns by the subcarrier phase step
+// per line (180 degrees with 227.5 cycles per line, 120 with the 227.33 of
+// NES / SNES). With similar magnitudes (within 2x) the two are averaged:
+// the luma detail cancels (halved at 120 degrees) and is no longer removed
+// from the luma (no blurred / ghost edges around fine detail), the colour
+// stays. Different magnitudes (a horizontal edge between colours, or between
+// colour and grey): Z of the line alone (the plain notch). PAL (V switched
+// on alternate lines) and hc[14]: plain notch.
+wire [15:0] nAI = zI0[15] ? -zI0 : zI0;
+wire [15:0] nAQ = zQ0[15] ? -zQ0 : zQ0;
+wire [15:0] nBI = zIo[15] ? -zIo : zIo;
+wire [15:0] nBQ = zQo[15] ? -zQo : zQo;
+wire [16:0] nmA = (nAI > nAQ) ? ({1'b0, nAI} + {2'b0, nAQ[15:1]}) : ({1'b0, nAQ} + {2'b0, nAI[15:1]});
+wire [16:0] nmB = (nBI > nBQ) ? ({1'b0, nBI} + {2'b0, nBQ[15:1]}) : ({1'b0, nBQ} + {2'b0, nBI[15:1]});
+wire n_comb = ~pal & ~notch_simple & ({1'b0, nmA} <= {nmB, 1'b0}) & ({1'b0, nmB} <= {nmA, 1'b0});
+wire signed [16:0] nSI = zI0 + zIo;
+wire signed [16:0] nSQ = zQ0 + zQo;
+reg signed [15:0] zI, zQ;
+always @(posedge clk) begin
+    zI <= n_comb ? nSI[16:1] : zI0;
+    zQ <= n_comb ? nSQ[16:1] : zQ0;
+end
+wire signed [9:0] sin_z = scd[14][19:10];
+wire signed [9:0] cos_z = scd[14][9:0];
 
 // ---------------------------------------------------------------------------
 // burst gate at the Z stage, burst accumulation
@@ -508,7 +571,7 @@ wire vs_fall = vs0_prev & ~vs0;
 
 always @(posedge clk)
     if (vs_fall && (bl_err > 13'sd12 || bl_err < -13'sd12))
-        blank <= blank_f[11:4] + blank_f[3];
+        blank <= black_f[11:4] + black_f[3];
 
 always @(posedge clk) begin
     if (vs_fall) begin
@@ -750,9 +813,9 @@ wire signed [8:0] yl_dd = $signed({1'b0, yl_q}) - $signed({1'b0, yl_qp});
 wire signed [13:0] yl_ip = yl_dd * $signed({1'b0, d_f});
 always @(posedge clk) begin
     if (svideo | nonotch | kill)
-        yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank});
+        yAn <= $signed({3'b0, x0d[27]}) - $signed({3'b0, blank});
     else
-        yAn <= $signed({3'b0, x0d[26]}) - $signed({3'b0, blank}) - rmod;
+        yAn <= $signed({3'b0, x0d[27]}) - $signed({3'b0, blank}) - rmod;
     h_d1 <= h[10:0];
     yl_q <= yl_mem[h_yr[10:0]];
     yl_mem[h_d1] <= yAn8;
@@ -864,8 +927,7 @@ always @(posedge clk) begin
 end
 
 // ---------------------------------------------------------------------------
-// status: peak code in the active area of the last field, PAL alternation
-reg [7:0] peak, peak_l;
+// status: burst gate / back porch levels, PAL alternation
 // colour killer for the status: sampled in the middle of the field (the
 // killer is briefly on after the vsync, where there is no burst, and the CPU
 // reads the status right after the vsync)
@@ -876,19 +938,13 @@ wire [17:0] absFr = Sr[18] ? -Sr[17:0] : Sr[17:0];
 wire [17:0] absFi = Si[18] ? -Si[17:0] : Si[17:0];
 wire [18:0] fmag = (absFr > absFi) ? ({1'b0, absFr} + {2'b0, absFi[17:1]}) : ({1'b0, absFi} + {2'b0, absFr[17:1]});
 always @(posedge clk) begin
-    if (vs_fall) begin
-        peak_l <= peak;
-        peak <= 8'h0;
-    end else if (vs0 && (h > 12'd250) && (h < 12'd1650) && (x0d[1] > peak)) begin
-        peak <= x0d[1];
-    end
     if (vs_fall)
         st_line <= 9'h0;
     else if ((hs0_prev & ~hs0) && (st_line != 9'h1ff))
         st_line <= st_line + 1'b1;
     if ((hs0_prev & ~hs0) && (st_line == 9'd120))
         kill_st <= kill;
-    status <= {corr[21:17], 1'b0, alt_ok, kill_st, peak_l, blank, (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
+    status <= {corr[21:17], 1'b0, alt_ok, kill_st, bp_f[11:4] + bp_f[3], blank_f[11:4] + blank_f[3], (fmag[18:14] != 0) ? 8'hff : fmag[13:6]};
 end
 
 
@@ -901,8 +957,8 @@ initial begin
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
     cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
-    alt_cnt = 0; bad_cnt = 0; alt_ok = 0; peak = 0; peak_l = 0; st_line = 0; kill_st = 1;
-    bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
+    alt_cnt = 0; bad_cnt = 0; alt_ok = 0;st_line = 0; kill_st = 1;
+    bl_acc = 0; bl_line = 0; bp_acc = 0; bp_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
     se_tip = 0; se_thr2 = 0; se_ms = 0; se_arm = 0; se_found = 0; se_k = 0; se_wait = 0; se_n = 0; se_rem = 0; se_den = 0; se_q = 0; se_cnt = 0;
     se_acc = 0; se_init = 1; se_d = 0; d_line = 0; yl_qp = 0; d_f = 0;

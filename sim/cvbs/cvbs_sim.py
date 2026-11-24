@@ -159,7 +159,7 @@ def run(args):
         for a, b, c, d in zip(G, B, hs, vs):
             f.write('%02x %02x %x %x\n' % (a, b, c, d))
     exe = os.path.join(HERE, 'tb.vvp')
-    subprocess.run(['iverilog', '-g2005', '-o', exe, os.path.join(HERE, 'tb_cvbs.v'),
+    subprocess.run(['iverilog', '-g2005'] + os.environ.get('IVFLAGS', '').split() + ['-o', exe, os.path.join(HERE, 'tb_cvbs.v'),
                     os.environ.get('CVBS_RTL', os.path.join(ROOT, 'rtl', 'cvbs_decoder.v'))], check=True)
     subprocess.run(['vvp', '-n', exe], check=True, cwd=ROOT, stdout=subprocess.DEVNULL)
     rows = [l.replace('x', '0').split() for l in open(os.path.join(ROOT, 'out.txt'))]
@@ -230,7 +230,7 @@ def main():
     s = st[-1]
     corr = ((s >> 27) & 0x1f)
     corr = corr - 32 if corr & 0x10 else corr
-    print('status: burst %d blank %d peak %d kill %d alt %d corr_sat %d corr %d' % (
+    print('status: burst %d blank %d porch %d kill %d alt %d corr_sat %d corr %d' % (
         s & 0xff, (s >> 8) & 0xff, (s >> 16) & 0xff, (s >> 24) & 1, (s >> 25) & 1, (s >> 26) & 1, corr))
     worst = 0
     for ln in range(len(starts) - 1 - args.show, len(starts) - 1):

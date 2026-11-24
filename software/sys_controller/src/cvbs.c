@@ -55,7 +55,7 @@ uint8_t cv_mode;
 // decoder status (lt_status register)
 #define ST_BURST(s)     ((s) & 0xff)
 #define ST_BLANK(s)     (((s) >> 8) & 0xff)
-#define ST_PEAK(s)      (((s) >> 16) & 0xff)
+#define ST_PORCH(s)     (((s) >> 16) & 0xff)
 #define ST_KILL(s)      (((s) >> 24) & 1)
 #define ST_ALT(s)       (((s) >> 25) & 1)
 #define ST_CSAT(s)      (((s) >> 26) & 1)
@@ -260,13 +260,14 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
           ((uint32_t)(rf & 1) << 10);
     *hc |= ((uint32_t)(cc->cv_sharp & 7) << 11);  // FPGA: hc[13:11] = sharpness
+    *hc |= ((uint32_t)(cc->cv_notch_off == 2) << 14);   // hc[14]: simple notch
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     *flags = cv_mode ? (1 |
                         ((cv_mode == 2) << 1) |
                         (pal << 2) |
                         ((fsc_x64 == FSC_X64_PAL) << 3) |
-                        ((cc->cv_notch_off != 0) << 4) |
+                        ((cc->cv_notch_off == 1) << 4) |
                         ((cc->cv_xtal != 0) << 5) |
                         ((uint32_t)(cc->cv_xtal != 0) << 7) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
@@ -324,7 +325,8 @@ int cvbs_update() {
 
 void cvbs_diag_str(char *s, int len) {
     uint32_t st = sc->lt_status.data;
-    sniprintf(s, len, "B%u L%u P%u %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st), (unsigned)ST_PEAK(st),
+    // L: level in the burst gate / in the back porch after the clamp
+    sniprintf(s, len, "B%u L%u/%u %c", (unsigned)ST_BURST(st), (unsigned)ST_BLANK(st), (unsigned)ST_PORCH(st),
               ST_KILL(st) ? 'K' : (ST_ALT(st) ? 'P' : 'N'));
 }
 

@@ -108,6 +108,7 @@ static const char* const ds_480p_in_desc[] = { "Auto", "720x480", "640x480" };
 static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
+static const char* const cv_notch_desc[] = { "Adaptive", "Off", "Simple" };   // cv_notch_off
 static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
 static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line3x 47kHz", "Line4x 63kHz" };
 static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
@@ -310,7 +311,7 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Contrast",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_contrast,   OPT_NOWRAP, CV_CONTRAST_MIN, CV_CONTRAST_MAX, cv_pct2_disp } } },
     { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
     { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
-    { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(on_off_desc) } } },
+    { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(cv_notch_desc) } } },
     { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
     { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },

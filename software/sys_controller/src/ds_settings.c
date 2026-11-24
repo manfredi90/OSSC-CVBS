@@ -144,6 +144,9 @@ int ds_settings_load() {
         tc.cv_sharp = 0;
     if (tc.cv_reffilt > 2)
         tc.cv_reffilt = 0;
+    // luma notch: 0 adaptive (0.36, was On), 1 off, 2 simple
+    if (tc.cv_notch_off > 2)
+        tc.cv_notch_off = 0;
     if (tc.cv_xtal > 1)
         tc.cv_xtal = 0;
     if (tc.s480p_mode > 2)
