@@ -53,6 +53,10 @@ Requirements
 
 * OSSC board (tested on rev 1.8) with the official firmware (tested with 1.22)
   as the primary firmware
+* Connections:
+
+  ![Connections](docs/connections.svg)
+
 * Composite or S-Video source on the **AV2** RCA jacks:
 
   | Input | Connection |
@@ -67,7 +71,12 @@ Requirements
     handles 15kHz signals: DACs that work with the MiSTer FPGA's Direct Video
     mode also work here.
   * **HDMI TVs:** Output on Line2x (720x480p / 720x576p, a standard HDMI
-    format), Line3x or Line4x, CSync Off (H+V).
+    format), Line3x or Line4x, CSync Off (H+V). The output clock follows the
+    source line rate and every frame has the same length: some HDMI TVs that
+    show a black frame now and then with the official firmware keep a steady
+    picture with this one.
+  * **VGA monitors:** Output on Line2x (31kHz), CSync Off (H+V), through an
+    HDMI→VGA DAC and a plain VGA cable.
 
 
 Supported inputs and outputs
@@ -79,10 +88,14 @@ Supported inputs and outputs
 
 | Output | Lines (NTSC / PAL) | Pixel clock | Notes |
 |--------|--------------------|-------------|-------|
-| 15kHz | as the source | 27MHz | for CRTs and 15kHz monitors |
-| Line2x 31kHz | 525 / 625 (480p / 576p) | 27MHz | 720x480p / 720x576p exactly as CEA-861 (HDMI VIC 2/3, 17/18) |
-| Line3x 47kHz | 786 / 936 | 40.5MHz | not a CEA mode (as the official firmware's Line3x) |
-| Line4x 63kHz | 1048 / 1248 | 54MHz | not a CEA mode; the sharpest in the tests on an HDMI TV |
+| 15kHz | as the source | ~27MHz | for CRTs and 15kHz monitors |
+| Line2x 31kHz | 525 / 625 (480p / 576p) | ~27MHz | 720x480p / 720x576p (HDMI VIC 2/3, 17/18) |
+| Line3x 47kHz | 786 / 936 | ~40.5MHz | not a CEA mode (as the official firmware's Line3x) |
+| Line4x 63kHz | 1048 / 1248 | ~54MHz | not a CEA mode; the sharpest in the tests on an HDMI TV |
+
+With the 27MHz xtal sample clock (default) the output clock follows the
+source line rate (within 1% of the nominal one), so that the output frames
+keep pace with the source frames with no frame buffer.
 
 
 Installation
@@ -169,8 +182,6 @@ Known issues and limitations
 * SECAM is not supported.
 * PAL: the adaptive luma notch is not available at the moment (the plain
   notch is used).
-* Some HDMI TVs show a black frame now and then; the same happens with the
-  official firmware on those TVs. **Sync opt. → FPGA PLL BW: Low** may help.
 
 
 Building
