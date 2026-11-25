@@ -1449,12 +1449,6 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     //vm_conf->framesync_line = vm_in->timings.interlaced ? ((vm_out->timings.v_total>>vm_out->timings.interlaced)-(vm_conf->y_rpt+1)) : 0;
     vm_conf->framesync_line = 0;
 #endif
-    // input lines of up to 1024 samples (CVBS Line2x / 3x / 4x: 720): 4-line
-    // buffer (see linebuf_top), the output frame starts one input line later
-    // than with the 2-line buffer (middle of the read window: these modes
-    // read a line 2-4 times faster than it is written)
-    if (vm_in->timings.h_active <= 1024)
-        vm_conf->framesync_line = (vm_out->timings.v_total >> vm_out->timings.interlaced) - (vm_conf->y_rpt+1);
     vm_conf->framelock = 1;
 
     // 480i/576i input shown as 240p/288p: the output keeps the interlaced

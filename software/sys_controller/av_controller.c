@@ -903,29 +903,86 @@ static uint32_t cvx_measure_lp() {
     return 0;
 }
 
-// line length for a preset h_total: rounded up and never below the preset
-// (frontend: tests of 0.20 / 0.21)
+// line length for a preset h_total: rounded up (output lines never shorter
+// than the input ones: the output would read lines before they are written)
+// and never below the preset (tests of 0.20 / 0.21: SNES ~1714 clocks per
+// line, no picture with a shorter output line, fine with the preset)
 static uint16_t cvx_htot(uint16_t pre, uint32_t lp_x256) {
     uint64_t den = (uint64_t)cvx_pll_h_total << 8;
     uint16_t h = (uint16_t)(((uint64_t)pre * lp_x256 + den - 1) / den);
     return (h > pre) ? h : pre;
 }
 
-// output line length: the nearest whole number of clocks to the source line
-// (0.45: the output frame lock adds / takes out whole lines, FPGA; the
-// output may run ahead of the input, 0.20-0.44 rounded up)
-static uint16_t cvx_htot_out(uint16_t pre, uint32_t lp_x256) {
-    uint64_t den = (uint64_t)cvx_pll_h_total << 8;
-    return (uint16_t)(((uint64_t)pre * lp_x256 + den/2) / den);
+// 0.46: output clock on the FPGA PLL, 27MHz x M/(N*C), and output line
+// length chosen so that the output (rpt+1 lines per input line) is just a
+// little slower than the source: the lag left per input frame (cvx_lines
+// lines, see cvx_lag) is CVX_LAG_MIN clocks or more, made up by the soft
+// frame lock (FPGA, up to 8 clocks per back porch line). 0.20-0.45: output
+// on the 27MHz clock itself, a lag of hundreds of clocks per frame (bent top
+// of the picture on sensitive 15kHz CRTs). Among the solutions with a lag up
+// to CVX_LAG_GOOD the one nearest to the nominal clock (HDMI sinks), else
+// the one with the smallest lag; clock within 1% of the nominal one, line
+// length within 2% of the preset, PLL within the limits of the downscaler
+// (PFD >= 5MHz, VCO 650-1250MHz, M <= 200: tested with these loop settings).
+#define CVX_LAG_MIN     8
+#define CVX_LAG_GOOD    32
+#define CVX_LAG_MAX     160     // redone above (soft lock: >= 80 per field)
+static uint16_t cvx_n, cvx_m, cvx_c;
+static uint8_t cvx_rpt, cvx_pll;
+static uint32_t cvx_lines;
+
+// lag of the output per input frame, clocks x256 (negative: output ahead)
+static int64_t cvx_lag(uint32_t lp, uint16_t h, uint16_t n, uint16_t m, uint16_t c) {
+    int64_t t = (int64_t)(cvx_rpt+1)*h*n*c*256;
+    return ((t - (int64_t)lp*m) * (int64_t)cvx_lines) / m;
 }
 
-// applied line lengths still right for the line period lp, with a
-// hysteresis of 1/8 clock per input line (a line period at a rounding step,
-// e.g. PC Engine ~1716.2, must not toggle; the output frame lock allows up
-// to ~0.6 clock per line, see the simulation in sim/scan)
+// nominal output clock 27MHz x m0/(n0*c0)
+static int cvx_solve(uint32_t lp, uint16_t pre, uint16_t n0, uint16_t m0, uint16_t c0) {
+    uint32_t best = 0xffffffff;
+    uint16_t n, m, c;
+
+    for (n = 1; n <= 5; n++) {
+        for (m = (650000UL*n + 26999)/27000; (m <= 200) && (27000UL*m <= 1250000UL*n); m++) {
+            uint32_t vco_k = (27000UL*m)/n;
+            uint32_t fn_k = (27000UL*m0)/((uint32_t)n0*c0);
+            uint16_t cmin = (uint16_t)(vco_k/(fn_k + fn_k/100)), cmax = (uint16_t)(vco_k/(fn_k - fn_k/100) + 1);
+            for (c = (cmin > 1) ? cmin : 1; (c <= cmax) && (c <= 510); c++) {
+                // clock offset (ppm) from the nominal one
+                int64_t num = (int64_t)m*n0*c0, den = (int64_t)n*c*m0;
+                int64_t ppm = ((num - den)*1000000)/den;
+                int64_t d, lag;
+                uint32_t h, cost;
+                if ((ppm > 10000) || (ppm < -10000))
+                    continue;
+                // shortest line with a lag of CVX_LAG_MIN or more
+                d = (int64_t)(cvx_rpt+1)*n*c*256*cvx_lines;
+                h = (uint32_t)((((int64_t)lp*cvx_lines + CVX_LAG_MIN*256)*m + d - 1)/d);
+                if ((h*50 < (uint32_t)pre*49) || (h*50 > (uint32_t)pre*51))
+                    continue;
+                lag = cvx_lag(lp, h, n, m, c);
+                cost = (lag <= CVX_LAG_GOOD*256) ? (uint32_t)((ppm < 0) ? -ppm : ppm) : 1000000UL + (uint32_t)(lag >> 8);
+                if (cost < best) {
+                    best = cost;
+                    cvx_ho = h;
+                    cvx_n = n;
+                    cvx_m = m;
+                    cvx_c = c;
+                }
+            }
+        }
+    }
+    return (best != 0xffffffff);
+}
+
+// applied line lengths still right for the line period lp: input not too
+// short, not longer than needed by more than 1/4 clock per input line
+// (hysteresis: a line period at a rounding step, e.g. PC Engine ~1716.2,
+// must not toggle); output lag per frame 0..CVX_LAG_MAX
 static int cvx_htot_ok(uint32_t lp) {
+    int64_t lag = cvx_pll ? cvx_lag(lp, cvx_ho, cvx_n, cvx_m, cvx_c) : 0;
     return (cvx_hi >= cvx_htot(cvx_hi_pre, lp)) && (cvx_hi <= cvx_htot(cvx_hi_pre, lp + 64)) &&
-           (cvx_ho >= cvx_htot_out(cvx_ho_pre, lp - 32)) && (cvx_ho <= cvx_htot_out(cvx_ho_pre, lp + 32));
+           (cvx_pll ? ((lag >= 0) && (lag <= CVX_LAG_MAX*256)) : ((cvx_ho >= cvx_htot(cvx_ho_pre, lp)) && (cvx_ho <= cvx_htot(cvx_ho_pre, lp + 64))));
 }
 
 // main loop: line period over 16 samples 20ms apart (~0.3s, non-blocking);
@@ -1021,11 +1078,14 @@ int cvbs_xtal_diag() {
         strncpy(func_ret_status, "Not stable", LCD_ROW_LEN+1);
         return 1;
     }
-    if (cvx_htot_ok(lp))
+    if (cvx_htot_ok(lp) && cvx_pll)
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u %ld", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
+                  (unsigned)cvx_ho, (long)(cvx_lag(lp, cvx_ho, cvx_n, cvx_m, cvx_c) >> 8));
+    else if (cvx_htot_ok(lp))
         sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu.%lu O%u", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 10) >> 8),
                   (unsigned)cvx_ho);
     else
-        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)cvx_htot_out(cvx_ho_pre, lp));
+        sniprintf(func_ret_status, LCD_ROW_LEN+1, "L%lu O%u>%u", (unsigned long)(lp >> 8), (unsigned)cvx_ho, (unsigned)cvx_htot(cvx_ho_pre, lp));
     return 1;
 }
 
@@ -1098,7 +1158,7 @@ void program_mode()
     // CVBS decoder on the 27MHz xtal clock: a line is not a whole number of
     // clocks and the output clock is not locked to the source. Frontend and
     // output line lengths follow the measured line period (the TVP7002 PLL
-    // keeps the preset), the output frame follows the input in whole lines (FPGA).
+    // keeps the preset), the output is resynced at every input frame (FPGA).
     if (cv_mode && cm.cc.cv_xtal && cm.totlines) {
         uint32_t lp = cvx_measure_lp();
         if (!lp)
@@ -1108,10 +1168,24 @@ void program_mode()
         cvx_ho_pre = vmode_out.timings.h_total;
         cvx_lp_x256 = cvx_lp_now = lp;
         cvx_hi = vmode_in.timings.h_total = cvx_htot(cvx_hi_pre, lp);
-        cvx_ho = vmode_out.timings.h_total = cvx_htot_out(cvx_ho_pre, lp);
+        cvx_rpt = (vm_conf.y_rpt > 0) ? vm_conf.y_rpt : 0;
+        cvx_lines = cm.totlines;
+        // output clock on the FPGA PLL following the source (see cvx_solve);
+        // nominal: 27MHz (passthrough, Line2x) or the Line3x / 4x PLL ratio
+        cvx_pll = cvx_solve(lp, cvx_ho_pre, vm_conf.ds_pll_n ? vm_conf.ds_pll_n : 1, vm_conf.ds_pll_n ? vm_conf.ds_pll_m : 1, vm_conf.ds_pll_n ? vm_conf.ds_pll_c : 1);
+        if (cvx_pll) {
+            vm_conf.ds_pll_n = cvx_n;
+            vm_conf.ds_pll_m = cvx_m;
+            vm_conf.ds_pll_c = cvx_c;
+            vmode_out.timings.h_total = cvx_ho;
+        } else {
+            cvx_ho = vmode_out.timings.h_total = cvx_htot(cvx_ho_pre, lp);
+        }
         cvx_active = 1;
-        printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u\n", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 100) >> 8),
-               (unsigned)cvx_hi, (unsigned)cvx_ho);
+        printf("CVBS xtal: %lu.%02lu clocks per line, h_total in %u out %u, PLL %u/%u/%u lag %ld\n", (unsigned long)(lp >> 8), (unsigned long)(((lp & 0xff) * 100) >> 8),
+               (unsigned)cvx_hi, (unsigned)cvx_ho, cvx_n, cvx_m, cvx_c, cvx_pll ? (long)(cvx_lag(lp, cvx_ho, cvx_n, cvx_m, cvx_c) >> 8) : 0L);
+    } else {
+        cvx_pll = 0;
     }
 
     // Tweak infoframe pixel repetition indicator if passing thru horizontally multiplied mode
@@ -1123,7 +1197,7 @@ void program_mode()
     // native sampling: output on the FPGA PLL at an exact ratio of the ADC clock
     // (also the CVBS Line3x / Line4x output: 3/2 / 2 of the 27MHz ADC clock)
     ds_pll_tp = 0;
-    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || (cv_mode && (cm.cc.cv_line2x >= 2)));
+    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || (cv_mode && ((cm.cc.cv_line2x >= 2) || cvx_pll)));
     if (ds_pll_active) {
         ds_pll_make(vm_conf.ds_pll_n, vm_conf.ds_pll_m, vm_conf.ds_pll_c, &ds_pll_cfg);
         cm.pclk_o_hz = (uint32_t)(((uint64_t)pclk_i_hz*vm_conf.ds_pll_m)/((uint32_t)vm_conf.ds_pll_n*vm_conf.ds_pll_c));

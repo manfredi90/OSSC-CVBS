@@ -1,8 +1,25 @@
 Changelog
 =========
 
-CVBS decoder 0.45
+CVBS decoder 0.46
 -----------------
+
+### Changed
+- 27MHz crystal clock: the output clock is on the FPGA PLL, 27MHz x M/(N*C)
+  with the output line length chosen so that the output follows the source
+  line rate: the output lag left per frame is ~15-35 clocks (0.44: SNES
+  ~340, Wii 480i ~515), made up by the soft frame lock of 0.44 (0.45
+  reverted: frames with a varying number of lines, some HDMI TVs lose the
+  picture; 15kHz CRTs: picture jumps) with at most 8 clocks per back porch
+  line (0.44: 64; sensitive 15kHz CRTs: bent top of the picture). Output
+  clock within 1% of 27MHz (40.5 / 54MHz in Line3x / 4x), output line
+  length within 2% of the preset. <Xtal timing> shows the lag per frame.
+- Line2x / 3x / 4x of 480i / 576i sources (bob): a frame lock found without
+  a resync (e.g. at power-up) could have the other source field parity
+  (torn lines, see sim/scan): the lock now also checks it.
+
+CVBS decoder 0.45 (not released)
+--------------------------------
 
 ### Fixed
 - 27MHz crystal clock, 15kHz CRTs: bent top of the picture with 0.44 (the
