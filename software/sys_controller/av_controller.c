@@ -360,6 +360,13 @@ int pll_reconfigure(uint8_t mult, uint32_t pclk_i_hz, uint8_t bwsel)
 
     IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, sys_ctrl);
 
+    // the FPGA PLL relocks after the reconfiguration and the switch back to
+    // the TVP7002 clock (datasheet: <= 1ms): the caller resets the HDMI TX,
+    // its PLL must not lock on a clock still moving (0.46, CVBS Line2x 240p
+    // -> 480i, output clock +1.3%: HDMI TVs at random without picture)
+    if (config_changed && !(sys_ctrl & PLL_BYPASS))
+        usleep(20000);
+
     // TX PLL may occasionally lose lock during switchover, caller should reset it if config was changed
     return config_changed;
 }

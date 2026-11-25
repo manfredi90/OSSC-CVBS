@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 0.47
+-----------------
+
+### Fixed
+- HDMI TVs at random without picture (screen going on and off) after a
+  source change in Line2x (e.g. Wii 240p -> 480i: output clock +1.3%): the
+  HDMI TX was reset while the FPGA PLL was still relocking. 20ms wait after
+  a PLL reconfiguration.
+
 CVBS decoder 0.46
 -----------------
 
