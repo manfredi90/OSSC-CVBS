@@ -64,14 +64,21 @@ def gen(args):
     cv_all, c_all = [], []
     hs_all = []
     rng = np.random.default_rng(1)
+    # VHS timebase error (crystal sampling): line starts moved by a slow drift
+    # (args.vhs_ns amplitude, period args.vhs_period lines) plus a random line
+    # to line jitter (args.vhs_jit ns rms); the colour carrier stays continuous
+    # (VCR crystal), the line content moves with the tape
+    offs = [(args.vhs_ns * math.sin(2 * math.pi * l / args.vhs_period) + (rng.normal(0, args.vhs_jit) if args.vhs_jit else 0.0)) * 1e-9
+            for l in range(args.lines + 1)]
     for ln in range(args.lines):
         t0 = ln * t_line
         if args.xtal:
             # samples k = ceil(ln*T*fs) .. ceil((ln+1)*T*fs)-1 of a continuous
             # 27MHz clock: N or N+1 samples per line, the line starts at a
             # different fraction of a sample on each line
-            k0 = math.ceil(ln * t_line * fs)
-            k1 = math.ceil((ln + 1) * t_line * fs)
+            t0 = ln * t_line + offs[ln]
+            k0 = math.ceil(t0 * fs)
+            k1 = math.ceil(((ln + 1) * t_line + offs[ln + 1]) * fs)
             tt = (k0 * os_ + np.arange((k1 - k0) * os_)) / (fs * os_) - t0
         # line-locked clock jitter: the sampling instants of a line are
         # shifted by a random amount (H-PLL phase noise)
@@ -100,11 +107,18 @@ def gen(args):
         fl = 312 if lines625 else 262
         vbl = args.vblank and (ln % fl) < 9
         bm = (ta >= b_start) & (ta < b_start + b_cyc / fsc) & (not vbl) & (not args.bw)
+        # colorstripe (copy protection, broadcast / DVD outputs): bands of
+        # args.cstripe lines every 20 lines with the last 70% of the burst
+        # shifted by args.csphase degrees
+        phb = ph[bm].copy()
+        if args.cstripe and (ln % 20) < args.cstripe:
+            tb_ = ta[bm] - b_start
+            phb = np.where(tb_ >= 0.3 * b_cyc / fsc, phb + math.radians(args.csphase), phb)
         if pal:
             # amplitude a_burst, phase 135 / 225 degrees
-            c[bm] = a_burst * (-np.sin(ph[bm]) + vsw * np.cos(ph[bm])) / math.sqrt(2)
+            c[bm] = a_burst * (-np.sin(phb) + vsw * np.cos(phb)) / math.sqrt(2)
         else:
-            c[bm] = -a_burst * np.sin(ph[bm])
+            c[bm] = -a_burst * np.sin(phb)
         am = (ta >= act0) & (ta < act1) & (not vbl)
         pos = (ta[am] - act0) / (act1 - act0)
         bar = np.minimum((pos * 8).astype(int), 7)
@@ -229,6 +243,11 @@ def main():
     ap.add_argument('--sharp', type=int, default=0, help='sharpness 0-7')
     ap.add_argument('--cphase', type=float, default=0.0, help='chroma phase error against the burst, degrees (tape)')
     ap.add_argument('--dl', type=int, default=0, help='VHS: PAL delay line (hc[15])')
+    ap.add_argument('--vhs-ns', type=float, default=0.0, help='VHS timebase drift amplitude, ns (crystal sampling)')
+    ap.add_argument('--vhs-period', type=float, default=100.0, help='VHS timebase drift period, lines')
+    ap.add_argument('--vhs-jit', type=float, default=0.0, help='VHS line to line jitter, ns rms')
+    ap.add_argument('--cstripe', type=int, default=0, help='colorstripe: bands of N lines every 20 lines (0 off)')
+    ap.add_argument('--csphase', type=float, default=180.0, help='colorstripe burst phase shift, degrees')
     ap.add_argument('--igain', type=int, default=0, help='reference ramp gain 0-3 (1x 1.5x 2x 3x)')
     ap.add_argument('--tri', type=int, default=0, help='3-line notch (hc[15])')
     ap.add_argument('--setup', type=float, default=0.0, help='NTSC setup (0.075 = 7.5 IRE)')

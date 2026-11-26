@@ -1,6 +1,42 @@
 Changelog
 =========
 
+VHS firmware 0.6 (test)
+-----------------------
+
+### Changed
+- Tape stop / start, source off / on: the HDMI output no longer drops. The
+  output was on the TVP7002 clock (FPGA PLL bypassed) with a source and on
+  the FPGA PLL from the 27MHz reference for the test pattern / safe screens,
+  the PLL reference itself switched with the source, and every safe screen
+  set the HDMI TX up again. Now the output is always on the FPGA PLL from the
+  27MHz reference with one configuration (FPGA PLL BW from the settings), and
+  the HDMI TX is set up again only when what it sends changes (CEA mode,
+  pixel repetition, TX mode) or the PLL was reconfigured: only the picture
+  changes (a capture keeps recording). One output resync when the source
+  comes back (its phase is new).
+- View: the sync / porch timings of the CEA preset (the line doubled 576i had
+  a 6-line vsync / 38-line back porch, CEA 576p 5 / 39, and other hsync / back
+  porch clocks), the same as the safe screens.
+
+### Added
+- Burst check: a burst more than 45 degrees away from the last good one is
+  not used (the line takes the last good reference); after 6 such lines in a
+  row the new phase is taken. Colorstripe copy protection (bands of 2-4 lines
+  with the burst turned, broadcast / DVD outputs: not on VHS tapes) and
+  bursts hit by tape dropouts. sim/cvbs `--cstripe 4`: hue error on the
+  striped lines 72 degrees -> 0.3 (as without colorstripe).
+
+### Simulation
+- sim/cvbs: VHS timebase model with the crystal clock (`--vhs-ns`,
+  `--vhs-period`, `--vhs-jit`: line starts moved, colour carrier continuous),
+  colorstripe (`--cstripe`, `--csphase`); `runstd.sh`: NTSC, PAL, PAL-60,
+  NTSC 4.43, PAL-M, PAL-N, clean and from a tape (+-3us drift, line jitter,
+  chroma phase error 8 degrees, subcarrier +30ppm, noise), firmware defaults:
+  every PAL standard as good as clean (delay line), NTSC / NTSC 4.43 with the
+  constant hue error of the tape (no delay line in NTSC: Hue corrects it, as
+  on a TV); horizontal jitter 25-100ns with +-3us of timebase error.
+
 VHS firmware 0.5 (test)
 -----------------------
 

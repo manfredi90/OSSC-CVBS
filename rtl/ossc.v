@@ -475,10 +475,12 @@ begin
     end
 end
 
-// Control PLL reference clock switchover
+// Control PLL reference clock switchover (VHS firmware: always the 27MHz
+// reference, inclk0: the output clock does not move when the source comes
+// and goes, stock: the TVP7002 clock while the scan converter is enabled)
 always @(posedge clk27)
 begin
-    pll_clkswitch <= (pll_activeclock != enable_sc);
+    pll_clkswitch <= (pll_activeclock != 1'b0);
 end
 
 // (VHS firmware: HDMI only, no 15kHz output watchdog)

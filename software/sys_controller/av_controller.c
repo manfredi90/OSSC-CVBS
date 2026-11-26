@@ -309,7 +309,14 @@ int pll_reconfigure(uint8_t mult, uint32_t pclk_i_hz, uint8_t bwsel)
     const pll_config_t *cfg;
     static pll_config_t loaded_custom;
 
-    if (ds_pll_active || (mult > 1) || ((bwsel == 1) && (pclk_i_hz < 40000000UL)) || (cm.avinput == AV_TESTPAT) || ds_safe_screen) {
+    // VHS firmware: the output is always 27MHz on the FPGA PLL from the 27MHz
+    // reference (FPGA), with the same configuration for the source and the
+    // test pattern / safe screens (FPGA PLL BW from the settings): no clock
+    // change, no HDMI TX reset when a tape stops / starts (stock: PLL bypass
+    // with the TVP7002 clock for a source at 1x)
+    mult = 1;
+    bwsel = cm.cc.fpga_pll_bw;
+    if (1) {
         if (ds_pll_active && (((cm.avinput != AV_TESTPAT) && !ds_safe_screen) || ds_pll_tp))
             id = DS_PLL_CUSTOM_ID;
         else if ((mult == 2) && (pclk_i_hz > 50000000UL))
@@ -616,6 +623,20 @@ static uint8_t cvx_active;
 
 // VHS firmware: last source at 50Hz (test pattern / safe screens at 576i / 576p)
 uint8_t vhs_last_50hz;
+
+// VHS firmware: HDMI TX set up again only when what it sends changes (CEA
+// mode, pixel repetition, TX mode) or the FPGA PLL was reconfigured (the
+// first call always: tx_vic starts invalid). Called with the mode about to be
+// sent in vmode_out / vm_conf.
+static int vhs_tx_setup_needed(int pll_changed) {
+    static int tx_vic = -1, tx_pixr = -1, tx_mode = -1;
+    int changed = pll_changed || (tx_vic != (int)vmode_out.vic) || (tx_pixr != (int)vm_conf.hdmitx_pixr_ifr) ||
+                  (tx_mode != (int)cm.cc.tx_mode);
+    tx_vic = vmode_out.vic;
+    tx_pixr = vm_conf.hdmitx_pixr_ifr;
+    tx_mode = cm.cc.tx_mode;
+    return changed;
+}
 static uint32_t vhs_sl_config2, vhs_sl_config;     // last sl_config2 / sl_config written (VHS diagnostics select)
 
 void update_sc_config()
@@ -849,14 +870,22 @@ void show_safe_screen(const char *reason)
     get_testpattern_mode(&cm.cc, &vmode_in, &vmode_out, &vm_conf);
     // VHS firmware: always 27MHz (PLL 1x from the 27MHz reference)
     cm.pclk_o_hz = 27000000UL;
-    pll_reconfigure(1, cm.pclk_o_hz, 0);
+    int pll_changed = pll_reconfigure(1, cm.pclk_o_hz, 0);
     ds_safe_reason = reason;
     cvx_active = 0;
     update_osd_size(&vmode_out);
     update_sc_config();
-    TX_SetPixelRepetition(0, 0);
-    cm.hdmitx_pclk_level = 0;
-    TX_enable(cm.cc.tx_mode);     // (AVI InfoFrame: vic and pixel repetition of get_testpattern_mode)
+    // VHS firmware: the safe screen is in the CEA mode of the output, on the
+    // same clock: the HDMI TX is set up again only if something it sends
+    // changed (first time, PLL reconfigured, other mode / pixel repetition),
+    // else the picture just changes (a capture keeps recording)
+    {
+        int tx_changed = vhs_tx_setup_needed(pll_changed);
+        TX_SetPixelRepetition(0, 0);
+        cm.hdmitx_pclk_level = 0;
+        if (tx_changed)
+            TX_enable(cm.cc.tx_mode);     // (AVI InfoFrame: vic and pixel repetition of get_testpattern_mode)
+    }
 
     if (cm.avinput != AV_TESTPAT) {
         strncpy(row1, avinput_str[cm.avinput], LCD_ROW_LEN+1);
@@ -1400,7 +1429,8 @@ void program_mode()
     printf("PCLK level: %u, PR: %u, IPR: %u, ITC: %u\n", hdmitx_pclk_level, vm_conf.tx_pixelrep, vm_conf.hdmitx_pixr_ifr, cm.cc.hdmi_itc);
 
     // Full TX initialization increases mode switch delay, use only when necessary
-    if (cm.cc.full_tx_setup || fpga_pll_config_changed || (cm.hdmitx_pclk_level != hdmitx_pclk_level)) {
+    // (VHS firmware: also when the CEA mode / pixel repetition sent changed)
+    if (vhs_tx_setup_needed(fpga_pll_config_changed) | cm.cc.full_tx_setup || (cm.hdmitx_pclk_level != hdmitx_pclk_level)) {
         cm.hdmitx_pclk_level = hdmitx_pclk_level;
         TX_enable(cm.cc.tx_mode);
     } else if (cm.cc.tx_mode!=TX_DVI) {

@@ -1463,8 +1463,23 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         ds_pt_position(cc, vm_out, vm_conf);
 
     if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
+        int k;
         vm_out->vic = ((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60;
         vm_conf->hdmitx_pixr_ifr = 0;
+        // VHS firmware: the sync / porch timings of the CEA preset of that
+        // mode (the line doubled 576i had a 6-line vsync and a 38-line back
+        // porch, CEA 576p 5 / 39, and other hsync / back porch clocks): the
+        // same timing as the test pattern / safe screens of View (no timing
+        // change on the HDMI output when a tape stops / starts)
+        for (k=0; k<num_video_modes_plm; k++) {
+            if (video_modes_plm_default[k].vic == vm_out->vic) {
+                vm_out->timings.h_synclen = video_modes_plm_default[k].timings.h_synclen;
+                vm_out->timings.h_backporch = video_modes_plm_default[k].timings.h_backporch;
+                vm_out->timings.v_synclen = video_modes_plm_default[k].timings.v_synclen;
+                vm_out->timings.v_backporch = video_modes_plm_default[k].timings.v_backporch;
+                break;
+            }
+        }
     }
 
     if (vm_out->vic == HDMI_Unknown)

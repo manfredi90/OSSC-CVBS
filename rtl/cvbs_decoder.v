@@ -509,6 +509,10 @@ wire rot_fast = (rot_h == {7{rot_p}});
 wire signed [22:0] corr_step = rot_fast ? 23'sd1024 : 23'sd128;
 wire signed [22:0] corr_next = rot_z ? $signed({corr[21], corr}) : (rot_p ? corr + corr_step : corr - corr_step);
 reg kill;
+reg signed [18:0] Gr, Gi;           // last good reference (burst check)
+reg signed [47:0] gdot;
+reg gv;
+reg [2:0] bad_run;
 reg s_cur, s_meas, s_meas_prev, s_meas_pv;
 reg [9:0] alt_cnt, bad_cnt;
 reg alt_ok;
@@ -615,6 +619,32 @@ always @(posedge clk) begin
                     Rr <= Rr <<< 1;
                     Ri <= Ri <<< 1;
                 end
+                st <= 7'd40;        // burst check, then 6
+            end
+            // VHS firmware: a burst more than 45 degrees away from the last
+            // good one (colorstripe copy protection: bands of 2-4 lines with
+            // the burst turned up to 180 degrees, broadcast / DVD outputs;
+            // a burst hit by a tape dropout) is not used: the line takes the
+            // last good reference. After 6 such lines in a row the new phase
+            // is taken (it really changed, e.g. another source).
+            40: begin ma <= Rr; mb <= Gr; end
+            41: begin ma <= Ri; mb <= Gi; end
+            42: begin t1 <= mres; ma <= Ri; mb <= Gr; end           // Rr*Gr
+            43: begin gdot <= t1 + mres; ma <= Rr; mb <= Gi; end    // + Ri*Gi
+            44: t1 <= mres;                                         // Ri*Gr
+            45: begin
+                // cross = Ri*Gr - Rr*Gi; bad: dot <= 0 or |cross| > dot
+                if (gv && (bad_run != 3'd6) && ((gdot <= 0) || ((t1 - mres) > gdot) || ((mres - t1) > gdot))) begin
+                    Rr <= Gr;
+                    Ri <= Gi;
+                    bad_run <= bad_run + 1'b1;
+                end else begin
+                    Gr <= Rr;
+                    Gi <= Ri;
+                    gv <= 1'b1;
+                    bad_run <= 3'd0;
+                end
+                st <= 7'd6;
             end
             6: begin
                 ma <= Ri; mb <= RPr;
@@ -921,7 +951,7 @@ end
 integer j;
 initial begin
     ph = 0; corr = 0; st = 0; pv = 0; rpv = 0; vb = 0; RPr = 0; RPi = 0; rot_p = 0; rot_z = 1; rot_h = 7'h55; Sr = 0; Si = 0;
-    Pr = 0; Pi = 0; Rr = 0; Ri = 0;
+    Pr = 0; Pi = 0; Rr = 0; Ri = 0; Gr = 0; Gi = 0; gv = 0; bad_run = 0; gdot = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
     nZI = 0; nZQ = 0; zI = 0; zQ = 0; cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
