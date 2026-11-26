@@ -193,17 +193,19 @@ typedef struct {
     alt_u8 cv_bright;       // brightness (SIGNED_NUMVAL_ZERO = 0)
     alt_u8 cv_adcgain;      // TVP7002 coarse gain 0-15 (gain 0.5 + n/10)
     alt_u8 cv_bgate;        // burst gate start (samples from the hsync leading edge)
-    alt_u8 cv_notch_off;    // luma notch: 0 = adaptive (NTSC: previous line compared), 1 = off, 2 = simple
+    alt_u8 cv_notch_off;    // luma notch: 0 = on (VHS firmware: plain notch only; CVBS: adaptive), 1 = off
     alt_u8 cv_retime_off;   // 0 = luma re-timed on the sync edge with the 27MHz xtal clock (0.14; was 0.12 ref. interp., frequency loop)
     alt_u8 cv_adcofs;       // Y blank level: mid-level clamp (ADC code 128) + coarse offset, x1 code (SIGNED_NUMVAL_ZERO = 0)
-    alt_u8 cv_edge;         // chroma suppression at luma edges: 0 off, 1-3
+    alt_u8 cv_edge;         // (VHS firmware: not used, CVBS: chroma suppression at luma edges)
     alt_u8 cv_clamp;        // TVP7002 clamp start, pixels after the hsync trailing edge
-    alt_u8 cv_line2x;       // CVBS output: 0 = 15kHz, 1 = Line2x (CEA 720x480p, 27MHz), 2 = Line3x (47kHz, 40.5MHz), 3 = Line4x (63kHz, 54MHz)
+    alt_u8 cv_line2x;       // VHS output: 0 = Archive (480i / 576i, CEA 1440 with pixel repetition), 1 = View (480p / 576p, bob); 27MHz
     /* added in settings v4 (0.6): keep at the end (v3 settings are migrated) */
     alt_u8 cv_reffilt;      // colour reference low-pass over lines: 0 auto (on with the xtal clock, else off), 1 off, 2 on (1/8) (0.14; was ramp gain, sharpness)
     alt_u8 cv_xtal;         // sample clock: 0 = TVP7002 H-PLL (line-locked), 1 = 27MHz crystal (EXT_CLK) (was 0.6 chroma delay, 0.8 ref. filter)
     /* added in settings v6 (0.37): keep at the end (v3-v5 settings are migrated) */
     alt_u8 cv_setup;        // NTSC 7.5 IRE setup removed: 0 = auto (NTSC, NTSC 4.43, PAL-M), 1 = off, 2 = on
+    /* VHS firmware */
+    alt_u8 cv_lockstep;     // soft frame lock: at most 1 << n clocks per back porch line (0-3)
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

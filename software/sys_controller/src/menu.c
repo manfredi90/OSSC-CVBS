@@ -99,7 +99,6 @@ static const char* const lumacode_pal_desc[] = { "PAL", "NTSC", c_lc_palette_set
 static const char* const adc_pll_bw_desc[] = { "High", "Medium", "Low", "Ultra low" };
 static const char* const fpga_pll_bw_desc[] = { "High", "Low" };
 static const char* const palset_type_arr[] = { "Custom .txt", "NES .pal" };
-static const char* const ds_csync_desc[] = { "Off (H+V)", "XOR", "AND", "Standard" };
 static const char* const ds_range_desc[] = { "Full (0-255)", "Lim. (16-235)", "Lim. (16-255)" };
 static const char* const ds_720p_ar_desc[] = { "Full 16:9", "Center 4:3", "Wide" };
 static const char* const on_off_desc[] = { "On", "Off" };   // for *_off settings
@@ -108,10 +107,9 @@ static const char* const ds_480p_in_desc[] = { "Auto", "720x480", "640x480" };
 static const char* const ds_i2p_desc[] = { "Passthru", "240p" };
 static const char* const ds_flicker_desc[] = { "Off", "1", "2", "3", "4" };
 static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTSC 4.43", "PAL-M", "PAL-N" };
-static const char* const cv_notch_desc[] = { "Adaptive", "Off", "Simple" };   // cv_notch_off
-static const char* const cv_edge_desc[] = { "Off", "Low", "Medium", "High" };
-static const char* const cv_out_desc[] = { "15kHz", "Line2x 31kHz", "Line3x 47kHz", "Line4x 63kHz" };
-static const char* const cv_xtal_desc[] = { "Line-locked", "27MHz xtal" };
+static const char* const cv_notch_desc[] = { "On", "Off" };   // cv_notch_off
+static const char* const cv_out_desc[] = { "Archive (interl)", "View (progress)" };
+static const char* const cv_lockstep_desc[] = { "1 clock", "2 clocks", "4 clocks", "8 clocks" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 static const char* const cv_setup_desc[] = { "Auto", "Off", "On" };
 
@@ -289,6 +287,7 @@ MENU(menu_cvbs_diag, P99_PROTECT({ \
     { "<Decoder diag. >",                       OPT_FUNC_CALL,          { .fun = { cvbs_diagnostics, NULL } } },
     { "<Sync diag.    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_sync_diag, NULL } } },
     { "<Xtal timing   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_xtal_diag, NULL } } },
+    { "<VHS timing    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_vhs_diag, NULL } } },
     { "<Event count.  >",                       OPT_FUNC_CALL,          { .fun = { cvbs_event_diag, NULL } } },
 }))
 
@@ -297,7 +296,7 @@ MENU(menu_cvbs_adv, P99_PROTECT({ \
     { "ADC offset",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_adcofs,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_ADCOFS_RANGE, SIGNED_NUMVAL_ZERO+CV_ADCOFS_RANGE, signed_disp } } },
     { "Burst position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bgate,      OPT_NOWRAP, CV_BGATE_MIN, CV_BGATE_MAX, value_disp } } },
     { "Clamp position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_clamp,      OPT_NOWRAP, CV_CLAMP_MIN, CV_CLAMP_MAX, value_disp } } },
-    { "Sample clock",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_xtal,      OPT_WRAP,   SETTING_ITEM(cv_xtal_desc) } } },
+    { "Frame lock step",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_lockstep,  OPT_WRAP,   SETTING_ITEM(cv_lockstep_desc) } } },
     { "Line re-timing",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_retime_off, OPT_WRAP,  SETTING_ITEM(on_off_desc) } } },
     { "Ref. filter",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_reffilt,   OPT_WRAP,   SETTING_ITEM(cv_reffilt_desc) } } },
     { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },
@@ -314,8 +313,6 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "Brightness",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bright,     OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_BRIGHT_RANGE, SIGNED_NUMVAL_ZERO+CV_BRIGHT_RANGE, signed_disp } } },
     { "Sharpness",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sharp,      OPT_NOWRAP, 0, CV_SHARP_MAX, cv_sharp_disp } } },
     { "Luma notch",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_notch_off, OPT_WRAP,   SETTING_ITEM(cv_notch_desc) } } },
-    { "Edge color sup.",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_edge,      OPT_WRAP,   SETTING_ITEM(cv_edge_desc) } } },
-    { "CSync on HSYNC",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_csync,     OPT_WRAP,   SETTING_ITEM(ds_csync_desc) } } },
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },
     { "H. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_hpos,       OPT_NOWRAP, DS_HPOS_MIN, DS_HPOS_MAX, signed_disp } } },
     { "V. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_vpos,       OPT_NOWRAP, DS_VPOS_MIN, DS_VPOS_MAX, signed_disp } } },
@@ -323,8 +320,8 @@ MENU(menu_downscaler, P99_PROTECT({ \
 
 
 MENU(menu_main, P99_PROTECT({ \
-    {     "CVBS decoder   >",                   OPT_SUBMENU,            { .sub = { &menu_downscaler, NULL, NULL } } },
-    {     "CVBS advanced  >",                   OPT_SUBMENU,            { .sub = { &menu_cvbs_adv, NULL, NULL } } },
+    {     "VHS decoder    >",                   OPT_SUBMENU,            { .sub = { &menu_downscaler, NULL, NULL } } },
+    {     "VHS advanced   >",                   OPT_SUBMENU,            { .sub = { &menu_cvbs_adv, NULL, NULL } } },
     { LNG("Video in opt.  >","ﾀｲｵｳｴｲｿﾞｳ     >"),  OPT_SUBMENU,            { .sub = { &menu_vinput_opt, NULL, NULL } } },
     { LNG("Sync opt.      >","ﾄﾞｳｷｵﾌﾟｼｮﾝ    >"),  OPT_SUBMENU,            { .sub = { &menu_sync, NULL, NULL } } },
     { LNG("Output opt.    >","ｼｭﾂﾘｮｸｵﾌﾟｼｮﾝ  >"),  OPT_SUBMENU,            { .sub = { &menu_output, NULL, NULL } } },

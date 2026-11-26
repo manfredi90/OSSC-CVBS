@@ -1463,7 +1463,7 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
         ds_pt_position(cc, vm_out, vm_conf);
 
     if ((mindiff_lm != MODE_PT) && cvbs_line2x(cc, mode_preset->group)) {
-        vm_out->vic = (cc->cv_line2x >= 2) ? HDMI_Unknown : (((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60);
+        vm_out->vic = ((mode_preset->group == GROUP_288P) || (mode_preset->group == GROUP_576I)) ? HDMI_576p50 : HDMI_480p60;
         vm_conf->hdmitx_pixr_ifr = 0;
     }
 
@@ -1478,39 +1478,33 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
  * 15.73kHz / 60Hz. Shown at boot, without sync and for unsupported inputs, so
  * the output is always at 15kHz.
  */
+extern uint8_t vhs_last_50hz;
+
 void get_testpattern_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm_proc_config_t *vm_conf)
 {
     int i;
+    // VHS firmware: the test pattern / safe screens in the CEA mode of the
+    // selected Output for the last colour system seen (480i / 576i with
+    // pixel repetition, 480p / 576p, 27MHz): a tape stopped or a source
+    // switched off does not change the HDMI mode (TVs, capture cards)
+    HDMI_Video_Type vic = cc->cv_line2x ? (vhs_last_50hz ? HDMI_576p50 : HDMI_480p60) :
+                                     (vhs_last_50hz ? HDMI_576i50 : HDMI_480i60);
 
     memset(vm_conf, 0, sizeof(vm_proc_config_t));
     memset(vm_in, 0, sizeof(mode_data_t));
 
     for (i=0; i<num_video_modes_plm; i++) {
-        if (video_modes_plm_default[i].vic == HDMI_240p60)
+        if (video_modes_plm_default[i].vic == vic)
             break;
     }
     memcpy(vm_out, &video_modes_plm_default[i], sizeof(mode_data_t));
-    // CVBS firmware: the test pattern / safe screens at the selected output
-    // (858 clocks per line, 525 / 786 / 1048 lines at 27 / 40.5 / 54MHz),
-    // so that an HDMI TV is not switched to 240p when the source is off
-    switch (cc->cv_line2x) {
-    case 1:
-        vmode_hv_mult(vm_out, 1, 2);
-        vm_out->timings.v_total = 525;
-        vm_out->vic = HDMI_480p60;
-        break;
-    case 2:
-    case 3:
-        vmode_hv_mult(vm_out, 1, cc->cv_line2x+1);
-        vm_out->vic = HDMI_Unknown;
-        break;
-    default:
-        vmode_hv_mult(vm_out, 2, 1);    // 858 -> 1716 clocks at 27MHz
-        break;
+    if (!cc->cv_line2x) {
+        vmode_hv_mult(vm_out, 2, 1);    // 858 / 864 -> 1716 / 1728 clocks at 27MHz
+        vm_conf->hdmitx_pixr_ifr = 1;
     }
     vm_out->ar.h = 4;
     vm_out->ar.v = 3;
-    vm_conf->ds_csync = cc->ds_csync;
+    vm_conf->ds_csync = 0;
 }
 
 int get_vmode(vmode_t vmode_id, mode_data_t *vm_in, mode_data_t *vm_out, vm_proc_config_t *vm_conf)

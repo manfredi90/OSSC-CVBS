@@ -22,8 +22,10 @@
 //    burst-locked phase and automatic chroma gain
 //  - a frequency loop trims the DDS increment so that r does not rotate from
 //    line to line (source subcarrier / OSSC crystal tolerance)
-// Luma: composite minus the remodulated chroma (an adaptive notch at the
-// subcarrier, removed when the colour killer is active).
+// Luma: composite minus the remodulated chroma (a notch at the subcarrier,
+// removed when the colour killer is active). VHS firmware: plain notch (the
+// adaptive one compared consecutive lines: with a tape the lines do not line
+// up and the luma is band-limited below the subcarrier anyway).
 //
 // The active video is demodulated one line later (line memories), with the
 // reference interpolated between the bursts of its line and of the next one.
@@ -49,7 +51,7 @@ module cvbs_decoder #(
     // resync at every frame (scanconverter),
     // [15:8] burst gate start (samples from the hsync leading edge),
     // [21:16] brightness (signed, x2), [23:22] chroma suppression at luma
-    // edges (0 off, 1-3)
+    // edges (0 off, 1-3; VHS firmware: not used, diagnostics select in ossc.v)
     input [23:0] cfg,
     // [9:0] re, [25:16] im (signed), [31:26] luma gain - 32, [10]
     // reference low-pass over lines (1/8), [13:11] sharpness (0-7), [14]
@@ -85,10 +87,7 @@ wire nonotch  = cfg[4];
 wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal clock)
 wire rflt = hc[10];             // reference low-pass over lines (1/8)
 wire [2:0] sharp = hc[13:11];   // sharpness 0-7
-wire notch_simple = hc[14];      // luma notch without the previous line
-wire notch_3l = hc[15];          // luma notch: 3 lines (120 degrees per line: NES / SNES)
 wire [7:0] bstart = cfg[15:8];
-wire [1:0] edge_sup = cfg[23:22];   // chroma suppression at luma edges: 0 off, 1-3
 wire signed [5:0] bright = cfg[21:16];
 wire signed [9:0] hc_re = hc[9:0];
 wire signed [9:0] hc_im = hc[25:16];
@@ -416,78 +415,14 @@ always @(posedge clk) begin
     zQo <= (h_f == 2'd0) ? cl_hiQ : (h_f[1] ? cl_mQ[16:1] : cl_loQ);
 end
 
-// second line memory: Z of two lines before (for the 3-line notch), written
-// with the Z of the previous line, read as cl_mem
-(* ramstyle = "M9K" *) reg [31:0] cl2_mem [0:511];
-reg [31:0] cl2_q;
-// (one value per group of 4 samples, not interpolated: logic space)
-reg signed [15:0] zIp, zQp;         // Z of two lines before
+// Z for the luma notch (remodulation) of the line being received, two
+// clocks after the Z stage (same latency as the adaptive notch of CVBS 1.0)
+reg signed [15:0] nZI, nZQ, zI, zQ;
 always @(posedge clk) begin
-    cl2_q <= cl2_mem[cl_ra];
-    if (h[1:0] == 2'd0)
-        cl2_mem[h[10:2]] <= {zIo, zQo};
-    if (h_f == 2'd1) begin
-        zIp <= cl2_q[31:16];
-        zQp <= cl2_q[15:0];
-    end
-end
-
-// Z for the luma notch (remodulation) of the line being received, one clock
-// after the Z stage. NTSC: compared with the Z of the previous line at the
-// same position (zIo / zQo, from the chroma line memory, aligned within a
-// sample). The colour of the source is the same from line to line (the DDS
-// follows the subcarrier, Z is in baseband), luma detail around the
-// subcarrier frequency is not: its phase turns by the subcarrier phase step
-// per line (180 degrees with 227.5 cycles per line, 120 with the 227.33 of
-// NES / SNES). With similar magnitudes (within 2x) the two are averaged:
-// the luma detail cancels (halved at 120 degrees) and is no longer removed
-// from the luma (no blurred / ghost edges around fine detail), the colour
-// stays. Different magnitudes (a horizontal edge between colours, or between
-// colour and grey): Z of the line alone (the plain notch). hc[14]: plain
-// notch. PAL: V is switched on alternate lines, the colour is the same two
-// lines before (zIp / zQp, second line memory): the same rule with that
-// line; the luma detail turns by twice the PAL step per line (2 x 270.6 =
-// 181 degrees; PAL-M / PAL-N 180, PAL-60 202) and cancels.
-// 3-line notch (hc[15], set by the CPU when the subcarrier turns by about
-// 120 degrees per line, from the measured line period): the luma detail
-// cancels in the sum of three lines (1 + e^j120 + e^j240 = 0). All three of
-// similar magnitude: average of three; else the 2-line rule. Two clocks after
-// the Z stage (stage 1: magnitudes and sums, stage 2: selection).
-wire [15:0] nAI = zI0[15] ? -zI0 : zI0;
-wire [15:0] nAQ = zQ0[15] ? -zQ0 : zQ0;
-wire [15:0] nBI = zIo[15] ? -zIo : zIo;
-wire [15:0] nBQ = zQo[15] ? -zQo : zQo;
-wire [15:0] nCI = zIp[15] ? -zIp : zIp;
-wire [15:0] nCQ = zQp[15] ? -zQp : zQp;
-reg [15:0] nmA, nmB, nmC;
-reg signed [16:0] nSI, nSQ;
-reg signed [15:0] nZI, nZQ, nPI, nPQ;
-// the line compared: the previous one (NTSC), two lines before (PAL)
-wire [15:0] nmB_n = (nBI > nBQ) ? nBI : nBQ;
-wire [15:0] nmC_n = (nCI > nCQ) ? nCI : nCQ;
-always @(posedge clk) begin
-    nmA <= (nAI > nAQ) ? nAI : nAQ;
-    nmB <= pal ? nmC_n : nmB_n;
-    nmC <= nmC_n;
-    nSI <= zI0 + (pal ? zIp : zIo);
-    nSQ <= zQ0 + (pal ? zQp : zQo);
     nZI <= zI0;
     nZQ <= zQ0;
-    nPI <= zIp;
-    nPQ <= zQp;
-end
-wire signed [17:0] n3I = nSI + nPI;
-wire signed [17:0] n3Q = nSQ + nPQ;
-wire n_ab = ({1'b0, nmA} <= {nmB, 1'b0}) & ({1'b0, nmB} <= {nmA, 1'b0});
-wire n_ac = ({1'b0, nmA} <= {nmC, 1'b0}) & ({1'b0, nmC} <= {nmA, 1'b0});
-wire n_comb = ~notch_simple & n_ab;
-wire n_tri = n_comb & ~pal & notch_3l & n_ac;
-wire signed [25:0] n3I_p = n3I * 8'sd85;     // x85/256 = 1/3.01
-wire signed [25:0] n3Q_p = n3Q * 8'sd85;
-reg signed [15:0] zI, zQ;
-always @(posedge clk) begin
-    zI <= n_tri ? n3I_p[23:8] : (n_comb ? nSI[16:1] : nZI);
-    zQ <= n_tri ? n3Q_p[23:8] : (n_comb ? nSQ[16:1] : nZQ);
+    zI <= nZI;
+    zQ <= nZQ;
 end
 wire signed [9:0] sin_z = scd[15][19:10];
 wire signed [9:0] cos_z = scd[15][9:0];
@@ -866,33 +801,17 @@ always @(posedge clk) begin
     yS <= sat11(s_sum);
 end
 
-// stage E: chroma suppression at luma edges. A sharp luma edge has energy at
-// the subcarrier, which is demodulated as colour fringes (cross-colour, e.g.
-// blue / purple at black / white edges). The chroma is attenuated around the
-// edges: edge strength e = |Y(n) - Y(n-4)|, envelope decaying by 6 per
-// sample, chroma delayed by 8 (luma: 5 in stage S, then 4 + 1) so that the
-// attenuation also covers the fringe before the edge. Off with S-Video (no
-// cross-colour; dark bands at edges between colours of different luma).
+// stage E: alignment of the luma with the chroma (CVBS 1.0: chroma
+// suppression at luma edges, removed in the VHS firmware)
 reg signed [10:0] yE_d [1:5];
-reg [10:0] e_env;
-reg [8:0] e_att;
 reg signed [10:0] yE, UE, VE;
-wire signed [11:0] e_diff = yA - yAd[4];
-wire [10:0] e_abs = e_diff[11] ? -e_diff[10:0] : e_diff[10:0];
-wire [10:0] e_dec = (e_env > 11'd6) ? e_env - 11'd6 : 11'd0;
-wire [13:0] e_scaled = {3'b0, e_env} << edge_sup;   // x2 / x4 / x8
-wire signed [9:0] e_gain = 10'sd256 - $signed({1'b0, e_att});
-wire signed [20:0] uE_p = UA * e_gain;
-wire signed [20:0] vE_p = VA * e_gain;
 always @(posedge clk) begin
     yE_d[1] <= yS;
     for (i=2; i<=5; i=i+1)
         yE_d[i] <= yE_d[i-1];
-    e_env <= (e_abs > e_dec) ? e_abs : e_dec;
-    e_att <= ((edge_sup == 2'h0) | svideo) ? 9'h0 : ((e_scaled > 14'd256) ? 9'd256 : e_scaled[8:0]);
     yE <= yE_d[4];      // (stage S: 5 clocks)
-    UE <= uE_p >>> 8;
-    VE <= vE_p >>> 8;
+    UE <= UA;
+    VE <= VA;
 end
 
 // stage B: luma gain (white 160 -> 255), brightness, YUV -> RGB products
@@ -968,7 +887,7 @@ initial begin
     Pr = 0; Pi = 0; Rr = 0; Ri = 0;
     w_re = 0; w_im = 0; kill = 1; Rr2 = 0;
     s_cur = 1; s_meas_prev = 0; s_meas_pv = 0; nob_cnt = 0; s_prev = 1;
-    cl2_q = 0; zIp = 0; zQp = 0; cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
+    nZI = 0; nZQ = 0; zI = 0; zQ = 0; cl_q = 0; cl_loI = 0; cl_loQ = 0; cl_hiI = 0; cl_hiQ = 0; zIo = 0; zQo = 0; h_f = 0; yl_q = 0; yAo = 0;
     alt_cnt = 0; bad_cnt = 0; alt_ok = 0; st_line = 0; kill_st = 1;
     bl_acc = 0; bl_line = 0; bx_a = 0; bx_b = 0; bx6 = 0; accI = 0; accQ = 0; gate_zd = 0;
     b6I = 0; b6Q = 0; b7I = 0; b7Q = 0; b8I = 0; b8Q = 0; pI = 0; pQ = 0;
@@ -981,7 +900,7 @@ initial begin
     for (j=1; j<=13; j=j+1) scd[j] = 0;
     for (j=1; j<=26; j=j+1) x0d[j] = 0;
     for (j=1; j<=8; j=j+1) cb[j] = 0;
-    c_bp2 = 0; e_env = 0; e_att = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
+    c_bp2 = 0; yA = 0; UA = 0; VA = 0; rmod = 0; U3 = 0; V3 = 0;
     for (j=1; j<=5; j=j+1) yE_d[j] = 0;
 
     for (j=1; j<=6; j=j+1) yAd[j] = 0;

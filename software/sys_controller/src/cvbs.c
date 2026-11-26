@@ -268,17 +268,7 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
           ((uint32_t)(rf & 1) << 10);
     *hc |= ((uint32_t)(cc->cv_sharp & 7) << 11);  // FPGA: hc[13:11] = sharpness
-    *hc |= ((uint32_t)(cc->cv_notch_off == 2) << 14);   // hc[14]: simple notch
-    // hc[15]: 3-line notch when the subcarrier turns by ~120 / 240 degrees
-    // per line (NES / SNES: 227.33 cycles per line; 227.5 = 180 degrees: 2
-    // lines), from the measured field period
-    notch_3l = 0;
-    if ((cc->cv_notch_off == 0) && !pal && in_pcnt && in_totlines) {
-        uint64_t cpl_x1000 = (fsc_x64 * in_pcnt * (in_ilace ? 2 : 1) * 1000ULL) / (64ULL * TVP_EXTCLK_HZ * in_totlines);
-        uint32_t fr = (uint32_t)(cpl_x1000 % 1000);
-        notch_3l = ((fr >= 280) && (fr <= 390)) || ((fr >= 610) && (fr <= 720));
-    }
-    *hc |= ((uint32_t)notch_3l << 15);
+    // (VHS firmware: plain luma notch only, hc[15:14] not used)
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     if (setup) {
@@ -299,8 +289,8 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
                         ((uint32_t)(cc->cv_xtal != 0) << 7) |
                         (((cc->cv_xtal != 0) && (cc->cv_retime_off == 0)) << 6) |
                         ((uint32_t)cc->cv_bgate << 8) |
-                        (((uint32_t)bright & 0x3f) << 16) |
-                        ((uint32_t)(cc->cv_edge & 3) << 22)) : 0;
+                        (((uint32_t)bright & 0x3f) << 16)) : 0;
+    // flags[23:22] (sl_config2[31:30]): VHS diagnostics select (ossc.v), 0 here
 }
 
 int cvbs_update() {

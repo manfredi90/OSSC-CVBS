@@ -2,7 +2,7 @@ name: Build secondary firmware
 
 on:
   push:
-    branches: [cvbs]
+    branches: [vhs]
   workflow_dispatch:
 
 env:
@@ -176,18 +176,18 @@ jobs:
             echo "$d: $(awk '/Setup/{s=1} s && /^Slack/{print $3; s=0}' "$d/output_files/ossc.sta.summary" 2>/dev/null | sort -g | head -1)" >> out/SEED.txt
           done
 
-      # Build outputs and logs are also pushed to the "ci-out-cvbs" branch,
+      # Build outputs and logs are also pushed to the "ci-out-vhs" branch,
       # so they can be fetched with plain git.
-      - name: Publish to ci-out-cvbs branch
+      - name: Publish to ci-out-vhs branch
         run: |
           cd out
           echo "${GITHUB_SHA} run ${GITHUB_RUN_ID}" > BUILD_INFO.txt
-          git init -q -b ci-out-cvbs
+          git init -q -b ci-out-vhs
           git -c user.name=ci -c user.email=ci@localhost add -A
           git -c user.name=ci -c user.email=ci@localhost commit -q -m "CI output for ${GITHUB_SHA::8}"
-          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-out-cvbs
+          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-out-vhs
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ossc-cv-fw
+          name: ossc-vhs-fw
           path: out/

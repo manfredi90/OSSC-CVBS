@@ -297,6 +297,10 @@ reg linebuf_wren;
 // words per line, lb_slots lines). Deeper layouts absorb the read/write drift
 // of a non-integer output line period (e.g. 750 input lines -> 262).
 wire lbs = (lb_layout == 2'h3);     // runtime stride layout
+// layout 0: 2 lines of 2048 pixels, or 4 lines of 1024 when the input lines
+// fit (Line2x: 720): the output reads a line twice as fast as it is written,
+// 2 lines leave almost no room for the output frame lock (VHS 0.1, as in 0.45)
+wire lb4 = (h_in_active <= 12'd1024);
 wire lb422 = lbs & ~lb_rgb;
 reg [12:0] linebuf_rdaddr;
 reg wr_x_ok;
@@ -315,7 +319,7 @@ always @(*) begin
             wr_x_ok = 1'b1;
         end
         default: begin
-            linebuf_rdaddr = {1'b0, ypos_lb[0], xpos_lb[10:0]};
+            linebuf_rdaddr = lb4 ? {1'b0, ypos_lb[1:0], xpos_lb[9:0]} : {1'b0, ypos_lb[0], xpos_lb[10:0]};
             wr_x_ok = 1'b1;
         end
     endcase
@@ -711,7 +715,7 @@ always @(posedge PCLK_CAP_i) begin
         2'h1: linebuf_wraddr_r <= {ypos_wraddr[2:0], ua3[9:0]};
         2'h2: linebuf_wraddr_r <= {ypos_wraddr[3:0], ua3[8:0]};
         2'h3: linebuf_wraddr_r <= wr_base + {2'h0, ua3};
-        default: linebuf_wraddr_r <= {1'b0, ypos_wraddr[0], ua3};
+        default: linebuf_wraddr_r <= lb4 ? {1'b0, ypos_wraddr[1:0], ua3[9:0]} : {1'b0, ypos_wraddr[0], ua3};
     endcase
     linebuf_wrdata <= lb422 ? u3_out : {8'h0, u3_out[31:8]};
     linebuf_wren <= uv3;

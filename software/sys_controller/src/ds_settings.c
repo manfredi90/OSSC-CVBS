@@ -26,12 +26,10 @@
 #include "utils.h"
 #include "cvbs.h"
 
-// CVBS firmware: own magic (the downscaler / HD firmware settings in the same
-// sector have another format and are not loaded)
-#define DS_SETTINGS_MAGIC   0x4F534356  // "OSCV"
-#define DS_SETTINGS_VERSION 6     // 4: 0.6 (sharpness, chroma delay at the end of avconfig_t), 5: 0.35 (Output values)
-                                  // 3: 0.3 (edge suppression, clamp position; older settings not loaded)
-                                  // 6: 0.37 (NTSC setup at the end of avconfig_t)
+// VHS firmware: own magic (the CVBS / downscaler / HD firmware settings in
+// the same sector have another format and are not loaded)
+#define DS_SETTINGS_MAGIC   0x4F535648  // "OSVH"
+#define DS_SETTINGS_VERSION 1     // 1: VHS 0.1
 #define V5_TC_LESS          1     // bytes added to avconfig_t in v6
 #define V3_TC_LESS          (2 + V5_TC_LESS)    // bytes added to avconfig_t in v4 and v6
 
@@ -58,49 +56,14 @@ static uint32_t blob_crc(const ds_settings_blob_t *b) {
 
 void set_default_settings();
 
-// settings with a shorter avconfig_t (fields added at its end since): copy
-// them into blob, the missing fields from the defaults
-static int load_short(const unsigned char *p, unsigned less) {
-    extern const avconfig_t tc_default;
-    unsigned tco = offsetof(ds_settings_blob_t, tc);
-    unsigned tcl = sizeof(avconfig_t) - less;
-    unsigned crco = offsetof(ds_settings_blob_t, crc) - less;
-    uint32_t crc_s;
-    memcpy(&crc_s, p + crco, 4);
-    if ((blob.len != ((crco + 4 + 3) & ~3u)) || (crc32((unsigned char*)p, crco, 1) != crc_s))
-        return 0;
-    memcpy(&blob.tc, p + tco, tcl);
-    memcpy((unsigned char*)&blob.tc + tcl, (const unsigned char*)&tc_default + tcl, less);
-    memcpy(&blob.ts, p + tco + tcl, sizeof(settings_t));
-    memcpy(blob.rc_keymap, p + tco + tcl + sizeof(settings_t), sizeof(blob.rc_keymap));
-    return 1;
-}
-
 int ds_settings_load() {
     const ds_settings_blob_t *f = (const ds_settings_blob_t*)(INTEL_GENERIC_SERIAL_FLASH_INTERFACE_TOP_0_AVL_MEM_BASE + DS_SETTINGS_FLASH_ADDR);
 
     extern const avconfig_t tc_default;
-    int migrated = 0;
 
     memcpy(&blob, f, sizeof(blob));
 
-    // v3 (0.3-0.5), v4 (0.6-0.34), v5 (0.35-0.36): same layout, avconfig_t
-    // without the fields added at its end since
-    if ((blob.magic == DS_SETTINGS_MAGIC) && (blob.version >= 3) && (blob.version <= 5)) {
-        unsigned less = (blob.version == 3) ? V3_TC_LESS : V5_TC_LESS;
-        uint16_t ver = blob.version;
-        if (load_short((const unsigned char*)f, less)) {
-            // v3 / v4: Output 1 / 2 = Line2x 1440 / 720 (both Line2x now),
-            // 3 / 4 = Line3x / Line4x
-            if (ver <= 4)
-                blob.tc.cv_line2x = (blob.tc.cv_line2x >= 3) ? (blob.tc.cv_line2x - 1) : (blob.tc.cv_line2x ? 1 : 0);
-            migrated = 1;
-            printf("DS settings: v%u migrated\n", (unsigned)ver);
-        }
-    }
-
-    if (!migrated &&
-        ((blob.magic != DS_SETTINGS_MAGIC) ||
+    if (((blob.magic != DS_SETTINGS_MAGIC) ||
          (blob.version != DS_SETTINGS_VERSION) ||
          (blob.len != sizeof(ds_settings_blob_t)) ||
          (blob.crc != blob_crc(&blob))))
@@ -131,9 +94,11 @@ int ds_settings_load() {
         tc.ds_flicker = 0;
     // test pattern design: not kept, Gray at start
     tc.ds_tp_sel = 0;
-    // CVBS output: 15kHz, Line2x, Line3x, Line4x (kept)
-    if (tc.cv_line2x > 3)
-        tc.cv_line2x = 0;
+    // VHS output: Archive (480i / 576i), View (480p / 576p)
+    if (tc.cv_line2x > 1)
+        tc.cv_line2x = 1;
+    if (tc.cv_lockstep > 3)
+        tc.cv_lockstep = 3;
     if (tc.ds_out_range > 2)
         tc.ds_out_range = 0;
     // decoder settings out of range: defaults
@@ -146,19 +111,19 @@ int ds_settings_load() {
         (tc.cv_edge > 3) || (tc.cv_clamp > CV_CLAMP_MAX)) {
         memcpy(&tc.cv_std, &tc_default.cv_std, offsetof(avconfig_t, cv_clamp) + 1 - offsetof(avconfig_t, cv_std));
     }
-    if (tc.ds_csync > 3)
-        tc.ds_csync = 0;
+    // VHS firmware: HDMI only (separate syncs), no edge suppression
+    tc.ds_csync = 0;
+    tc.cv_edge = 0;
     if (tc.cv_sharp > CV_SHARP_MAX)
         tc.cv_sharp = 0;
     if (tc.cv_reffilt > 2)
         tc.cv_reffilt = 0;
     if (tc.cv_setup > 2)
         tc.cv_setup = 0;
-    // luma notch: 0 adaptive (0.36, was On), 1 off, 2 simple
-    if (tc.cv_notch_off > 2)
+    // luma notch: 0 on (plain), 1 off; always the 27MHz crystal clock
+    if (tc.cv_notch_off > 1)
         tc.cv_notch_off = 0;
-    if (tc.cv_xtal > 1)
-        tc.cv_xtal = 0;
+    tc.cv_xtal = 1;
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
     if (tc.ds_720p_ar == 3)       // 1.2.2-1.2.3 "Wide (216p)": now "Wide"

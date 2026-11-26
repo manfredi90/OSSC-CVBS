@@ -17,7 +17,7 @@ integer wt [0:4095];
 reg [23:0] q;
 reg [10:0] yprev = 0;
 reg [1:0] slot = 0;
-wire lb4 = (h_in_active <= 12'd1024);
+wire lb4 = (h_in_active <= 12'd1024);   // as linebuf_top (layout 0)
 integer tcap = 0;
 reg [23:0] d_tag [0:WDLY]; reg [11:0] d_adr [0:WDLY]; reg d_we [0:WDLY];
 integer i;

@@ -26,10 +26,10 @@
 #define FW_VER_MAJOR            1
 #define FW_VER_MINOR            22
 
-// CVBS decoder firmware version (shown at boot). DS_FW_TAG names the image
-// (ossc_cv_vX.Y.bin)
-#define DS_VERSION "1.0.2"
-#define DS_FW_TAG               "cv"
+// VHS firmware version (shown at boot). DS_FW_TAG names the image
+// (ossc_vhs_vX.Y.bin)
+#define DS_VERSION "0.1"
+#define DS_FW_TAG               "vhs"
 
 #ifdef OSDLANG_JP
 #define FW_SUFFIX              "j"

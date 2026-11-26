@@ -16,7 +16,7 @@ end
 always #(HI) clki = ~clki;
 always #(HO) clko = ~clko;
 
-integer JIT, LP_X256, NFRAMES, HTOT, HACT, HSL, HBP, VTOT, VACT, VSL, VBP, ILACE, YRPT, IHSL, IHBP, IHACT, IHSKIP, IVSL, IVBP, IVACT, IPROG;
+integer LS, VJ, VA, VP, VHS, VHSL, JIT, LP_X256, NFRAMES, HTOT, HACT, HSL, HBP, VTOT, VACT, VSL, VBP, ILACE, YRPT, IHSL, IHBP, IHACT, IHSKIP, IVSL, IVBP, IVACT, IPROG;
 wire [31:0] hv_out_config  = {HSL[7:0], HACT[11:0], HTOT[11:0]};
 wire [31:0] hv_out_config2 = {ILACE[0], VACT[10:0], VTOT[10:0], HBP[8:0]};
 integer VSTART;
@@ -40,7 +40,7 @@ scanconverter dut (
     .sl_config(32'h0), .sl_config2(32'h0), .sl_config3(32'h0), .testpattern_enable(1'b0), .lb_enable(1'b1),
     .ds_vdec(3'h0), .lb_layout(2'h0), .ds_hfilt(2'h0), .ds_field_cfg(10'h0), .ds_ilace(1'b0), .ds_fswap(1'b0), .ds_i2p(1'b0),
     .ds_vflt(1'b0), .ds_vflt_bofs(2'h0), .ds_vflt_a(5'h0), .ds_w31(1'b0), .lb_stride(10'h0), .lb_slots(6'h0), .lb_rgb(1'b0),
-    .ds_hofs(13'h0), .resync_always(1'b1), .ext_sync_mode(1'b0), .ext_frame_change_i(1'b0),
+    .ds_hofs(13'h0), .resync_always(1'b1), .lock_step(LS[1:0]), .ext_sync_mode(1'b0), .ext_frame_change_i(1'b0),
     .ext_R_i(8'h0), .ext_G_i(8'h0), .ext_B_i(8'h0),
     .HSYNC_o(HS), .VSYNC_o(VS), .CSYNC_o(CS), .DE_o(DE), .shmask_data(12'h0), .ds_resync_cnt(rcnt),
     .lt_active(1'b0), .lt_mode(2'h0), .emif_br_clk(1'b0), .emif_br_reset(1'b0),
@@ -55,6 +55,15 @@ initial begin
     if (!$value$plusargs("NF=%d", NFRAMES)) NFRAMES = 12;
     if (!$value$plusargs("VSTART=%d", VSTART)) VSTART = 0;
     if (!$value$plusargs("JIT=%d", JIT)) JIT = 0;
+    // VHS model (clocks): random line start jitter +-VJ, slow drift VA x
+    // sin(2 pi line / VP), head switch: the last VHSL lines of each field
+    // VHS clocks later; lock step (1 << LS clocks per back porch line)
+    if (!$value$plusargs("LS=%d", LS)) LS = 2;
+    if (!$value$plusargs("VJ=%d", VJ)) VJ = 0;
+    if (!$value$plusargs("VA=%d", VA)) VA = 0;
+    if (!$value$plusargs("VP=%d", VP)) VP = 1000;
+    if (!$value$plusargs("VHS=%d", VHS)) VHS = 0;
+    if (!$value$plusargs("VHSL=%d", VHSL)) VHSL = 6;
     if (!$value$plusargs("HTOT=%d", HTOT)) HTOT = 1716;
     if (!$value$plusargs("HACT=%d", HACT)) HACT = 1440;
     if (!$value$plusargs("HSL=%d", HSL)) HSL = 124;
@@ -75,28 +84,50 @@ initial begin
     if (!$value$plusargs("IPROG=%d", IPROG)) IPROG = 0;
     f = $fopen("lb_out.txt", "w");
     g = $fopen("sc_out.txt", "w");
-    dut.h_cnt = 0; dut.v_cnt = 0; dut.dst_fid = 0; dut.src_fid = 0; dut.fl_drop = 0; dut.fl_ins = 0;
+    dut.h_cnt = 0; dut.v_cnt = 0; dut.dst_fid = 0; dut.src_fid = 0;
     dut.frame_change_sync1_reg = 0; dut.frame_change_sync2_reg = 0; dut.frame_change_prev = 0; dut.frame_change_resync = 0;
-    dut.in_field = 0; dut.ds_resync_cnt = 0; dut.fl_cap = 0; dut.resync_strobe = 0;
+    dut.in_field = 0; dut.ds_resync_cnt = 0; dut.resync_strobe = 0;
     lines_f = IPROG ? 262 : 525;
     if (!$value$plusargs("LINES=%d", lines_f)) ;
     lines_a = IPROG ? lines_f : (lines_f + 1) / 2;    // field A lines (frame change at its line 1)
-    acc = 64'd1000 << 8; lstart = acc; v = 0;
+    acc = 64'd1000 << 8; lstart = acc; lnom = acc; v = 0; gl = 0;
 end
 // input side: line v (1..) from the frame start, field A / B
 integer h, vv, fb, hs;
+reg [63:0] lnom, lnext;
+integer gl;
+// start of input line n (n = 1.. in the frame, global line gn): nominal
+// position + VHS offset (x256)
+function [63:0] vhs_start(input [63:0] nom, input integer n, input integer gn);
+    real d;
+    reg signed [63:0] o;
+    begin
+        d = VA * $sin(6.283185307 * gn / VP);
+        o = $rtoi(d * 256.0);
+        if (VJ > 0) o = o + $signed(64'($urandom % (2*VJ*16+1))) * 16 - VJ*256;
+        if ((VHS != 0) && ((IPROG ? (n > lines_f - VHSL) : ((n > lines_a - VHSL && n <= lines_a) || (n > lines_f - VHSL)))))
+            o = o + VHS * 256;
+        vhs_start = $signed(nom) + o;
+    end
+endfunction
 always @(posedge clki) begin
     ti <= ti + 1;
-    if ((ti << 8) >= acc) begin
-        fc <= 1'b1;
-        lstart <= acc; v <= 1; fld <= fld + (IPROG ? 1 : 2);
-        acc <= acc + lines_f * LP_X256 + ((JIT > 0) ? (($urandom % (2*JIT+1)) - JIT) << 8 : 0);
-        frame <= frame + 1;
-        $fwrite(g, "F %0d\n", ti);
-        if (frame == NFRAMES) begin $fclose(f); $fclose(g); $finish; end
+    if ((v == 0) || ((v == lines_f) && ((ti << 8) >= acc))) begin
+        if ((ti << 8) >= acc) begin
+            fc <= 1'b1;
+            lstart <= vhs_start(acc, 1, gl + 1); lnom <= acc; v <= 1;
+            lnext <= vhs_start(acc + LP_X256, 2, gl + 2); gl <= gl + 1; fld <= fld + (IPROG ? 1 : 2);
+            acc <= acc + lines_f * LP_X256 + ((JIT > 0) ? (($urandom % (2*JIT+1)) - JIT) << 8 : 0);
+            frame <= frame + 1;
+            $fwrite(g, "F %0d\n", ti);
+            if (frame == NFRAMES) begin $fclose(f); $fclose(g); $finish; end
+        end
     end else begin
         if ((ti << 8) >= lstart + 16*256) fc <= 1'b0;
-        if ((ti << 8) >= lstart + LP_X256) begin lstart <= lstart + LP_X256; v <= v + 1; end
+        if ((v < lines_f) && ((ti << 8) >= lnext)) begin
+            lstart <= lnext; lnom <= lnom + LP_X256; v <= v + 1; gl <= gl + 1;
+            lnext <= vhs_start(lnom + 2*LP_X256, v + 2, gl + 2);
+        end
     end
     // position in the line (frontend: DE / x / y 4 clocks after the line start)
     h = ti - 4 - (lstart >> 8);

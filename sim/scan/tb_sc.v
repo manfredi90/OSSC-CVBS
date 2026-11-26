@@ -25,7 +25,7 @@ scanconverter dut (
     .sl_config(32'h0), .sl_config2(32'h0), .sl_config3(32'h0), .testpattern_enable(1'b0), .lb_enable(1'b1),
     .ds_vdec(3'h0), .lb_layout(2'h0), .ds_hfilt(2'h0), .ds_field_cfg(10'h0), .ds_ilace(1'b0), .ds_fswap(1'b0), .ds_i2p(1'b0),
     .ds_vflt(1'b0), .ds_vflt_bofs(2'h0), .ds_vflt_a(5'h0), .ds_w31(1'b0), .lb_stride(10'h0), .lb_slots(6'h0), .lb_rgb(1'b0),
-    .ds_hofs(13'h0), .resync_always(RESYNC[0]), .ext_sync_mode(1'b0), .ext_frame_change_i(1'b0),
+    .ds_hofs(13'h0), .resync_always(RESYNC[0]), .lock_step(2'd2), .ext_sync_mode(1'b0), .ext_frame_change_i(1'b0),
     .ext_R_i(8'h0), .ext_G_i(8'h0), .ext_B_i(8'h0),
     .HSYNC_o(HS), .VSYNC_o(VS), .CSYNC_o(CS), .DE_o(DE), .shmask_data(12'h0), .ds_resync_cnt(rcnt),
     .lt_active(1'b0), .lt_mode(2'h0), .emif_br_clk(1'b0), .emif_br_reset(1'b0),

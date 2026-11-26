@@ -32,3 +32,16 @@ data age. `runall.sh` runs 15kHz (480i, 240p, 576i, 288p) and Line2x / 3x /
     python3 mkcopy.py
     verilator --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module tb -I../../rtl tb_lb.v sc_sim.v stubs.v -o tblb
     NF=24 ./runall.sh
+
+VHS firmware
+------------
+
+`runvhs.sh`: exact CEA output line lengths, input with the VHS model of
+`tb_lb.v` (plusargs VA / VP: slow drift amplitude in clocks and period in
+lines, VHS / VHSL: head switch jump in clocks over the last lines of each
+field, VJ: random line start jitter, JIT: frame start jitter, LS: lock step),
+480i / 576i in Archive (Line1x) and View (Line2x), 0, +-100 and 300ppm.
+
+    python3 mkcopy.py
+    verilator --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module tb -I../../rtl tb_lb.v sc_sim.v stubs.v -o tblb
+    NF=24 ./runvhs.sh

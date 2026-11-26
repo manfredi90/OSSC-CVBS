@@ -64,7 +64,6 @@ module ossc (
 
 wire [31:0] sys_ctrl;
 wire lt_active = 1'b0;   // latency tester removed (downscaler build)
-wire wd_bypass = sys_ctrl[11];   // CVBS firmware test option: Line2x (31kHz) output
 wire tvp_vsync_type = sys_ctrl[10];
 wire pll_bypass = sys_ctrl[9];
 wire remote_event = sys_ctrl[8];
@@ -95,7 +94,6 @@ wire [31:0] misc_config_sc = {misc_config[31:25], 1'b0, 8'h0, 1'b0, misc_config[
 //   sl_config2 = [5:0] horizontal timing extension bits, [31:8] decoder flags
 //   sl_config3 = DDS increment
 wire [2:0] ds_vdec = 3'h0;
-wire [1:0] ds_csync = misc_config[28:27];   // 0=off, 1=XOR, 2=AND, 3=standard (CSync on HSYNC)
 // HDMI RGB range: 0 = full 0-255, 1 = limited 16-235, 2 = 16-255 (DACs that
 // clip below 16). misc_config[8:7]: the stock reverse LPF bits, not used
 // here (masked off for the frontend)
@@ -226,6 +224,48 @@ always @(posedge TVP_PCLK_i) begin
     end
     TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
 end
+
+// VHS diagnostics, per field (latched at the TVP7002 vsync edge): range of
+// the line lengths seen by the flywheel (27MHz clocks, edge to edge) in the
+// middle of the field (lines 24-223, away from the vertical interval and the
+// head switch) and over the whole field, and the number of edges the
+// flywheel generated (missing / rejected syncs). Read by the CPU through the
+// decoder status (cv_status[23:16], selected by sl_config2[31:30]).
+reg dg_vs_prev;
+reg [8:0] dg_line;
+reg [11:0] dg_mn, dg_mx, dg_mnA, dg_mxA;
+reg [7:0] dg_pp, dg_ppA;
+reg [4:0] dg_gen, dg_genF;
+wire [11:0] dg_d = dg_mx - dg_mn;
+wire [11:0] dg_dA = dg_mxA - dg_mnA;
+always @(posedge TVP_PCLK_i) begin
+    dg_vs_prev <= TVP_VS;
+    if (dg_vs_prev & ~TVP_VS) begin
+        dg_pp <= (dg_mn > dg_mx) ? 8'h0 : ((dg_d > 12'd255) ? 8'hff : dg_d[7:0]);
+        dg_ppA <= (dg_mnA > dg_mxA) ? 8'h0 : ((dg_dA > 12'd255) ? 8'hff : dg_dA[7:0]);
+        dg_genF <= dg_gen;
+        dg_line <= 9'h0;
+        dg_mn <= 12'hfff; dg_mx <= 12'h0;
+        dg_mnA <= 12'hfff; dg_mxA <= 12'h0;
+        dg_gen <= 5'h0;
+    end else if (fw_locked & (fw_accept | fw_gen)) begin
+        if (dg_line != 9'h1ff)
+            dg_line <= dg_line + 1'b1;
+        if ((dg_line >= 9'd24) && (dg_line < 9'd224)) begin
+            if (fw_cnt < dg_mn) dg_mn <= fw_cnt;
+            if (fw_cnt > dg_mx) dg_mx <= fw_cnt;
+        end
+        if (dg_line >= 9'd2) begin
+            if (fw_cnt < dg_mnA) dg_mnA <= fw_cnt;
+            if (fw_cnt > dg_mxA) dg_mxA <= fw_cnt;
+        end
+        if (fw_gen && (dg_gen != 5'h1f))
+            dg_gen <= dg_gen + 1'b1;
+    end
+end
+wire [7:0] lock_err;
+wire [1:0] dg_sel = sl_config2[31:30];
+wire [7:0] dg_val = (dg_sel == 2'h0) ? dg_pp : ((dg_sel == 2'h1) ? dg_ppA : ((dg_sel == 2'h2) ? lock_err : {3'h0, dg_genF}));
 
 
 // TVP7002 RGB digitizer
@@ -434,48 +474,7 @@ begin
     pll_clkswitch <= (pll_activeclock != enable_sc);
 end
 
-// 15kHz output watchdog (independent of the CPU).
-// Measures the period of the generated HSYNC with the fixed 27MHz clock. If
-// 16 consecutive lines are shorter than WD_MIN_LINE_CLKS (i.e. line rate above
-// ~16.4kHz), all syncs and video are suppressed until 16 consecutive lines are
-// back in range. A 15kHz TV without sync just free-runs, which is harmless.
-// (The firmware itself never programs more than 16.0kHz.)
-localparam WD_MIN_LINE_CLKS = 12'd1646;     // 27MHz / 1646 = 16.4kHz
-reg [2:0] wd_hs_sync;
-reg [11:0] wd_line_ctr;
-reg [3:0] wd_fast_cnt, wd_ok_cnt;
-reg wd_kill = 1'b1;     // start killed until the first 16 good lines
-reg wd_kill_sync1_reg, wd_kill_sync2_reg;
-reg [1:0] wd_bypass_sync;
-
-always @(posedge clk27) begin
-    wd_hs_sync <= {wd_hs_sync[1:0], HSYNC_sc};
-    if (wd_hs_sync[2] & ~wd_hs_sync[1]) begin
-        if (wd_line_ctr < WD_MIN_LINE_CLKS) begin
-            wd_ok_cnt <= 4'h0;
-            if (wd_fast_cnt == 4'hf)
-                wd_kill <= 1'b1;
-            else
-                wd_fast_cnt <= wd_fast_cnt + 1'b1;
-        end else begin
-            wd_fast_cnt <= 4'h0;
-            if (wd_ok_cnt == 4'hf)
-                wd_kill <= 1'b0;
-            else
-                wd_ok_cnt <= wd_ok_cnt + 1'b1;
-        end
-        wd_line_ctr <= 12'h0;
-    end else if (wd_line_ctr != 12'hfff) begin
-        wd_line_ctr <= wd_line_ctr + 1'b1;
-    end
-end
-
-always @(posedge pclk_out) begin
-    // the CPU sets wd_bypass only while a Line2x (31kHz) mode selected by
-    // the user is programmed (not saved: 15kHz at every boot)
-    wd_bypass_sync <= {wd_bypass_sync[0], wd_bypass};
-    {wd_kill_sync1_reg, wd_kill_sync2_reg} <= {wd_kill & ~wd_bypass_sync[1], wd_kill_sync1_reg};
-end
+// (VHS firmware: HDMI only, no 15kHz output watchdog)
 
 // Output registers: 3 stages (select, range scaling product, output pins);
 // syncs and DE follow with the same latency
@@ -487,31 +486,17 @@ wire [7:0] range_k = (out_range_r == 2'h2) ? 8'd240 : 8'd220;   // 16-255 / 16-2
 always @(posedge pclk_out) begin
     out_range_r <= out_range;
 
-    // stage 1: picture / OSD / watchdog blanking
-    if (wd_kill_sync2_reg) begin
-        {R_o1, G_o1, B_o1} <= 24'h0;
-    end else if (osd_enable) begin
+    // stage 1: picture / OSD
+    if (osd_enable) begin
         {R_o1, G_o1, B_o1} <= {{8{osd_color[2]}}, {8{osd_color[1]}}, {8{osd_color[0]}}};
     end else begin
         {R_o1, G_o1, B_o1} <= {R_sc, G_sc, B_sc};
     end
 
-    // Sync combiner for RGBS (SCART): composite sync is sent on the HSYNC
-    // line, which an HDMI-VGA DAC reproduces on VGA pin 13. Syncs are active low.
-    if (wd_kill_sync2_reg) begin
-        HS_o1 <= 1'b1;
-        VS_o1 <= 1'b1;
-        DE_o1 <= 1'b0;
-    end else begin
-        case (ds_csync)
-            2'h1: HS_o1 <= ~(HSYNC_sc ^ VSYNC_sc); // XOR: hsync inverted during vsync
-            2'h2: HS_o1 <= HSYNC_sc & VSYNC_sc;    // AND: low for the whole vsync
-            2'h3: HS_o1 <= CSYNC_sc;               // standard: equalizing pulses + serrated vsync
-            default: HS_o1 <= HSYNC_sc;
-        endcase
-        VS_o1 <= VSYNC_sc;
-        DE_o1 <= DE_sc;
-    end
+    // separate syncs (HDMI), active low
+    HS_o1 <= HSYNC_sc;
+    VS_o1 <= VSYNC_sc;
+    DE_o1 <= DE_sc;
 
     // stage 2: range scaling 16 + round(v * k / 256)
     {R_o2, G_o2, B_o2} <= {R_o1, G_o1, B_o1};
@@ -595,9 +580,9 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({5'h0, ru_regout, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({5'h0, ru_regout, fc_cnt, ds_resync_cnt, 1'b0, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
-    .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
+    .sc_config_0_sc_if_lt_status_i          ({cv_status[31:24], dg_val, cv_status[15:0]}),     // colour decoder status, VHS diagnostics
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),
     .sc_config_0_sc_if_hv_in_config2_o      (hv_in_config2),
     .sc_config_0_sc_if_hv_in_config3_o      (hv_in_config3),
@@ -680,6 +665,7 @@ scanconverter #(
     .lb_rgb(ds_lb_rgb),
     .ds_hofs(ds_hofs),
     .resync_always(fw_en & sl_config2[15]),    // cfg[7]: test option
+    .lock_step(sl_config2[7:6]),
     .ext_sync_mode(1'b0),
     .ext_frame_change_i(1'b0),
     .ext_R_i(8'h00),
@@ -701,6 +687,7 @@ scanconverter #(
     .resync_strobe(resync_strobe_i),
     .ds_resync_cnt(ds_resync_cnt),
     .ds_fperiod_lo(ds_fperiod_lo),
+    .lock_err(lock_err),
     .lt_active(lt_active),
     .lt_mode(lt_mode_synced),
     .emif_br_clk(1'b0),
