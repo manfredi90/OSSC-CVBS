@@ -1,6 +1,30 @@
 Changelog
 =========
 
+VHS firmware 0.3 (test)
+-----------------------
+
+### Fixed
+- Jagged vertical edges on tapes (`<VHS timing>` M31: 31+ generated syncs per
+  field): the hsync flywheel accepted an edge from 7/8 of the line but
+  generated a missing one only 4 clocks after the expected end; a tape's
+  lines are longer / shorter than the previous one by more than that, so
+  most lines got a generated edge and their real one was dropped (lines out
+  of place). Now generated 1/8 line late, the late side of the window as wide
+  as the early one (sim/fw: line to line variation of +-8 clocks, 2943 of
+  2951 lines generated before, none now; real missing syncs still made up;
+  Macrovision pseudo syncs ignored).
+- Black level pumping on some original tapes: the blank level was measured
+  on every line, also in the vertical blanking where Macrovision puts its AGC
+  pulses (white level, cycling). Now only the lines 24-239 after the vsync,
+  for every source.
+
+### Diagnostics
+- `<VHS events>`: B = range of the blank level over the picture lines of a
+  field (ADC codes, largest of 12 fields), P = setups since boot, R = output
+  resyncs since boot (mod 256). A black screen on the TV with P up: setup
+  redone; with R up: frame lock resync.
+
 VHS firmware 0.2 (test)
 -----------------------
 

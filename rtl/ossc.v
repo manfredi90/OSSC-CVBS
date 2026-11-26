@@ -203,7 +203,11 @@ wire fw_edge = fw_hs_prev & ~TVP_HS_raw;
 wire [12:0] fw_diff = {1'b0, fw_cnt} - {1'b0, fw_len};
 wire fw_near = (fw_diff[12] ? (fw_diff[11:0] > 12'hff7) : (fw_diff[11:0] < 12'd9));
 wire fw_accept = fw_edge & (~fw_locked | (fw_cnt >= fw_len - {3'b0, fw_len[11:3]}));
-wire fw_gen = fw_locked & (fw_cnt == fw_len + 12'd4);
+// (VHS firmware: missing edge generated 1/8 line after the expected end, the
+// late side of the window as wide as the early one; CVBS: 4 clocks, a tape's
+// longer lines got a generated edge and their real one was dropped: lines
+// out of place, jagged vertical edges)
+wire fw_gen = fw_locked & (fw_cnt == fw_len + {3'b0, fw_len[11:3]});
 always @(posedge TVP_PCLK_i) begin
     fw_hs_prev <= TVP_HS_raw;
     if (fw_accept | fw_gen) begin
@@ -264,8 +268,10 @@ always @(posedge TVP_PCLK_i) begin
     end
 end
 wire [7:0] lock_err;
-wire [1:0] dg_sel = sl_config2[31:30];
-wire [7:0] dg_val = (dg_sel == 2'h0) ? dg_pp : ((dg_sel == 2'h1) ? dg_ppA : ((dg_sel == 2'h2) ? lock_err : {3'h0, dg_genF}));
+wire [7:0] blk_pp;
+wire [2:0] dg_sel = {sl_config[14], sl_config2[31:30]};
+wire [7:0] dg_val = (dg_sel == 3'h0) ? dg_pp : ((dg_sel == 3'h1) ? dg_ppA : ((dg_sel == 3'h2) ? lock_err :
+                    ((dg_sel == 3'h3) ? {3'h0, dg_genF} : blk_pp)));
 
 
 // TVP7002 RGB digitizer
@@ -362,7 +368,8 @@ cvbs_decoder #(
     .G_o(G_dec),
     .B_o(B_dec),
     .side_o({frame_change_dec, FID_dec, datavalid_dec, DE_dec, VSYNC_dec, HSYNC_dec, xpos_dec, ypos_dec}),
-    .status(cv_status)
+    .status(cv_status),
+    .blk_pp(blk_pp)
 );
 
 // diagnostics: input frames (decoder frame change strobes)

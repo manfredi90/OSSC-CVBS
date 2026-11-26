@@ -288,6 +288,7 @@ MENU(menu_cvbs_diag, P99_PROTECT({ \
     { "<Sync diag.    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_sync_diag, NULL } } },
     { "<Xtal timing   >",                       OPT_FUNC_CALL,          { .fun = { cvbs_xtal_diag, NULL } } },
     { "<VHS timing    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_vhs_diag, NULL } } },
+    { "<VHS events    >",                       OPT_FUNC_CALL,          { .fun = { cvbs_vhs_events, NULL } } },
     { "<Event count.  >",                       OPT_FUNC_CALL,          { .fun = { cvbs_event_diag, NULL } } },
 }))
 

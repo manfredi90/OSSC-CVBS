@@ -65,7 +65,10 @@ module cvbs_decoder #(
     // [7:0] burst level, [15:8] blank level, [23:16] (0),
     // [24] colour killer, [25] PAL alternation seen, [26] frequency loop at
     // (0), [31:27] (0)
-    output reg [31:0] status
+    output reg [31:0] status,
+    // VHS diagnostics: range of the blank level over the picture lines of the
+    // last field (lines 24-239 after the vsync, 1/2 ADC code)
+    output reg [7:0] blk_pp
 );
 
 // The active video is delayed by one line (line memories after the Z stage):
@@ -248,7 +251,17 @@ reg [10:0] bx6;
 reg [15:0] bl_acc;
 reg bl_upd;
 reg [11:0] blank_f = 12'd960;   // 60.0
+// VHS firmware: only the lines 24-239 after the vsync (lines after the
+// hsync edge, from the vsync leading edge) update the blank level: the
+// vertical blanking lines carry copy protection pulses (Macrovision AGC
+// pulses at white level, cycling: the black level pumped) and the head
+// switch comes before the vsync. Same for every source.
+reg [8:0] st_line;
+wire bl_ok = (st_line >= 9'd24) && (st_line < 9'd240);
+reg [7:0] bk_mn, bk_mx;
+wire vs_fall = vs0_prev & ~vs0;     // vsync leading edge (field counters)
 reg [11:0] bl_line;     // mean of the gate, 4 fractional bits
+wire [7:0] bk_line = (bl_line[11:9] != 3'h0) ? 8'hff : bl_line[8:1];    // 1/2 code, up to 127.5
 reg [7:0] blank = 8'd60;
 wire signed [12:0] bl_diff = $signed({1'b0, bl_line}) - $signed({1'b0, blank_f});
 wire [11:0] bl_step = {{3{bl_diff[12]}}, bl_diff[11:3]};
@@ -266,8 +279,17 @@ always @(posedge clk) begin
         bl_acc <= 16'h0;
         bl_upd <= 1'b1;
     end
-    if (bl_upd)     // blank_f += (line*16 - blank_f) / 8
+    if (bl_upd & bl_ok)     // blank_f += (line*16 - blank_f) / 8
         blank_f <= blank_f + bl_step;
+    // range of the line blank levels over the picture lines (diagnostics)
+    if (vs_fall) begin
+        blk_pp <= (bk_mn > bk_mx) ? 8'h0 : (bk_mx - bk_mn);
+        bk_mn <= 8'hff;
+        bk_mx <= 8'h0;
+    end else if (bl_upd & bl_ok) begin
+        if (bk_line < bk_mn) bk_mn <= bk_line;
+        if (bk_line > bk_mx) bk_mx <= bk_line;
+    end
 end
 
 wire signed [12:0] bl_err = $signed({1'b0, blank_f}) - $signed({1'b0, blank, 4'h0});
@@ -513,8 +535,6 @@ reg Rr2;                // NTSC: reference = 2Z (second step)
 wire meas_w = ((t1 - mres) < 0);    // step 4: Im(Z * conj(P)) < 0
 wire s_new = pal ? ((vb & pv) ? meas_w : ~s_cur) : 1'b1;
 
-// vsync leading edge (field counters)
-wire vs_fall = vs0_prev & ~vs0;
 
 always @(posedge clk)
     if (vs_fall && (bl_err > 13'sd12 || bl_err < -13'sd12))
@@ -862,7 +882,6 @@ end
 // colour killer for the status: sampled in the middle of the field (the
 // killer is briefly on after the vsync, where there is no burst, and the CPU
 // reads the status right after the vsync)
-reg [8:0] st_line;
 reg kill_st;
 // burst level: the reference (low-passed over lines when the filter is on)
 wire [17:0] absFr = Sr[18] ? -Sr[17:0] : Sr[17:0];
