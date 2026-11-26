@@ -564,6 +564,22 @@ defparam
     clkctrl1.ena_register_mode = "falling edge",
     clkctrl1.lpm_type = "cycloneive_clkctrl";
 
+// Remote update hard block alone (1.0.1): the project keeps the remote
+// configuration mode of 1.0 (the image is started by the official firmware's
+// remote update, "Launch 2nd FW"), which needs the block in the design; the
+// Avalon remote update IP around it (~230 logic elements) was never used by
+// this firmware. Inputs idle, the output kept on an unused status bit.
+wire ru_regout;
+cycloneive_rublock ru_block (
+    .clk(1'b0),
+    .shiftnld(1'b0),
+    .captnupdt(1'b0),
+    .regin(1'b0),
+    .rsttimer(1'b0),
+    .rconfig(1'b0),
+    .regout(ru_regout)
+);
+
 sys sys_inst(
     .clk_clk                                (clk27),
     .reset_sys_reset_n                      (sys_reset_n),
@@ -579,7 +595,7 @@ sys sys_inst(
     .pio_1_controls_in_export               (controls),
     // CVBS firmware: the downscaler diagnostics (resync count, frame period) are not
     // read: tied off (logic for the decoder)
-    .sc_config_0_sc_if_fe_status_i          ({6'h0, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
+    .sc_config_0_sc_if_fe_status_i          ({5'h0, ru_regout, fc_cnt, ds_resync_cnt, wd_kill, TVP_sync_active, TVP_fe_interlace, TVP_fe_vtotal}),
     .sc_config_0_sc_if_fe_status2_i         ({4'h0, TVP_hsync_width, TVP_fe_pcnt_field}),
     .sc_config_0_sc_if_lt_status_i          (cv_status),     // colour decoder status
     .sc_config_0_sc_if_hv_in_config_o       (hv_in_config),
