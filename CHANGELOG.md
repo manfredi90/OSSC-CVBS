@@ -1,6 +1,18 @@
 Changelog
 =========
 
+CVBS decoder 1.0.2 (test)
+-------------------------
+
+### Added
+- Adaptive luma notch for PAL (PAL, PAL-M, PAL-N, PAL-60): the line compared
+  is the one two lines before (PAL: V switched on alternate lines, the
+  colour repeats every two lines; the luma detail turns by 2 x 270.6 = 181
+  degrees and cancels). Simulation (sine of 3.5MHz in the luma, line-locked
+  and crystal clock): fine luma detail kept 77-86% (plain notch 14-35%, no
+  notch 84%), colour bars unchanged.
+- sim/cvbs: --fine (luma detail test), --simple.
+
 CVBS decoder 1.0.1 (test)
 -------------------------
 

@@ -443,8 +443,11 @@ end
 // the luma detail cancels (halved at 120 degrees) and is no longer removed
 // from the luma (no blurred / ghost edges around fine detail), the colour
 // stays. Different magnitudes (a horizontal edge between colours, or between
-// colour and grey): Z of the line alone (the plain notch). PAL (V switched
-// on alternate lines) and hc[14]: plain notch.
+// colour and grey): Z of the line alone (the plain notch). hc[14]: plain
+// notch. PAL: V is switched on alternate lines, the colour is the same two
+// lines before (zIp / zQp, second line memory): the same rule with that
+// line; the luma detail turns by twice the PAL step per line (2 x 270.6 =
+// 181 degrees; PAL-M / PAL-N 180, PAL-60 202) and cancels.
 // 3-line notch (hc[15], set by the CPU when the subcarrier turns by about
 // 120 degrees per line, from the measured line period): the luma detail
 // cancels in the sum of three lines (1 + e^j120 + e^j240 = 0). All three of
@@ -459,12 +462,15 @@ wire [15:0] nCQ = zQp[15] ? -zQp : zQp;
 reg [15:0] nmA, nmB, nmC;
 reg signed [16:0] nSI, nSQ;
 reg signed [15:0] nZI, nZQ, nPI, nPQ;
+// the line compared: the previous one (NTSC), two lines before (PAL)
+wire [15:0] nmB_n = (nBI > nBQ) ? nBI : nBQ;
+wire [15:0] nmC_n = (nCI > nCQ) ? nCI : nCQ;
 always @(posedge clk) begin
     nmA <= (nAI > nAQ) ? nAI : nAQ;
-    nmB <= (nBI > nBQ) ? nBI : nBQ;
-    nmC <= (nCI > nCQ) ? nCI : nCQ;
-    nSI <= zI0 + zIo;
-    nSQ <= zQ0 + zQo;
+    nmB <= pal ? nmC_n : nmB_n;
+    nmC <= nmC_n;
+    nSI <= zI0 + (pal ? zIp : zIo);
+    nSQ <= zQ0 + (pal ? zQp : zQo);
     nZI <= zI0;
     nZQ <= zQ0;
     nPI <= zIp;
@@ -474,8 +480,8 @@ wire signed [17:0] n3I = nSI + nPI;
 wire signed [17:0] n3Q = nSQ + nPQ;
 wire n_ab = ({1'b0, nmA} <= {nmB, 1'b0}) & ({1'b0, nmB} <= {nmA, 1'b0});
 wire n_ac = ({1'b0, nmA} <= {nmC, 1'b0}) & ({1'b0, nmC} <= {nmA, 1'b0});
-wire n_comb = ~pal & ~notch_simple & n_ab;
-wire n_tri = n_comb & notch_3l & n_ac;
+wire n_comb = ~notch_simple & n_ab;
+wire n_tri = n_comb & ~pal & notch_3l & n_ac;
 wire signed [25:0] n3I_p = n3I * 8'sd85;     // x85/256 = 1/3.01
 wire signed [25:0] n3Q_p = n3Q * 8'sd85;
 reg signed [15:0] zI, zQ;

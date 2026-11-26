@@ -140,7 +140,7 @@ Menu
 | NTSC 7.5 IRE | Auto, Off, On | NTSC "setup": black 7.5 IRE above the blank level (NTSC-M, PAL-M). On: removed, so that black is black again (gain x100/92.5, white stays white). **Auto** (default): on with NTSC, NTSC 4.43 and PAL-M. If dark greys look crushed, set Off |
 | Brightness | ±31 | |
 | Sharpness | Off, 1–7 | luma peaking: sharper pixel edges. No boost at DC or at the highest frequencies (no extra noise). Default Off |
-| Luma notch | Adaptive, Off, Simple | **Adaptive** (default): sharp outlines and fine pixels, no grey halo beside them (NTSC; PAL as Simple). **Simple**: plain notch. **Off**: full bandwidth luma, the colour subcarrier shows as dot crawl |
+| Luma notch | Adaptive, Off, Simple | **Adaptive** (default): sharp outlines and fine pixels, no grey halo beside them (NTSC and PAL). **Simple**: plain notch. **Off**: full bandwidth luma, the colour subcarrier shows as dot crawl |
 | Edge color sup. | Off, Low, Medium, High | chroma attenuated around sharp luma edges: less colour fringing at black / white edges, softer colour edges and dark bands between colours of very different brightness at high settings. Always off with S-Video. Default Low |
 | CSync on HSYNC | Off (H+V), XOR, AND, Standard | Off (default) for HDMI TVs; composite sync types are for RGBS monitors through an HDMI→VGA DAC; Standard has equalizing pulses and serrated vsync |
 | HDMI range | Full (0-255), Lim. (16-235), Lim. (16-255) | RGB levels sent on HDMI. Full is right for most TVs and DACs; use Limited if blacks look grey or whites are clipped |
@@ -180,8 +180,6 @@ Known issues and limitations
 ----------------------------
 
 * SECAM is not supported.
-* PAL: the adaptive luma notch is not available at the moment (the plain
-  notch is used).
 
 
 Building

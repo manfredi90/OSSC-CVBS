@@ -109,6 +109,12 @@ def gen(args):
         pos = (ta[am] - act0) / (act1 - act0)
         bar = np.minimum((pos * 8).astype(int), 7)
         rgb = np.array(BARS)[bar]
+        if args.fine:
+            # luma detail: grey with a sine of args.fine MHz (same on every
+            # line), left half; colour bars (yellow, cyan) on the right half
+            fine = (pos < 0.5)
+            g_ = 0.4 + 0.25 * np.sin(2 * math.pi * args.fine * 1e6 * (ta[am] - act0))
+            rgb = np.where(fine[:, None], np.stack([g_] * 3, axis=1), np.array(BARS)[np.where(pos < 0.75, 1, 2)])
         if args.stripes:
             # black / white stripes, 1.5us wide (sharp luma edges)
             k_ = ((ta[am] - act0) / 1.5e-6).astype(int) % 2
@@ -151,7 +157,7 @@ def gen(args):
 def run(args):
     G, B, hs, vs, N, inc, pal = gen(args)
     cfg, pal = cfg_for(args.std, args.svideo, args.bstart, nonotch=args.nonotch, loop_off=args.loop_off, edge=args.edge)
-    hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 1) << 10) | ((args.sharp & 7) << 11) | ((args.tri & 1) << 15)
+    hc = hc_for(pal, args.sat, args.hue) | ((args.reffilt & 1) << 10) | ((args.sharp & 7) << 11) | ((args.simple & 1) << 14) | ((args.tri & 1) << 15)
     cfg |= (1 << 7) if args.diag else 0
     cfg |= (1 << 6) if (args.xtal and not args.noalign) else 0
     with open(os.path.join(ROOT, 'in.txt'), 'w') as f:
@@ -224,6 +230,8 @@ def main():
     ap.add_argument('--tri', type=int, default=0, help='3-line notch (hc[15])')
     ap.add_argument('--setup', type=float, default=0.0, help='NTSC setup (0.075 = 7.5 IRE)')
     ap.add_argument('--stripes', action='store_true', help='black/white stripes (cross-colour test)')
+    ap.add_argument('--fine', type=float, default=0.0, help='luma detail test: sine of FINE MHz on the left half, colour bars on the right')
+    ap.add_argument('--simple', type=int, default=0, help='simple luma notch (hc[14])')
     ap.add_argument('--show', type=int, default=4, help='lines to show (from the end)')
     args = ap.parse_args()
     R, G, B, starts, st, N, pal = run(args)
@@ -325,6 +333,21 @@ def main():
         print('Y blue->black: ' + ' '.join('%.0f' % v for v in Yf[c - 12:c + 12]))
     if dl:
         print('CHROMA-LUMA DELAY (samples): ' + ' '.join('%+.1f' % d for d in dl) + '  mean %+.2f' % (sum(dl) / len(dl)))
+    if args.fine:
+        # luma detail kept (amplitude of the sine in Y, % of the input) and
+        # the colour bars of the right half (mean over the last lines)
+        amp = []; bars = []
+        fs_us = N / 64.0 if pal else N / 63.556
+        a0 = (10.5 if pal else 9.4); a1 = (64.0 if pal else 63.556) - 1.5
+        for ln in range(len(starts) - 1 - args.show, len(starts) - 1):
+            s0 = starts[ln]
+            a = s0 + int((a0 + 0.1 * (a1 - a0)) * fs_us); b = s0 + int((a0 + 0.4 * (a1 - a0)) * fs_us)
+            yy = 0.299 * R[a:b] + 0.587 * G[a:b] + 0.114 * B[a:b]
+            amp.append(100 * (yy.std() * math.sqrt(2)) / (0.25 * 255))
+            m = measure(R, G, B, starts, N, pal, ln)
+            bars.append((m[4][:3], m[7][:3]))
+        print('FINE %.2fMHz: luma detail kept %.0f %%' % (args.fine, np.mean(amp)))
+        print('FINE bars: yellow %s cyan %s' % (tuple(int(round(v)) for v in np.mean([b[0] for b in bars], 0)), tuple(int(round(v)) for v in np.mean([b[1] for b in bars], 0))))
     if args.stripes:
         ln = len(starts) - 3
         s0 = starts[ln]
