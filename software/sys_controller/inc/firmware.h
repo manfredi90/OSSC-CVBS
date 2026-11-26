@@ -28,7 +28,7 @@
 
 // CVBS decoder firmware version (shown at boot). DS_FW_TAG names the image
 // (ossc_cv_vX.Y.bin)
-#define DS_VERSION "1.0"
+#define DS_VERSION "1.0.1"
 #define DS_FW_TAG               "cv"
 
 #ifdef OSDLANG_JP
@@ -49,24 +49,7 @@ typedef struct {
     uint32_t hdr_crc;
 } __attribute__((packed)) fw_hdr;
 
-typedef struct {
-    uint32_t sm_cur_state[4];
-    uint32_t force_early_confdone[4];
-    uint32_t wdog_timeout[4];
-    uint32_t wdog_enable[4];
-    uint32_t image_addr[4];
-    uint32_t force_int_osc[4];
-    uint32_t reg_trig_cnd[4];
-    uint32_t reset_timer;
-    uint32_t reconfig_start;
-} rem_update_regs;
 
-typedef struct {
-    volatile rem_update_regs *regs;
-} rem_update_dev;
-
-int fw_init_secondary();
 int fw_update(char *dirname, char *filename);
-void fw_update_commit(uint32_t* cluster_idx, uint32_t bytes_to_copy, uint16_t fs_csize, uint16_t fs_startsec, uint32_t flash_addr);
 
 #endif

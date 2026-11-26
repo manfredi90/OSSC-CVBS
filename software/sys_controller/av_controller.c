@@ -98,7 +98,6 @@ alt_u8 pcm1862_active;
 flash_ctrl_dev flashctrl_dev = {.regs = (volatile gen_flash_if_regs*)INTEL_GENERIC_SERIAL_FLASH_INTERFACE_TOP_0_AVL_CSR_BASE,
                                 .flash_size = 0x0200000};
 
-rem_update_dev rem_reconfig_dev = {.regs = (volatile rem_update_regs*)0x0002a000};
 
 uint8_t sl_def_iv_x, sl_def_iv_y;
 

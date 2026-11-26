@@ -1,6 +1,14 @@
 Changelog
 =========
 
+CVBS decoder 1.0.1 (test)
+-------------------------
+
+### Changed
+- FPGA remote update block removed (~250 logic elements): this firmware
+  never used it (no firmware update of its own, updates are done from the
+  official firmware; "Launch 2nd FW" uses the official firmware's block).
+
 CVBS decoder 1.0
 ----------------
 
