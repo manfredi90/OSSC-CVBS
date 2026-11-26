@@ -54,11 +54,15 @@
 
 // VHS firmware: a tape's field period and sync width wander (timebase
 // errors, noise): 1% of the field period (50 / 60Hz, line count and source
-// changes are far larger), and a change counts only when seen in
-// MODE_CHANGE_READS consecutive status reads (stock: 50 clocks, 8, at once)
+// changes are far larger). A new mode counts only when the same one is read
+// MODE_CHANGE_READS times in a row (~160ms), a loss of a valid mode only
+// after as many invalid reads: a damaged stretch / splice of a tape (a few
+// odd fields) no longer redoes the setup (picture lost for seconds); the
+// output frame lock resyncs there if the field timing jumps. (Stock: at
+// once, 50 clocks, sync width 8; VHS 0.2-0.3: 3 reads, any differing values.)
 #define PCNT_TOLERANCE (cm.pcnt_field / 100)
 #define HSYNC_WIDTH_TOLERANCE 16
-#define MODE_CHANGE_READS 3
+#define MODE_CHANGE_READS 8
 
 alt_u32 sys_ctrl;
 
@@ -456,27 +460,45 @@ status_t get_status(tvp_sync_input_t syncinput)
     clkcnt = pcnt_field/(totlines>>!progressive);
     valid_mode = (pcnt_field > 0) && check_linecnt(progressive, totlines);
 
-    // Check sync activity
-    if (!cm.sync_active && sync_active && valid_mode) {
-        cm.sync_active = 1;
-        status = ACTIVITY_CHANGE;
-    } else if (cm.sync_active && (!sync_active || !valid_mode)) {
-        cm.sync_active = 0;
-        status = ACTIVITY_CHANGE;
+    // Check sync activity (an invalid mode with the sync still active: lost
+    // only after MODE_CHANGE_READS reads in a row)
+    {
+        static alt_u8 invalid_cnt;
+        if (!cm.sync_active && sync_active && valid_mode) {
+            cm.sync_active = 1;
+            status = ACTIVITY_CHANGE;
+        } else if (cm.sync_active && (!sync_active || (!valid_mode && (++invalid_cnt >= MODE_CHANGE_READS)))) {
+            cm.sync_active = 0;
+            status = ACTIVITY_CHANGE;
+        }
+        if (valid_mode || !cm.sync_active)
+            invalid_cnt = 0;
     }
 
     if (sync_active && valid_mode) {
-        static alt_u8 mode_diff_cnt;
+        static alt_u8 cand_cnt, cand_prog;
+        static alt_u32 cand_tot, cand_pcnt, cand_hsw;
         int mode_diff = (totlines != cm.totlines) ||
                         (progressive != cm.progressive) ||
                         (pcnt_field < (cm.pcnt_field - PCNT_TOLERANCE)) ||
                         (pcnt_field > (cm.pcnt_field + PCNT_TOLERANCE)) ||
                         (abs(((int)hsync_width - (int)cm.hsync_width)) > HSYNC_WIDTH_TOLERANCE);
+        int mode_hold = 0;
         // (right after an activity change: at once, as before); not yet:
         // the current mode and its values are kept
-        int mode_hold = mode_diff && (status != ACTIVITY_CHANGE) && (++mode_diff_cnt < MODE_CHANGE_READS);
+        if (mode_diff && (status != ACTIVITY_CHANGE)) {
+            if (cand_cnt && (totlines == cand_tot) && (progressive == cand_prog) &&
+                (pcnt_field + cand_pcnt/100 >= cand_pcnt) && (pcnt_field <= cand_pcnt + cand_pcnt/100) &&
+                (abs((int)hsync_width - (int)cand_hsw) <= HSYNC_WIDTH_TOLERANCE)) {
+                if (cand_cnt < 255) cand_cnt++;
+            } else {
+                cand_tot = totlines; cand_prog = progressive; cand_pcnt = pcnt_field; cand_hsw = hsync_width;
+                cand_cnt = 1;
+            }
+            mode_hold = (cand_cnt < MODE_CHANGE_READS);
+        }
         if (!mode_hold)
-            mode_diff_cnt = 0;
+            cand_cnt = 0;
         if (mode_diff && !mode_hold) {
             printf("totlines: %lu (cur) / %lu (prev), pcnt_field: %lu (cur) / %lu (prev), hsync_width: %lu (cur) / %lu (prev)\n", totlines, cm.totlines, pcnt_field, cm.pcnt_field, hsync_width, cm.hsync_width);
 

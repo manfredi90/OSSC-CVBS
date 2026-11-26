@@ -1,6 +1,20 @@
 Changelog
 =========
 
+VHS firmware 0.4 (test)
+-----------------------
+
+### Fixed
+- Setup redone at a damaged stretch / splice of a tape (always at the same
+  point; same mode before and after, the TV black for seconds): a mode change
+  counted after 3 differing status reads, whatever they read, and a single
+  read without a valid mode was a sync loss (then a setup at the sync up).
+  Now the new mode must be read the same 8 times in a row (~160ms), and an
+  invalid mode with the sync active is a loss only after 8 reads in a row
+  (no sync at all from the frontend: at once, as before). Same for every
+  source. The output frame lock still resyncs there when the field timing
+  jumps (no frame memory: a TV fed by the VCR rolls there).
+
 VHS firmware 0.3 (test)
 -----------------------
 
