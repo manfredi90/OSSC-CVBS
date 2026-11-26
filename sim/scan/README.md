@@ -45,3 +45,6 @@ field, VJ: random line start jitter, JIT: frame start jitter, LS: lock step),
     python3 mkcopy.py
     verilator --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module tb -I../../rtl tb_lb.v sc_sim.v stubs.v -o tblb
     NF=24 ./runvhs.sh
+
+Tape splice: `+SPF=n +SPC=c` (from input frame n the timing jumps by c clocks,
+e.g. -270000 = a PAL field dropped).

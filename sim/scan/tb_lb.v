@@ -16,7 +16,7 @@ end
 always #(HI) clki = ~clki;
 always #(HO) clko = ~clko;
 
-integer LS, VJ, VA, VP, VHS, VHSL, JIT, LP_X256, NFRAMES, HTOT, HACT, HSL, HBP, VTOT, VACT, VSL, VBP, ILACE, YRPT, IHSL, IHBP, IHACT, IHSKIP, IVSL, IVBP, IVACT, IPROG;
+integer SPF, SPC, LS, VJ, VA, VP, VHS, VHSL, JIT, LP_X256, NFRAMES, HTOT, HACT, HSL, HBP, VTOT, VACT, VSL, VBP, ILACE, YRPT, IHSL, IHBP, IHACT, IHSKIP, IVSL, IVBP, IVACT, IPROG;
 wire [31:0] hv_out_config  = {HSL[7:0], HACT[11:0], HTOT[11:0]};
 wire [31:0] hv_out_config2 = {ILACE[0], VACT[10:0], VTOT[10:0], HBP[8:0]};
 integer VSTART;
@@ -59,6 +59,10 @@ initial begin
     // sin(2 pi line / VP), head switch: the last VHSL lines of each field
     // VHS clocks later; lock step (1 << LS clocks per back porch line)
     if (!$value$plusargs("LS=%d", LS)) LS = 2;
+    // tape splice: from input frame SPF on, the timing jumps by SPC clocks
+    // (that frame is SPC clocks longer / shorter)
+    if (!$value$plusargs("SPF=%d", SPF)) SPF = -1;
+    if (!$value$plusargs("SPC=%d", SPC)) SPC = 0;
     if (!$value$plusargs("VJ=%d", VJ)) VJ = 0;
     if (!$value$plusargs("VA=%d", VA)) VA = 0;
     if (!$value$plusargs("VP=%d", VP)) VP = 1000;
@@ -86,7 +90,7 @@ initial begin
     g = $fopen("sc_out.txt", "w");
     dut.h_cnt = 0; dut.v_cnt = 0; dut.dst_fid = 0; dut.src_fid = 0;
     dut.frame_change_sync1_reg = 0; dut.frame_change_sync2_reg = 0; dut.frame_change_prev = 0; dut.frame_change_resync = 0;
-    dut.in_field = 0; dut.ds_resync_cnt = 0; dut.resync_strobe = 0;
+    dut.in_field = 0; dut.ds_resync_cnt = 0; dut.fl_pend = 0; dut.resync_strobe = 0;
     lines_f = IPROG ? 262 : 525;
     if (!$value$plusargs("LINES=%d", lines_f)) ;
     lines_a = IPROG ? lines_f : (lines_f + 1) / 2;    // field A lines (frame change at its line 1)
@@ -117,7 +121,7 @@ always @(posedge clki) begin
             fc <= 1'b1;
             lstart <= vhs_start(acc, 1, gl + 1); lnom <= acc; v <= 1;
             lnext <= vhs_start(acc + LP_X256, 2, gl + 2); gl <= gl + 1; fld <= fld + (IPROG ? 1 : 2);
-            acc <= acc + lines_f * LP_X256 + ((JIT > 0) ? (($urandom % (2*JIT+1)) - JIT) << 8 : 0);
+            acc <= acc + lines_f * LP_X256 + ((JIT > 0) ? (($urandom % (2*JIT+1)) - JIT) << 8 : 0) + ((frame == SPF) ? 64'($signed(64'(SPC)) * 256) : 64'd0);
             frame <= frame + 1;
             $fwrite(g, "F %0d\n", ti);
             if (frame == NFRAMES) begin $fclose(f); $fclose(g); $finish; end

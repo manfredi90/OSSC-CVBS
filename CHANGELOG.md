@@ -1,6 +1,30 @@
 Changelog
 =========
 
+VHS firmware 0.5 (test)
+-----------------------
+
+### Added
+- PAL delay line (VHS decoder menu, On by default): U / V averaged with the
+  line before, as in a PAL TV (PAL, PAL-M, PAL-N, PAL-60; NTSC unchanged).
+  A tape's chroma has a phase error against its burst; with V switched on
+  alternate lines the hue turned one way on a line and the other way on the
+  next (Hanover bars: purple / red lines). sim/cvbs `--cphase 10`: line to
+  line hue error 8.8 degrees -> 0.2 (as without error); halves the chroma
+  noise too.
+
+### Fixed
+- Tape splice (a field dropped): two output resyncs, the TV blank twice. The
+  splice gives one odd frame, then the new phase; both resynced the output.
+  Now an input frame start out of lock resyncs only when the previous one
+  was out of lock at the same output line (new phase confirmed): the odd
+  frame is ignored (picture wrong for a frame or two, HDMI timing unchanged),
+  one resync. sim/scan (`SPF` / `SPC`: splice frame / jump): one resync for a
+  dropped field, picture clean after it.
+- Soft lock window half an input line for every output (0.1-0.4: half an
+  output line, a quarter of an input line in View): jumps up to half an
+  input line (~32us) now absorbed without a resync in View too.
+
 VHS firmware 0.4 (test)
 -----------------------
 

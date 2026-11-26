@@ -90,6 +90,7 @@ wire nonotch  = cfg[4];
 wire line_align = cfg[6];      // luma re-timed on the sync edge (27MHz crystal clock)
 wire rflt = hc[10];             // reference low-pass over lines (1/8)
 wire [2:0] sharp = hc[13:11];   // sharpness 0-7
+wire pal_dl = hc[15] & pal;     // PAL delay line (chroma of two lines averaged)
 wire [7:0] bstart = cfg[15:8];
 wire signed [5:0] bright = cfg[21:16];
 wire signed [9:0] hc_re = hc[9:0];
@@ -791,11 +792,28 @@ always @(posedge clk) begin
     // between the two samples read last (fraction of d)
     yAo <= $signed({3'b0, yl_qp}) + (yl_ip >>> 4) - 11'sd32;
 end
+// PAL delay line (VHS firmware): U / V averaged with the line before, as in
+// a PAL TV. V is switched on alternate lines: a phase error of the chroma
+// against its burst (a tape: colour-under conversion, timebase error along
+// the line) turns the hue one way on a line and the other way on the next
+// (Hanover bars); in the sum the two cancel (some desaturation at most).
+// Line memory of U / V, one value per 2 samples (chroma ~1MHz), written at
+// the same h as read one line later. hc[15], PAL standards only.
+(* ramstyle = "M9K" *) reg [21:0] dl_mem [0:1023];
+reg [21:0] dl_q;
+wire [10:0] dl_ra = h[10:1] + 10'd1;
+wire signed [11:0] dl_u = U3 + $signed(dl_q[21:11]);
+wire signed [11:0] dl_v = V3 + $signed(dl_q[10:0]);
+always @(posedge clk) begin
+    dl_q <= dl_mem[dl_ra[9:0]];
+    if (~h[0])
+        dl_mem[h[10:1]] <= {U3, V3};
+end
 reg signed [10:0] yA;
 always @(posedge clk) begin
     yA <= yAo;
-    UA <= U3;
-    VA <= V3;
+    UA <= pal_dl ? dl_u[11:1] : U3;
+    VA <= pal_dl ? dl_v[11:1] : V3;
 end
 
 // stage S: sharpness (peaking), luma delayed by 4 (alignment with the chroma

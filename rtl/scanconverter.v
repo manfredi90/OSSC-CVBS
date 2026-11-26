@@ -207,6 +207,14 @@ wire [11:0] LT_BOX_Y_STOP  = (lt_mode == `LT_POS_TOPLEFT) ? (V_ACTIVE/`LT_HEIGHT
 
 
 reg frame_change_sync1_reg, frame_change_sync2_reg, frame_change_prev, frame_change_resync;
+// VHS 0.5: an input frame start out of lock resyncs the output only when the
+// previous one was out of lock at the same output line (+-1, same field):
+// the new phase is confirmed. A tape splice gives one odd frame before the
+// new phase (0.1-0.4: two resyncs, the TV blank twice); now it is ignored
+// (picture wrong for a frame or two, HDMI timing unchanged), one resync.
+reg fl_pend, fl_fid;
+reg [10:0] fl_v;
+wire fl_same = fl_pend & (dst_fid == fl_fid) & ((v_cnt == fl_v) | (v_cnt == fl_v + 1'b1) | (v_cnt + 1'b1 == fl_v));
 // Downscaler 480i: every input frame becomes one output field. in_field is
 // the parity of the current input frame; the output is (re)aligned only on
 // field A frames, so that field A always ends up in the ODD output field.
@@ -463,10 +471,14 @@ wire [6:0] SL_MAX = 7'd1 << lock_step;
 wire [12:0] H_HALF = {1'b0, H_TOTAL[12:1]};
 wire sl_fprev = ~V_INTERLACED | (dst_fid == FID_PREV);
 wire sl_fstart = ~V_INTERLACED | (dst_fid == FID_START);
-// output ahead: already past its frame start (first half of the start line)
-wire sl_ahead = (ds_hofs == 13'h0) & sl_fstart & (v_cnt == V_STARTLINE) & (h_cnt < H_HALF);
-// output behind: second half of the line before its frame start
-wire sl_behind = (ds_hofs == 13'h0) & sl_fprev & (v_cnt == V_STARTLINE_PREV) & (h_cnt >= H_HALF);
+// Window: half an input line before / after the frame start (VHS 0.5: the
+// same for every output; Line1x: half an output line, Line2x: a whole one;
+// 0.1-0.4: half an output line for both)
+wire sl_wfull = (Y_RPT != 4'h0);
+// output ahead: already past its frame start
+wire sl_ahead = (ds_hofs == 13'h0) & sl_fstart & (v_cnt == V_STARTLINE) & (sl_wfull | (h_cnt < H_HALF));
+// output behind: before its frame start
+wire sl_behind = (ds_hofs == 13'h0) & sl_fprev & (v_cnt == V_STARTLINE_PREV) & (sl_wfull | (h_cnt >= H_HALF));
 // progressive output of an interlaced source (bob): the source field parity
 // at the frame start must be the one a resync sets (a lock found without
 // resync, e.g. at power-up, can have the other one: torn lines, see
@@ -501,13 +513,22 @@ always @(posedge PCLK_OUT_i) begin
     // resync_always (CVBS xtal clock): output within 2 lines before its frame
     // start (or just past it): soft lock, no resync (see sl_credit below)
     frame_change_resync <= ~frame_change_prev & frame_change &
-                           (resync_always ? ~sl_lock :
+                           (resync_always ? (~sl_lock & fl_same) :
                             ~(((ds_hofs == 13'h0) & (v_cnt == V_STARTLINE_PREV) & (h_cnt > H_TOTAL-128) & (~V_INTERLACED | (dst_fid == FID_PREV))) |
                              ((ds_hofs == 13'h0) & (v_cnt == V_STARTLINE) & (h_cnt < 128) & (~V_INTERLACED | (dst_fid == FID_START))) |
                              ((ds_hofs != 13'h0) & (v_cnt == V_STARTLINE) & (h_cnt >= ds_hofs-13'd128) & (h_cnt < ds_hofs+13'd128) & (~V_INTERLACED | (dst_fid == FID_START))))) &
                            (~ds_ilace | (in_field ^ ds_fswap));    // 480i: frame shown in the odd field
     if (~frame_change_prev & frame_change)
         in_field <= ds_ilace ? ~in_field : 1'b0;
+    if (~frame_change_prev & frame_change) begin
+        if (sl_lock | fl_same) begin
+            fl_pend <= 1'b0;
+        end else begin
+            fl_pend <= 1'b1;
+            fl_v <= v_cnt;
+            fl_fid <= dst_fid;
+        end
+    end
     // soft lock: the lag of the output at the input frame start, to be made
     // up in the back porch lines of the next frame
     sl_cap <= ~frame_change_prev & frame_change & resync_always & sl_lock;

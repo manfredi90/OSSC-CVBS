@@ -206,6 +206,7 @@ typedef struct {
     alt_u8 cv_setup;        // NTSC 7.5 IRE setup removed: 0 = auto (NTSC, NTSC 4.43, PAL-M), 1 = off, 2 = on
     /* VHS firmware */
     alt_u8 cv_lockstep;     // soft frame lock: at most 1 << n clocks per back porch line (0-3)
+    alt_u8 cv_paldl_off;    // PAL delay line (chroma of two lines averaged, PAL standards): 0 = on, 1 = off
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

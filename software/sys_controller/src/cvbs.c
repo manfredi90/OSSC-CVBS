@@ -268,7 +268,9 @@ void cvbs_get_regs(uint32_t *hc, uint32_t *flags, uint32_t *inc) {
     *hc = ((uint32_t)re & 0x3ff) | (((uint32_t)im & 0x3ff) << 16) | ((uint32_t)(lg - 32) << 26) |
           ((uint32_t)(rf & 1) << 10);
     *hc |= ((uint32_t)(cc->cv_sharp & 7) << 11);  // FPGA: hc[13:11] = sharpness
-    // (VHS firmware: plain luma notch only, hc[15:14] not used)
+    // (VHS firmware: plain luma notch only; hc[14]: diagnostics select)
+    // hc[15]: PAL delay line (the FPGA applies it to the PAL standards only)
+    *hc |= ((uint32_t)(cc->cv_paldl_off == 0) << 15);
 
     bright = (int)cc->cv_bright - SIGNED_NUMVAL_ZERO;
     if (setup) {
