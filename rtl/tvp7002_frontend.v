@@ -119,7 +119,7 @@ reg lc_atari_ctr;
 reg [20:0] pcnt_frame_ctr;
 reg [17:0] syncpol_det_ctr, hsync_hpol_ctr, vsync_hpol_ctr;
 reg [2:0] sync_inactive_ctr;
-reg [11:0] pcnt_line, pcnt_line_ctr, meas_h_cnt, meas_h_cnt_sogref;
+reg [11:0] pcnt_line, pcnt_line_ctr, pcnt_line_prev, meas_h_cnt, meas_h_cnt_sogref;
 reg [7:0] hs_ctr;
 reg pcnt_line_stored;
 reg [10:0] meas_v_cnt;
@@ -452,9 +452,17 @@ always @(posedge CLK_MEAS_i) begin
     if (HSYNC_i_np_prev & ~HSYNC_i_np) begin
         pcnt_line_ctr <= 1;
         hs_ctr <= 1;
+        pcnt_line_prev <= pcnt_line_ctr;
 
-        // store count 1ms after vsync
-        if (~pcnt_line_stored & (pcnt_frame_ctr > 21'd27000)) begin
+        // VHS firmware: store the count 8ms after vsync (mid field: the
+        // vertical blanking lines carry copy protection pseudo syncs, e.g.
+        // Macrovision AGC pulses, and the tape head switch comes before the
+        // vsync), from two consecutive lines of the same length (+-8 clocks:
+        // noise). Stock: 1ms after vsync (line ~16: in a Macrovision line the
+        // count was the spacing of the pseudo syncs, ~216 clocks, and the
+        // line count / interlace detection based on it went wrong)
+        if (~pcnt_line_stored & (pcnt_frame_ctr > 21'd216000) &&
+            (pcnt_line_ctr <= pcnt_line_prev + 12'd8) && (pcnt_line_prev <= pcnt_line_ctr + 12'd8)) begin
             pcnt_line <= pcnt_line_ctr;
             hsync_width <= hs_ctr;
             pcnt_line_stored <= 1'b1;
@@ -511,17 +519,29 @@ always @(posedge CLK_MEAS_i) begin
                 meas_hl_det <= 1'b1;
                 meas_h_cnt <= meas_h_cnt + 1'b1;
             //end
-        end else begin
+        end else if (meas_h_cnt >= pcnt_line - (pcnt_line/8)) begin
             meas_hl_det <= 1'b0;
             meas_h_cnt <= 0;
             meas_v_cnt <= meas_v_cnt + 1'b1;
+        end else begin
+            // VHS firmware: an edge before 7/8 of the line that is not a
+            // half-line pulse is not a new line (copy protection pseudo
+            // syncs, tape noise): ignored, as by the flywheel
+            meas_h_cnt <= meas_h_cnt + 1'b1;
         end
-        meas_h_cnt_sogref <= meas_h_cnt;
-    end else if (meas_vblank_region & (meas_h_cnt >= pcnt_line+4)) begin
+        // (field parity reference: half-line pulses and new lines only)
+        if (((meas_h_cnt > ((pcnt_line/2) - (pcnt_line/4))) && (meas_h_cnt < ((pcnt_line/2) + (pcnt_line/4)))) ||
+            (meas_h_cnt >= pcnt_line - (pcnt_line/8)))
+            meas_h_cnt_sogref <= meas_h_cnt;
+    end else if (meas_vblank_region & (meas_h_cnt >= pcnt_line + (pcnt_line/8))) begin
         // hsync may be missing or irregular during vblank, force line change detect if pcnt_line is exceeded
+        // (VHS firmware: by 1/8 line, the window of the flywheel; stock: by
+        // 4 clocks, a tape's line jitter made up lines and the real edge right
+        // after them was dropped, losing the field parity reference)
         meas_hl_det <= 1'b0;
         meas_h_cnt <= 0;
         meas_v_cnt <= meas_v_cnt + 1'b1;
+        meas_h_cnt_sogref <= meas_h_cnt;
     end else begin
         meas_h_cnt <= meas_h_cnt + 1'b1;
     end

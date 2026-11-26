@@ -1,6 +1,35 @@
 Changelog
 =========
 
+VHS firmware 0.2 (test)
+-----------------------
+
+### Fixed
+- Original (copy protected) tapes: the OSSC kept redoing the setup, line
+  counts all over the place (~220-1160 lines per field), "Unsupported", 50 /
+  100Hz. The frontend measured the line period once per field on the first
+  sync edge 1ms after the vsync (line ~16): right in the Macrovision AGC
+  pulse lines, where it got the spacing of the pseudo syncs (~216 clocks
+  instead of 1728); the line count and the interlace detection built on it
+  went wrong (reproduced in sim/fe, PAL and NTSC). Now, the same rules for
+  every source:
+  - line period measured 8ms after the vsync (mid field), from two
+    consecutive lines of the same length (+-8 clocks);
+  - a new line only from 7/8 of the line (as the flywheel); edges before
+    that which are not half-line pulses are ignored;
+  - in the vertical blanking a missing line is made up after 9/8 of the line
+    (stock: 4 clocks: a tape's line jitter made up lines and dropped the real
+    edge right after them, losing the field parity).
+- Mode changes: seen in 3 consecutive status reads (a single odd field no
+  longer redoes the setup), field period tolerance 1% (was 50 clocks), sync
+  width tolerance 16 (was 8).
+
+### Simulation
+- sim/fe: frontend measurement testbench (composite sync with equalizing /
+  broad pulses, PAL / NTSC, Macrovision pseudo syncs, VHS model): 625 / 525
+  interlaced on every field with and without Macrovision and tape timebase
+  errors (stock: 385-424 lines, progressive, with Macrovision).
+
 VHS firmware 0.1 (test)
 -----------------------
 

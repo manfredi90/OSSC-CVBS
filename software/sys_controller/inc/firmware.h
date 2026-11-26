@@ -28,7 +28,7 @@
 
 // VHS firmware version (shown at boot). DS_FW_TAG names the image
 // (ossc_vhs_vX.Y.bin)
-#define DS_VERSION "0.1"
+#define DS_VERSION "0.2"
 #define DS_FW_TAG               "vhs"
 
 #ifdef OSDLANG_JP

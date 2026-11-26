@@ -52,8 +52,13 @@
 #define STATUS_TIMEOUT_US       25000
 #define MAINLOOP_INTERVAL_US    10000
 
-#define PCNT_TOLERANCE 50
-#define HSYNC_WIDTH_TOLERANCE 8
+// VHS firmware: a tape's field period and sync width wander (timebase
+// errors, noise): 1% of the field period (50 / 60Hz, line count and source
+// changes are far larger), and a change counts only when seen in
+// MODE_CHANGE_READS consecutive status reads (stock: 50 clocks, 8, at once)
+#define PCNT_TOLERANCE (cm.pcnt_field / 100)
+#define HSYNC_WIDTH_TOLERANCE 16
+#define MODE_CHANGE_READS 3
 
 alt_u32 sys_ctrl;
 
@@ -461,11 +466,18 @@ status_t get_status(tvp_sync_input_t syncinput)
     }
 
     if (sync_active && valid_mode) {
-        if ((totlines != cm.totlines) ||
-            (progressive != cm.progressive) ||
-            (pcnt_field < (cm.pcnt_field - PCNT_TOLERANCE)) ||
-            (pcnt_field > (cm.pcnt_field + PCNT_TOLERANCE)) ||
-            (abs(((int)hsync_width - (int)cm.hsync_width)) > HSYNC_WIDTH_TOLERANCE)) {
+        static alt_u8 mode_diff_cnt;
+        int mode_diff = (totlines != cm.totlines) ||
+                        (progressive != cm.progressive) ||
+                        (pcnt_field < (cm.pcnt_field - PCNT_TOLERANCE)) ||
+                        (pcnt_field > (cm.pcnt_field + PCNT_TOLERANCE)) ||
+                        (abs(((int)hsync_width - (int)cm.hsync_width)) > HSYNC_WIDTH_TOLERANCE);
+        // (right after an activity change: at once, as before); not yet:
+        // the current mode and its values are kept
+        int mode_hold = mode_diff && (status != ACTIVITY_CHANGE) && (++mode_diff_cnt < MODE_CHANGE_READS);
+        if (!mode_hold)
+            mode_diff_cnt = 0;
+        if (mode_diff && !mode_hold) {
             printf("totlines: %lu (cur) / %lu (prev), pcnt_field: %lu (cur) / %lu (prev), hsync_width: %lu (cur) / %lu (prev)\n", totlines, cm.totlines, pcnt_field, cm.pcnt_field, hsync_width, cm.hsync_width);
 
             status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
@@ -479,11 +491,13 @@ status_t get_status(tvp_sync_input_t syncinput)
             (tc.ds_i2p != cm.cc.ds_i2p) || (tc.ds_flicker != cm.cc.ds_flicker))
             status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
 
-        cm.totlines = totlines;
-        cm.clkcnt = clkcnt;
-        cm.pcnt_field = pcnt_field;
-        cm.hsync_width = hsync_width;
-        cm.progressive = progressive;
+        if (!mode_hold) {
+            cm.totlines = totlines;
+            cm.clkcnt = clkcnt;
+            cm.pcnt_field = pcnt_field;
+            cm.hsync_width = hsync_width;
+            cm.progressive = progressive;
+        }
     }
 
     if (memcmp(&tc.sl_mode, &cm.cc.sl_mode, offsetof(avconfig_t, sync_vth) - offsetof(avconfig_t, sl_mode)))
