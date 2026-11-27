@@ -130,7 +130,4 @@ always @(posedge clk) begin
         nf_seen = nf_seen + 1;
     end
 end
-// V=2: every parity decision
-always @(posedge clk) if ((V == 2) && dut.fid_decide)
-    $display("  DBG decide tc %0d h_cnt %0d sogref %0d raw %0d raw1 %0d raw2 %0d fix %0d ilace %0d", tc, dut.h_cnt, dut.h_cnt_sogref, dut.fid_raw, dut.fid_raw1, dut.fid_raw2, dut.fid_fix, interlace_flag);
 endmodule

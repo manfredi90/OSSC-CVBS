@@ -1191,9 +1191,9 @@ int cvbs_vhs_events() {
 }
 
 // <VHS fields>: since boot (mod 256), S = output frames whose bob parity
-// repeated the previous one's (View: a field one line off), F = field parity
-// readings corrected by the alternation rule (frontend), I = output frames
-// begun with the source interlace flag off
+// repeated the previous one's (View: a field one line off), F = fields read
+// by the frontend with the parity of the previous one (interlaced source),
+// I = output frames begun with the source interlace flag off
 int cvbs_vhs_fields() {
     unsigned s, f, i;
 

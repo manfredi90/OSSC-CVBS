@@ -344,7 +344,7 @@ tvp7002_frontend u_tvp_frontend (
     .pcnt_field(TVP_fe_pcnt_field),
     .hsync_width(TVP_hsync_width),
     .sync_active(TVP_sync_active),
-    .fid_fix_cnt(fe_fidfix),
+    .fid_rep_cnt(fe_fidfix),
     .lumacode_addr(lumacode_addr),
     .lumacode_rden(lumacode_rden)
 );

@@ -7,13 +7,18 @@ VHS firmware 0.10 (diagnostics)
 ### Added
 - Diagnostics <VHS fields>: S = output frames whose bob parity repeated the
   previous one's (View: a field one line off), F = field parity readings
-  corrected by the alternation rule of 0.9 (frontend), I = output frames
+  read by the frontend with the parity of the previous one, I = output frames
   begun with the source interlace flag off; since boot, mod 256. The field
   one line off is still there with 0.9 (View captures: about once a second,
   the same field type, output resyncs R not moving): it is not the frontend
   parity reading. The bob parity of the scan converter is its own toggle
   (inverted every output frame, set at a resync, forced odd when the source
   interlace flag is off); sim/scan with the VHS model does not reproduce it.
+
+### Changed
+- The frontend parity changes of 0.8 / 0.9 are reverted (no effect on the
+  hardware, the FPGA full: the diagnostics did not fit). F counts instead the
+  fields the frontend reads with the parity of the previous one.
 
 VHS firmware 0.9 (test)
 -----------------------
