@@ -160,7 +160,7 @@ typedef struct {
     /* TX / extra settings */
     alt_u8 tx_mode;
     alt_u8 hdmi_itc;
-    alt_u8 hdmi_ar;
+    alt_u8 hdmi_ar;         // HDMI aspect flag: 0 not set, 1 4:3, 2 16:9, 3 4:3 pillarbox (CVBS: 4:3 picture in a 4/3 wider line, flag 16:9)
     alt_u8 hdmi_hdr;
     alt_u8 hdmi_vrr;
     alt_u8 full_tx_setup;

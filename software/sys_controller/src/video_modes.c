@@ -1406,6 +1406,28 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
 
     sniprintf(vm_out->name, 11, "%s x%u", vm_in->name, vm_conf->y_rpt+1);
 
+    // CVBS decoder, Aspect "4:3 pillarbox" (all outputs): the same line period
+    // with 4/3 more clocks (output clock x4/3: the FPGA PLL M x4/3, 27 / 40.5 /
+    // 54MHz -> 36 / 54 / 72MHz), the picture with its own pixels in the
+    // middle 3/4 of the active line (x_offset below), black on the sides: a
+    // display stretching the active line to 16:9 shows it 4:3 (like the
+    // stock 1280x720 / 1920x1080 formats, wider active line, picture
+    // centred). HDMI aspect flag 16:9 (avi_ar in av_controller.c).
+    if (cv_mode && cvbs_group_ok(mode_preset->group) && (cc->hdmi_ar == 3)) {
+        if (vm_conf->x_size == 0)
+            vm_conf->x_size = (vm_in->timings.h_active-2*vm_in->mask.h)*(vm_conf->x_rpt+1);
+        vm_out->timings.h_total = (vm_out->timings.h_total*4 + 1)/3;
+        vm_out->timings.h_active = (vm_out->timings.h_active*4 + 1)/3;
+        vm_out->timings.h_synclen = (vm_out->timings.h_synclen*4 + 1)/3;
+        vm_out->timings.h_backporch = (vm_out->timings.h_backporch*4 + 1)/3;
+        if (!vm_conf->ds_pll_n) {
+            vm_conf->ds_pll_n = 3;      // 27MHz: PFD 9MHz, VCO 810MHz
+            vm_conf->ds_pll_m = 90;
+            vm_conf->ds_pll_c = 30;
+        }
+        vm_conf->ds_pll_m = (vm_conf->ds_pll_m*4)/3;    // 90 -> 120, VCO 1080MHz
+    }
+
     if (vm_conf->x_size == 0)
         vm_conf->x_size = (vm_in->timings.h_active-2*vm_in->mask.h)*(vm_conf->x_rpt+1);
     if (vm_conf->y_size == 0)
@@ -1435,7 +1457,7 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     }
 
     // Aspect
-    if (vm_out->type & VIDEO_HDTV) {
+    if ((vm_out->type & VIDEO_HDTV) || (cv_mode && (cc->hdmi_ar == 3))) {
         vm_out->ar.h = 16;
         vm_out->ar.v = 9;
     } else {

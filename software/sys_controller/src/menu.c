@@ -78,7 +78,7 @@ static const char* const pm_480p_desc[] = { LNG("Passthru","ﾊﾟｽｽﾙｰ")
 static const char* const pm_1080i_desc[] = { LNG("Passthru","ﾊﾟｽｽﾙｰ"), "Line2x (bob)" };
 static const char* const ar_256col_desc[] = { "Pseudo 4:3 DAR", "1:1 PAR" };
 static const char* const tx_mode_desc[] = { "HDMI (RGB)", "HDMI (YCbCr444)", "DVI" };
-static const char* const hdmi_ar_desc[] = { "Not set", "4:3", "16:9" };
+static const char* const hdmi_ar_desc[] = { "Not set", "4:3", "16:9", "4:3 pillarbox" };
 static const char* const sl_mode_desc[] = { LNG("Off","ｵﾌ"), LNG("Auto","ｵｰﾄ"), LNG("On","ｵﾝ") };
 static const char* const sl_method_desc[] = { LNG("Multiplication","Multiplication"), LNG("Subtraction","Subtraction") };
 static const char* const sl_type_desc[] = { LNG("Horizontal","ﾖｺ"), LNG("Vertical","ﾀﾃ"), "Horiz. + Vert.", "Custom" };
@@ -236,7 +236,6 @@ MENU(menu_lm, P99_PROTECT({ \
 MENU(menu_output, P99_PROTECT({ \
     { LNG("TX mode","TXﾓｰﾄﾞ"),                  OPT_AVCONFIG_SELECTION, { .sel = { &tc.tx_mode,         OPT_WRAP, SETTING_ITEM(tx_mode_desc) } } },
     { "HDMI ITC",                              OPT_AVCONFIG_SELECTION, { .sel = { &tc.hdmi_itc,        OPT_WRAP, SETTING_ITEM(off_on_desc) } } },
-    { "HDMI Aspect flag",                      OPT_AVCONFIG_SELECTION, { .sel = { &tc.hdmi_ar,         OPT_WRAP, SETTING_ITEM(hdmi_ar_desc) } } },
 }))
 
 MENU(menu_scanlines, P99_PROTECT({ \
@@ -306,6 +305,7 @@ MENU(menu_cvbs_adv, P99_PROTECT({ \
 
 MENU(menu_downscaler, P99_PROTECT({ \
     { "Output",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_line2x,    OPT_WRAP,   SETTING_ITEM(cv_out_desc) } } },
+    { "Aspect",                                 OPT_AVCONFIG_SELECTION, { .sel = { &tc.hdmi_ar,      OPT_WRAP,   SETTING_ITEM(hdmi_ar_desc) } } },
     { "Color system",                           OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_std,       OPT_WRAP,   SETTING_ITEM(cv_std_desc) } } },
     { "Saturation",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_sat,        OPT_NOWRAP, 0, CV_SAT_MAX, cv_pct5_disp } } },
     { "Hue",                                    OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_hue,        OPT_NOWRAP, SIGNED_NUMVAL_ZERO-CV_HUE_RANGE, SIGNED_NUMVAL_ZERO+CV_HUE_RANGE, cv_deg_disp } } },

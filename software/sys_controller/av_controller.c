@@ -207,6 +207,12 @@ inline void SetupAudio(tx_mode_t mode)
     }
 }
 
+// HDMI aspect flag sent: "4:3 pillarbox" (hdmi_ar 3, the 4:3 picture in a
+// 4/3 wider line, see video_modes.c) is a 16:9 frame
+static int avi_ar(alt_u8 ar) {
+    return (ar == 3) ? 2 : ar;
+}
+
 inline void TX_enable(tx_mode_t mode)
 {
     // shut down TX before setting new config
@@ -221,7 +227,7 @@ inline void TX_enable(tx_mode_t mode)
 
     if (mode != TX_DVI) {
         hdmitx_rgb_limited = (tc.ds_out_range != 0);
-        HDMITX_SetAVIInfoFrame(vmode_out.vic, (mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, tc.hdmi_ar, 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
+        HDMITX_SetAVIInfoFrame(vmode_out.vic, (mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, avi_ar(tc.hdmi_ar), 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
         if (tc.hdmi_vrr)
             HDMITX_SetVRRInfoFrame(tc.hdmi_vrr);
         if (tc.hdmi_hdr)
@@ -245,7 +251,7 @@ inline void TX_enable(tx_mode_t mode)
 // [bypass][high count 8][odd][low count 8]. The chain is stored so that the
 // last bit (C4 lsb) is shifted first (see pll_reconfig_top).
 #define DS_PLL_CUSTOM_ID 15
-#define DS_PLL_PCLK_MAX  66000000UL    // see pclk_5x in ossc.sdc
+#define DS_PLL_PCLK_MAX  74000000UL    // see pclk_5x in ossc.sdc (1.0.3: Line4x pillarbox at 72MHz +1%; was 66MHz)
 static pll_config_t ds_pll_cfg;
 static uint8_t ds_pll_active;
 static uint8_t ds_pll_tp;               // custom configuration for the safe screen (CVBS Line3x)
@@ -542,7 +548,8 @@ status_t get_status(tvp_sync_input_t syncinput)
     // (mode reprogram), the rest only the decoder registers
     if (cv_mode && sync_active && valid_mode &&
         ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp) ||
-         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal)))
+         (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal) ||
+         ((tc.hdmi_ar == 3) != (cm.cc.hdmi_ar == 3))))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();
@@ -566,7 +573,7 @@ status_t get_status(tvp_sync_input_t syncinput)
         if (ds_range_changed) {
             hdmitx_rgb_limited = (tc.ds_out_range != 0);
             if (tc.tx_mode != TX_DVI)
-                HDMITX_SetAVIInfoFrame(vmode_out.vic, (tc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, tc.hdmi_ar, 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
+                HDMITX_SetAVIInfoFrame(vmode_out.vic, (tc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, avi_ar(tc.hdmi_ar), 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
         }
     }
 
@@ -1203,7 +1210,7 @@ void program_mode()
     // native sampling: output on the FPGA PLL at an exact ratio of the ADC clock
     // (also the CVBS Line3x / Line4x output: 3/2 / 2 of the 27MHz ADC clock)
     ds_pll_tp = 0;
-    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || (cv_mode && ((cm.cc.cv_line2x >= 2) || cvx_pll)));
+    ds_pll_active = vm_conf.ds_pll_n && (vm_conf.ds_vdec || cv_mode);
     if (ds_pll_active) {
         ds_pll_make(vm_conf.ds_pll_n, vm_conf.ds_pll_m, vm_conf.ds_pll_c, &ds_pll_cfg);
         cm.pclk_o_hz = (uint32_t)(((uint64_t)pclk_i_hz*vm_conf.ds_pll_m)/((uint32_t)vm_conf.ds_pll_n*vm_conf.ds_pll_c));
@@ -1309,7 +1316,7 @@ void program_mode()
         cm.hdmitx_pclk_level = hdmitx_pclk_level;
         TX_enable(cm.cc.tx_mode);
     } else if (cm.cc.tx_mode!=TX_DVI) {
-        HDMITX_SetAVIInfoFrame(vmode_out.vic, (cm.cc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, cm.cc.hdmi_ar, 0, cm.cc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
+        HDMITX_SetAVIInfoFrame(vmode_out.vic, (cm.cc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, avi_ar(cm.cc.hdmi_ar), 0, cm.cc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
 #ifdef MANUAL_CTS
         SetupAudio(cm.cc.tx_mode);
 #endif
@@ -1867,7 +1874,7 @@ int main(int argc, char **argv, char **envp)
             if ((tc.hdmi_itc != cm.cc.hdmi_itc) || (tc.hdmi_ar != cm.cc.hdmi_ar)) {
                 //EnableAVIInfoFrame(FALSE, NULL);
                 printf("setting ITC to %d\nsetting Aspect-Ratio to %d\n", tc.hdmi_itc, tc.hdmi_ar);
-                HDMITX_SetAVIInfoFrame(vmode_out.vic, (tc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, tc.hdmi_ar, 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
+                HDMITX_SetAVIInfoFrame(vmode_out.vic, (tc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, avi_ar(tc.hdmi_ar), 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
                 cm.cc.hdmi_itc = tc.hdmi_itc;
                 cm.cc.hdmi_ar = tc.hdmi_ar;
             }

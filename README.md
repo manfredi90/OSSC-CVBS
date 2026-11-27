@@ -133,6 +133,7 @@ Menu
 | Item | Values | |
 |------|--------|---|
 | Output | 15kHz, Line2x 31kHz, Line3x 47kHz, Line4x 63kHz | see the outputs table and **Safety**. Saved with the settings |
+| Aspect | Not set, 4:3, 16:9, 4:3 pillarbox | HDMI aspect flag. **4:3 pillarbox**: for 16:9 displays that always stretch the picture to the full width: the active line is 4/3 wider (960 / 1920 pixels, output clock x4/3: ~36MHz at 15kHz and Line2x, ~54MHz Line3x, ~72MHz Line4x), the picture keeps its pixels in the middle, black bars on the sides, flag 16:9. Not a CEA format: some displays may not accept it. Default Not set |
 | Color system | Auto, PAL, NTSC, PAL-60, NTSC 4.43, PAL-M, PAL-N | Auto (default) recognizes the system by itself; force it only for a source that is misdetected |
 | Saturation | 0–200% | |
 | Hue | ±30 deg | |

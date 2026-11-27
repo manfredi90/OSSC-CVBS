@@ -159,6 +159,8 @@ int ds_settings_load() {
         tc.cv_notch_off = 0;
     if (tc.cv_xtal > 1)
         tc.cv_xtal = 0;
+    if (tc.hdmi_ar > 3)
+        tc.hdmi_ar = 0;
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
     if (tc.ds_720p_ar == 3)       // 1.2.2-1.2.3 "Wide (216p)": now "Wide"

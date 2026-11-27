@@ -1,6 +1,21 @@
 Changelog
 =========
 
+CVBS decoder 1.0.3 (test)
+-------------------------
+
+### Added
+- Aspect: 4:3 pillarbox, for 16:9 displays without an aspect setting (the
+  4:3 picture was stretched). All outputs: the same line period with 4/3
+  more clocks (FPGA PLL M x4/3: 36MHz at 15kHz and Line2x, 54MHz Line3x,
+  72MHz Line4x; with the crystal clock the output clock still follows the
+  source), the picture with its own pixels in the middle of a 4/3 wider
+  active line (960 / 1920), black on the sides (as the official firmware's
+  1280x720 / 1920x1080 formats); HDMI aspect flag 16:9. The HDMI aspect
+  flag menu item (Output opt.) is now Aspect in the CVBS decoder menu, with
+  this fourth value.
+- FPGA PLL output constrained at 74MHz (66MHz before).
+
 CVBS decoder 1.0.2 (test)
 -------------------------
 
