@@ -1,6 +1,20 @@
 Changelog
 =========
 
+VHS firmware 0.7 (test)
+-----------------------
+
+### Changed
+- VCR search / fast forward: the picture no longer goes black ("Unsupported").
+  The disturbed signal (noise bars, pseudo vsyncs) can make the frontend
+  read a line rate far from 15kHz (e.g. 31kHz / 103Hz), taken as a new
+  unsupported mode after 8 reads. Now a reading that is not a 15kHz signal
+  (line rate outside 14.8-16kHz) is ignored: the current mode and output are
+  kept and the FPGA frame lock follows what it can. Only the loss of the
+  sync is a sync loss (before: also 8 invalid reads in a row). A real field
+  rate / line count change in search (e.g. 604 lines at 51.5Hz) is still a
+  mode change: a short picture loss, the HDMI output stays.
+
 VHS firmware 0.6 (test)
 -----------------------
 

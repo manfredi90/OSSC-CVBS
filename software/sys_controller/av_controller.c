@@ -466,20 +466,25 @@ status_t get_status(tvp_sync_input_t syncinput)
 
     clkcnt = pcnt_field/(totlines>>!progressive);
     valid_mode = (pcnt_field > 0) && check_linecnt(progressive, totlines);
+    // VHS firmware: the input is always a 15kHz SD signal; a reading at
+    // another line rate is a measurement of a disturbed signal (VCR search /
+    // fast forward: noise bars, pseudo vsyncs, e.g. 31kHz / 103Hz read)
+    if (valid_mode) {
+        uint32_t lrate = (uint32_t)(((uint64_t)TVP_EXTCLK_HZ * totlines) / ((uint64_t)pcnt_field * (1 + !progressive)));
+        valid_mode = (lrate >= DS_HFREQ_MIN) && (lrate <= DS_HFREQ_MAX);
+    }
 
-    // Check sync activity (an invalid mode with the sync still active: lost
-    // only after MODE_CHANGE_READS reads in a row)
-    {
-        static alt_u8 invalid_cnt;
-        if (!cm.sync_active && sync_active && valid_mode) {
-            cm.sync_active = 1;
-            status = ACTIVITY_CHANGE;
-        } else if (cm.sync_active && (!sync_active || (!valid_mode && (++invalid_cnt >= MODE_CHANGE_READS)))) {
-            cm.sync_active = 0;
-            status = ACTIVITY_CHANGE;
-        }
-        if (valid_mode || !cm.sync_active)
-            invalid_cnt = 0;
+    // Check sync activity. VHS firmware: an invalid reading with the sync
+    // still active is ignored (current mode and output kept, the FPGA frame
+    // lock follows what it can); only the loss of the sync is a sync loss
+    // (VHS 0.4-0.6: also MODE_CHANGE_READS invalid reads in a row, which made
+    // the picture go black in VCR search)
+    if (!cm.sync_active && sync_active && valid_mode) {
+        cm.sync_active = 1;
+        status = ACTIVITY_CHANGE;
+    } else if (cm.sync_active && !sync_active) {
+        cm.sync_active = 0;
+        status = ACTIVITY_CHANGE;
     }
 
     if (sync_active && valid_mode) {
