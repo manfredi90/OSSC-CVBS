@@ -57,12 +57,15 @@ Requirements
 
   ![Connections](docs/connections.svg)
 
-* Composite or S-Video source on the **AV2** RCA jacks:
+* Composite or S-Video source on the **AV2** RCA jacks or on the **VGA**
+  input (same pin out: luma on green, chroma on blue):
 
   | Input | Connection |
   |-------|------------|
   | AV2 Composite | composite video on the AV2 **Y** (green) jack |
   | AV2 S-Video   | S-Video **Y** on the AV2 Y (green) jack, **C** on the AV2 **Pb** (blue) jack (S-Video to 2 RCA adapter required) |
+  | VGA Composite | composite video on VGA pin 2 (**green**), ground on pin 7 |
+  | VGA S-Video   | S-Video **Y** on VGA pin 2 (**green**), **C** on pin 3 (**blue**), grounds on pins 7 and 8 |
 
 * Display:
   * **15kHz:** OSSC HDMI output → HDMI-to-VGA DAC → VGA-to-SCART (or VGA/BNC)
@@ -84,7 +87,7 @@ Supported inputs and outputs
 
 | Input | Colour systems | Timing |
 |-------|----------------|--------|
-| AV2 Composite, AV2 S-Video | **Auto** (default), PAL, NTSC, PAL-60, NTSC 4.43, PAL-M, PAL-N | 240p, 288p, 480i, 576i (standard and non-standard timings, e.g. NES and SNES) |
+| AV2 Composite, AV2 S-Video, VGA Composite, VGA S-Video | **Auto** (default), PAL, NTSC, PAL-60, NTSC 4.43, PAL-M, PAL-N | 240p, 288p, 480i, 576i (standard and non-standard timings, e.g. NES and SNES) |
 
 | Output | Lines (NTSC / PAL) | Pixel clock | Notes |
 |--------|--------------------|-------------|-------|
@@ -108,8 +111,8 @@ Installation
    the OSSC Downscaler HD if one of them was installed).
 3. Start it with **Launch 2nd FW**. The LCD shows `CV vX.Y 15kHz` and the
    OSSC outputs the test pattern until a source is found.
-4. Press button 5 on the remote control for **AV2 Composite** or button 2 for
-   **AV2 S-Video**.
+4. Press button 5 on the remote control for **AV2 Composite**, 2 for **AV2
+   S-Video**, 8 for **VGA Composite** or 9 for **VGA S-Video**.
 5. In the **CVBS decoder** menu, select the **Output** for your display:
    15kHz for CRTs and 15kHz monitors, Line2x / Line3x / Line4x for HDMI TVs
    (see **Safety**).
@@ -117,10 +120,11 @@ Installation
    AND / Standard for RGBS monitors through an HDMI→VGA DAC. Then save with
    **Settings opt. → Save settings**.
 
-Buttons on the OSSC: the 1st one switches between AV2 Composite and AV2
-S-Video; the 2nd one has no function in this firmware. The other inputs (AV1,
-AV3) are not available. **Initial input** (Settings opt.): AV2 Composite
-(default), AV2 S-Video or Last used.
+Buttons on the OSSC: the 1st one goes through AV2 Composite, AV2 S-Video,
+VGA Composite and VGA S-Video; the 2nd one has no function in this firmware.
+The other inputs (AV1 SCART, RGB / component on AV2 and VGA) are not
+available. **Initial input** (Settings opt.): AV2 Composite (default), AV2
+S-Video or Last used (also VGA).
 
 To return to the official firmware, power cycle the OSSC.
 

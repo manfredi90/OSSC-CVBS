@@ -30,6 +30,7 @@
 #include "sys/alt_timestamp.h"
 #include "userdata.h"
 #include "ds_settings.h"
+#include "cvbs.h"
 #include "firmware.h"
 #include "utils.h"
 #include "lcd.h"
@@ -207,8 +208,11 @@ int parse_control()
     alt_u8* pmcfg_ptr[] = { &pt_only, &tc.pm_240p, &tc.pm_240p, &tc.pm_384p, &tc.pm_480i, &tc.pm_480i, &tc.pm_480p, &tc.pm_480p, &pt_only, &tc.pm_1080i, &pt_only };
     alt_u8 valid_pm[] = { 0x1, 0x3f, 0x3f, 0x7, 0xf, 0xf, 0x7, 0x7, 0x1, 0x3, 0x1 };
 
-    // CVBS firmware: AV2 composite / S-Video only
-    avinput_t next_input = (cm.avinput == AV2_RGsB) ? AV2_YPBPR : AV2_RGsB;
+    // CVBS firmware: AV2 composite -> AV2 S-Video -> VGA composite -> VGA
+    // S-Video
+    avinput_t next_input = (cm.avinput == AV2_RGsB) ? AV2_YPBPR :
+                           (cm.avinput == AV2_YPBPR) ? AV3_RGsB :
+                           (cm.avinput == AV3_RGsB) ? AV3_YPBPR : AV2_RGsB;
 
     if (remote_code)
         printf("RCODE: 0x%.4lx, %d\n", remote_code, remote_rpt);
@@ -231,9 +235,13 @@ int parse_control()
         i = REMOTE_MAX_KEYS;
 
     switch (i) {
-        // CVBS firmware: AV2 composite / S-Video only (AV1 / AV3 keys ignored)
+        // CVBS firmware: AV2 (5 composite, 2 S-Video) and VGA (8 composite,
+        // 9 S-Video, the stock AV3 RGsB / YPbPr keys); the other input keys
+        // ignored
         case RC_BTN2: man_target_input = AV2_YPBPR; break;
         case RC_BTN5: man_target_input = AV2_RGsB; break;
+        case RC_BTN8: man_target_input = AV3_RGsB; break;
+        case RC_BTN9: man_target_input = AV3_YPBPR; break;
         case RC_MENU:
             menu_active = !menu_active;
             osd->osd_config.menu_active = menu_active;
@@ -462,7 +470,7 @@ Button_Check:
         if (pos != NULL) {
             *pos = 0;
             if (sscanf(uart_rx_buf, "input %u", &uart_rx_arg) == 1) {
-                if ((uart_rx_arg == AV2_YPBPR) || (uart_rx_arg == AV2_RGsB)) {
+                if ((uart_rx_arg < AV_LAST) && cvbs_input_mode((avinput_t)uart_rx_arg)) {
                     man_target_input = uart_rx_arg;
                     dd_printf("Input %u selected\n", uart_rx_arg);
                 } else {

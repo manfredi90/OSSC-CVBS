@@ -1652,11 +1652,11 @@ void update_settings(int init_setup) {
         osd->osd_config.highlight_color = 2+ts.osd_highlight_color;
         refresh_osd();
     }
-    // CVBS firmware: AV2 composite / S-Video only; Initial input AV2_RGsB+1
-    // = last used
+    // CVBS firmware: AV2 / VGA composite and S-Video; Initial input AV2
+    // composite / S-Video or AV2_RGsB+1 = last used (also VGA)
     if (init_setup)
         target_input = ((ts.def_input == AV2_YPBPR) || (ts.def_input == AV2_RGsB)) ? ts.def_input :
-                       (((last_input == AV2_YPBPR) || (last_input == AV2_RGsB)) ? last_input : AV2_RGsB);
+                       (cvbs_input_mode(last_input) ? last_input : AV2_RGsB);
 
     memcpy(&cs, &ts, sizeof(settings_t));
 }
@@ -1797,11 +1797,11 @@ int main(int argc, char **argv, char **envp)
             case AV1_RGsB:
             case AV2_RGsB:      // CVBS firmware: composite on Y
             case AV2_YPBPR:     // CVBS firmware: S-Video, Y and chroma on Pb
-            case AV3_RGsB:
+            case AV3_RGsB:      // CVBS firmware: VGA composite on G
+            case AV3_YPBPR:     // CVBS firmware: VGA S-Video, Y on G, chroma on B
                 target_format = FORMAT_RGsB;
                 break;
             case AV1_YPBPR:
-            case AV3_YPBPR:
                 target_format = FORMAT_YPbPr;
                 break;
             case AV3_RGBHV:

@@ -1,6 +1,17 @@
 Changelog
 =========
 
+CVBS decoder 1.0.6 (test)
+-------------------------
+
+### Added
+- VGA input: VGA Composite (composite on the green pin) and VGA S-Video (Y on
+  green, C on blue), the same pin out as AV2; sync from the green pin (SOG).
+  Remote: 8 VGA Composite, 9 VGA S-Video (as AV3 RGsB / YPbPr in the
+  stock firmware; 5 / 2: AV2); the 1st OSSC button
+  goes through the four inputs; Last used can be VGA; the OSSC still starts
+  on AV2 by default.
+
 CVBS decoder 1.0.5 (test)
 -------------------------
 

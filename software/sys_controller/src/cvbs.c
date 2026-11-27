@@ -77,10 +77,12 @@ static int lines625() {
     return in_ilace ? (in_totlines > 575) : (in_totlines > 287);
 }
 
+// AV2 (RCA) and, since 1.0.6, VGA: composite on the green (Y) pin, S-Video
+// Y on green and C on blue
 uint8_t cvbs_input_mode(avinput_t input) {
-    if (input == AV2_RGsB)
+    if ((input == AV2_RGsB) || (input == AV3_RGsB))
         return 1;
-    if (input == AV2_YPBPR)
+    if ((input == AV2_YPBPR) || (input == AV3_YPBPR))
         return 2;
     return 0;
 }

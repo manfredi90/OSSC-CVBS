@@ -63,7 +63,7 @@
 #define L5FMT_1920x1200     2
 
 // CVBS firmware: AV2 is the decoder input (Composite on Y, S-Video on Y + Pb)
-static const char *avinput_str[] = { "Test pattern", "AV1_RGBS", "AV1_RGsB", "AV1_YPbPr", "AV2 S-Video", "AV2 Composite", "AV3_RGBHV", "AV3_RGBS", "AV3_RGsB", "AV3_YPbPr", "Last used" };
+static const char *avinput_str[] = { "Test pattern", "AV1_RGBS", "AV1_RGsB", "AV1_YPbPr", "AV2 S-Video", "AV2 Composite", "AV3_RGBHV", "AV3_RGBS", "VGA Composite", "VGA S-Video", "Last used" };
 
 typedef enum {
     AV_TESTPAT      = 0,
