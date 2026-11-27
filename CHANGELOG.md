@@ -1,6 +1,25 @@
 Changelog
 =========
 
+VHS firmware 0.9 (test)
+-----------------------
+
+### Fixed
+- The field placed one line off was still there with 0.8 (a View capture:
+  about once a second, the same signature). Besides the race of 0.8 the
+  vsync edge of the TVP7002 can come on the wrong half line (on the last
+  equalizing pulse instead of the first broad one), which no delay fixes.
+  Now the fields of an interlaced source alternate: a parity read once
+  against the alternation (equal to the previous reading, which itself
+  differed from the one before) is taken as the expected parity, with the
+  field start of that parity; a repeated one is real (a dropped field at a
+  splice: one field off as before; a progressive source, e.g. VCR pause,
+  stays progressive). Output side and measurement side (the interlace flag
+  no longer drops for that field). The 1/16 line delay of 0.8 is kept.
+  sim/fe `runfid.sh` with `EPE` / `EPO` (vsync half a line early) and `PROG`:
+  5% of the even fields early, 50 fields: 0.8 2 placed off / 4 progressive
+  reads -> 0 / 0; every other case unchanged (PAL and NTSC).
+
 VHS firmware 0.8 (test)
 -----------------------
 

@@ -3,7 +3,8 @@
 // broad pulses, the regenerated line start (HS flywheel: line starts only),
 // the TVP7002 vsync edge VSD clocks after the first broad pulse edge with a
 // random jitter of +-VSJ clocks (VSD near 0: the vsync edge races the SOG
-// edge), VHS model (drift, head switch jump, jitter) and an optional dropped
+// edge; EPE / EPO: per mille of even / odd fields with the vsync edge half
+// a line early, on the last equalizing pulse), VHS model (drift, head switch jump, jitter) and an optional dropped
 // field (SKIP: field number, a tape splice). Per field start: FID, field
 // start line vs the expected one, alternation errors counted.
 `timescale 1ns/1ps
@@ -11,7 +12,7 @@ module tb;
 reg clk = 0;
 always #18.5 clk = ~clk;     // 27MHz
 
-integer PAL, NF, VA, VP, VHS, VJ, VSD, VSJ, SKIP, V;
+integer PAL, NF, VA, VP, VHS, VJ, VSD, VSJ, SKIP, V, EPE, EPO, PROG;
 integer HL, FHL, NEQ, LINE;
 initial begin
     if (!$value$plusargs("PAL=%d", PAL)) PAL = 1;
@@ -24,9 +25,13 @@ initial begin
     if (!$value$plusargs("VSJ=%d", VSJ)) VSJ = 0;
     if (!$value$plusargs("SKIP=%d", SKIP)) SKIP = -1;
     if (!$value$plusargs("V=%d", V)) V = 0;
+    if (!$value$plusargs("EPE=%d", EPE)) EPE = 0;   // per mille: vsync half a line early, even fields
+    if (!$value$plusargs("EPO=%d", EPO)) EPO = 0;   // odd fields
+    if (!$value$plusargs("PROG=%d", PROG)) PROG = 0; // progressive source (312 / 262 lines, VCR pause)
     LINE = PAL ? 1728 : 1716;
     HL = LINE / 2;
     FHL = PAL ? 625 : 525;
+    if (PROG) FHL = FHL - 1;
     NEQ = PAL ? 5 : 6;
 end
 
@@ -67,6 +72,7 @@ initial begin : gen
         if (f == 0) begin
             fstart[nfld] = start; fpar[nfld] = ((k % 2) == 0); nfld = nfld + 1;
             d = VSD + ((VSJ > 0) ? (($urandom % (2*VSJ+1)) - VSJ) : 0);
+            if (((k % 2) ? EPE : EPO) > ($urandom % 1000)) d = d - HL;
             vs_at = start + d;
         end
         while (tc < start) @(posedge clk);
@@ -75,7 +81,7 @@ initial begin : gen
         if (w) begin sog = 0; repeat (w) @(posedge clk); sog = 1; end
     end
     #1000;
-    $display("SUMMARY fields %0d alternation_errors %0d placement_errors %0d progressive_reads %0d", nf_seen, n_alt, n_pos, n_prog);
+    $display("SUMMARY fields %0d alternation_errors %0d placement_errors %0d progressive_reads %0d even_fids %0d", nf_seen, n_alt, n_pos, n_prog, n_even);
     $finish;
 end
 
@@ -103,7 +109,7 @@ tvp7002_frontend dut (
 );
 
 // field start in the frontend: HS edge with fid_next_ctr == 1 (v_cnt <= 1)
-integer n_prog = 0;
+integer n_prog = 0, n_even = 0;
 integer nf_seen = 0, n_alt = 0, n_pos = 0, last_fid = -1, fi, dl, exp_dl, last_true = -1;
 always @(posedge clk) begin
     if (dut.HS_i_prev & ~dut.HS_i & (dut.fid_next_ctr == 2'h1)) begin
@@ -113,6 +119,7 @@ always @(posedge clk) begin
         // expected: odd (broad at line start) starts 1 line after, even 1.5
         exp_dl = fpar[fi] ? LINE : LINE + HL;
         if (nf_seen >= 6 && !interlace_flag) n_prog = n_prog + 1;
+        if (nf_seen >= 6 && (dut.fid_next == 0)) n_even = n_even + 1;
         if (nf_seen >= 6 && interlace_flag) begin
             if ((last_fid >= 0) && (dut.fid_next == last_fid) && (fpar[fi] != last_true)) n_alt = n_alt + 1;
             if ((dut.fid_next != fpar[fi]) || (dl < exp_dl - HL/2) || (dl > exp_dl + HL/2)) n_pos = n_pos + 1;
@@ -123,4 +130,7 @@ always @(posedge clk) begin
         nf_seen = nf_seen + 1;
     end
 end
+// V=2: every parity decision
+always @(posedge clk) if ((V == 2) && dut.fid_decide)
+    $display("  DBG decide tc %0d h_cnt %0d sogref %0d raw %0d raw1 %0d raw2 %0d fix %0d ilace %0d", tc, dut.h_cnt, dut.h_cnt_sogref, dut.fid_raw, dut.fid_raw1, dut.fid_raw2, dut.fid_fix, interlace_flag);
 endmodule
