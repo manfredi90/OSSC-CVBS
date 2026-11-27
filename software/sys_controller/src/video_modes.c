@@ -1413,7 +1413,7 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     // display stretching the active line to 16:9 shows it 4:3 (like the
     // stock 1280x720 / 1920x1080 formats, wider active line, picture
     // centred). HDMI aspect flag 16:9 (avi_ar in av_controller.c).
-    if (cv_mode && cvbs_group_ok(mode_preset->group) && (cc->hdmi_ar == 3)) {
+    if (cv_mode && cvbs_group_ok(mode_preset->group) && (cc->hdmi_ar == CV_AR_PILLARBOX)) {
         if (vm_conf->x_size == 0)
             vm_conf->x_size = (vm_in->timings.h_active-2*vm_in->mask.h)*(vm_conf->x_rpt+1);
         vm_out->timings.h_total = (vm_out->timings.h_total*4 + 1)/3;
@@ -1457,7 +1457,7 @@ int get_pure_lm_mode(avconfig_t *cc, mode_data_t *vm_in, mode_data_t *vm_out, vm
     }
 
     // Aspect
-    if ((vm_out->type & VIDEO_HDTV) || (cv_mode && (cc->hdmi_ar == 3))) {
+    if ((vm_out->type & VIDEO_HDTV) || (cv_mode && (cc->hdmi_ar == CV_AR_PILLARBOX))) {
         vm_out->ar.h = 16;
         vm_out->ar.v = 9;
     } else {

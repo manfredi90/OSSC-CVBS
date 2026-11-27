@@ -29,9 +29,10 @@
 // CVBS firmware: own magic (the downscaler / HD firmware settings in the same
 // sector have another format and are not loaded)
 #define DS_SETTINGS_MAGIC   0x4F534356  // "OSCV"
-#define DS_SETTINGS_VERSION 6     // 4: 0.6 (sharpness, chroma delay at the end of avconfig_t), 5: 0.35 (Output values)
+#define DS_SETTINGS_VERSION 7     // 4: 0.6 (sharpness, chroma delay at the end of avconfig_t), 5: 0.35 (Output values)
                                   // 3: 0.3 (edge suppression, clamp position; older settings not loaded)
                                   // 6: 0.37 (NTSC setup at the end of avconfig_t)
+                                  // 7: 1.0.4 (Aspect values: hdmi_ar 0 4:3, 1 16:9, 2 pillarbox; v6 0 not set, 1 4:3, 2 16:9, 3 pillarbox)
 #define V5_TC_LESS          1     // bytes added to avconfig_t in v6
 #define V3_TC_LESS          (2 + V5_TC_LESS)    // bytes added to avconfig_t in v4 and v6
 
@@ -99,6 +100,17 @@ int ds_settings_load() {
         }
     }
 
+    // v6 (0.37-1.0.3): same layout, other Aspect values
+    if (!migrated && (blob.magic == DS_SETTINGS_MAGIC) && (blob.version == 6) &&
+        (blob.len == sizeof(ds_settings_blob_t)) && (blob.crc == blob_crc(&blob))) {
+        blob.tc.hdmi_ar = (blob.tc.hdmi_ar <= 1) ? CV_AR_43 : (blob.tc.hdmi_ar - 1);
+        migrated = 1;
+        printf("DS settings: v6 migrated\n");
+    }
+    // v3-v5: the Aspect values of v6 too
+    else if (migrated)
+        blob.tc.hdmi_ar = (blob.tc.hdmi_ar <= 1) ? CV_AR_43 : (blob.tc.hdmi_ar - 1);
+
     if (!migrated &&
         ((blob.magic != DS_SETTINGS_MAGIC) ||
          (blob.version != DS_SETTINGS_VERSION) ||
@@ -159,8 +171,8 @@ int ds_settings_load() {
         tc.cv_notch_off = 0;
     if (tc.cv_xtal > 1)
         tc.cv_xtal = 0;
-    if (tc.hdmi_ar > 3)
-        tc.hdmi_ar = 0;
+    if (tc.hdmi_ar > CV_AR_PILLARBOX)
+        tc.hdmi_ar = CV_AR_43;
     if (tc.s480p_mode > 2)
         tc.s480p_mode = 0;
     if (tc.ds_720p_ar == 3)       // 1.2.2-1.2.3 "Wide (216p)": now "Wide"

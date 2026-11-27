@@ -207,10 +207,11 @@ inline void SetupAudio(tx_mode_t mode)
     }
 }
 
-// HDMI aspect flag sent: "4:3 pillarbox" (hdmi_ar 3, the 4:3 picture in a
-// 4/3 wider line, see video_modes.c) is a 16:9 frame
+// HDMI aspect flag sent (1 = 4:3, 2 = 16:9): Aspect 4:3, 16:9 anamorphic,
+// 4:3 pillarbox (the 4:3 picture in a 4/3 wider line, see video_modes.c: a
+// 16:9 frame)
 static int avi_ar(alt_u8 ar) {
-    return (ar == 3) ? 2 : ar;
+    return (ar == CV_AR_43) ? 1 : 2;
 }
 
 inline void TX_enable(tx_mode_t mode)
@@ -549,7 +550,7 @@ status_t get_status(tvp_sync_input_t syncinput)
     if (cv_mode && sync_active && valid_mode &&
         ((tc.cv_adcgain != cm.cc.cv_adcgain) || (tc.cv_adcofs != cm.cc.cv_adcofs) || (tc.cv_clamp != cm.cc.cv_clamp) ||
          (tc.cv_line2x != cm.cc.cv_line2x) || (tc.cv_xtal != cm.cc.cv_xtal) ||
-         ((tc.hdmi_ar == 3) != (cm.cc.hdmi_ar == 3))))
+         ((tc.hdmi_ar == CV_AR_PILLARBOX) != (cm.cc.hdmi_ar == CV_AR_PILLARBOX))))
         status = (status < MODE_CHANGE) ? MODE_CHANGE : status;
     if (tc.cv_std != cm.cc.cv_std)
         cvbs_reset_auto();

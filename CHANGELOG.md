@@ -1,6 +1,14 @@
 Changelog
 =========
 
+CVBS decoder 1.0.4 (test)
+-------------------------
+
+### Changed
+- Aspect: 4:3 (default), 16:9 anamorphic, 4:3 pillarbox ("Not set" removed:
+  720x480 / 720x576 are taken as 4:3 by nearly every display anyway).
+  Settings v7: saved Not set / 4:3 -> 4:3, 16:9 -> 16:9 anamorphic.
+
 CVBS decoder 1.0.3 (test)
 -------------------------
 

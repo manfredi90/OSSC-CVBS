@@ -160,7 +160,7 @@ typedef struct {
     /* TX / extra settings */
     alt_u8 tx_mode;
     alt_u8 hdmi_itc;
-    alt_u8 hdmi_ar;         // HDMI aspect flag: 0 not set, 1 4:3, 2 16:9, 3 4:3 pillarbox (CVBS: 4:3 picture in a 4/3 wider line, flag 16:9)
+    alt_u8 hdmi_ar;         // CVBS Aspect: 0 4:3, 1 16:9 anamorphic, 2 4:3 pillarbox (4:3 picture in a 4/3 wider line, flag 16:9) (settings v7; v6 and the official firmware: 0 not set, 1 4:3, 2 16:9)
     alt_u8 hdmi_hdr;
     alt_u8 hdmi_vrr;
     alt_u8 full_tx_setup;
@@ -205,6 +205,10 @@ typedef struct {
     /* added in settings v6 (0.37): keep at the end (v3-v5 settings are migrated) */
     alt_u8 cv_setup;        // NTSC 7.5 IRE setup removed: 0 = auto (NTSC, NTSC 4.43, PAL-M), 1 = off, 2 = on
 } __attribute__((packed)) avconfig_t;
+
+#define CV_AR_43        0
+#define CV_AR_169       1
+#define CV_AR_PILLARBOX 2
 
 int set_default_profile(int update_cc);
 int reset_profile();
