@@ -58,14 +58,15 @@ Requirements
   ![Connections](docs/connections.svg)
 
 * Composite or S-Video source on the **AV2** RCA jacks or on the **VGA**
-  input (same pin out: luma on green, chroma on blue):
+  input (same pin out: luma on green, chroma on blue; the VGA input is
+  **untested** so far):
 
   | Input | Connection |
   |-------|------------|
   | AV2 Composite | composite video on the AV2 **Y** (green) jack |
   | AV2 S-Video   | S-Video **Y** on the AV2 Y (green) jack, **C** on the AV2 **Pb** (blue) jack (S-Video to 2 RCA adapter required) |
-  | VGA Composite | composite video on VGA pin 2 (**green**), ground on pin 7 |
-  | VGA S-Video   | S-Video **Y** on VGA pin 2 (**green**), **C** on pin 3 (**blue**), grounds on pins 7 and 8 |
+  | VGA Composite (untested) | composite video on VGA pin 2 (**green**), ground on pin 7 |
+  | VGA S-Video (untested)   | S-Video **Y** on VGA pin 2 (**green**), **C** on pin 3 (**blue**), grounds on pins 7 and 8 |
 
 * Display:
   * **15kHz:** OSSC HDMI output → HDMI-to-VGA DAC → VGA-to-SCART (or VGA/BNC)
@@ -185,6 +186,10 @@ Known issues and limitations
 ----------------------------
 
 * SECAM is not supported.
+* The VGA input (VGA Composite, VGA S-Video) has not been tested on real
+  hardware yet: it uses the same decoder settings as AV2, but the signal
+  goes straight to the TVP7002 (no THS7353 buffer), so the level may differ
+  slightly (ADC gain / offset in the CVBS decoder menu).
 
 
 Building

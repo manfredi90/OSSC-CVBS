@@ -1,6 +1,18 @@
 Changelog
 =========
 
+CVBS decoder 1.1
+----------------
+
+1.0.7 renamed, no other change. Since 1.0:
+- Aspect (CVBS decoder menu): 4:3, 16:9 anamorphic, 4:3 pillarbox (16:9
+  displays without an aspect setting); the HDMI aspect flag follows it, the
+  change is immediate.
+- Adaptive luma notch for PAL too.
+- VGA input (untested): VGA Composite and VGA S-Video, same pin out as AV2;
+  remote 6 / 3, also in Initial input.
+- FPGA remote update IP removed (unused, more room in the FPGA).
+
 CVBS decoder 1.0.7 (test)
 -------------------------
 
