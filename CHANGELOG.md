@@ -1,6 +1,23 @@
 Changelog
 =========
 
+VHS firmware 0.8 (test)
+-----------------------
+
+### Fixed
+- A field placed one line off every ~30 fields (View: the picture jumps one
+  line for a field; Archive: the field one line off as well). The TVP7002
+  vsync edge comes together with a sync edge of the composite sync: when the
+  vsync edge was registered first, the field parity reference was the
+  previous sync edge, half a line earlier, and the field was read as the
+  other one with its start one line early (seen in a View capture: always the
+  same field of the frame, its content one line off). The parity is now
+  taken 1/16 line after the vsync edge (sync separated mode, output side and
+  measurement side), when that edge is always in. The measured interlace
+  flag no longer drops for such fields either. sim/fe `tb_fid.v` /
+  `runfid.sh`: vsync edge racing the sync edge, 50 fields: 5 placed off and
+  19 read as progressive -> 0 / 0 (PAL and NTSC); a splice as before.
+
 VHS firmware 0.7 (test)
 -----------------------
 

@@ -89,6 +89,15 @@ reg HS_i_prev, VS_i_np_prev;
 reg HSYNC_i_np_prev, VSYNC_i_np_prev;
 reg [1:0] fid_next_ctr;
 reg fid_next;
+// VHS firmware: field parity taken 1/16 line after the vsync edge (sync
+// separated mode). The TVP7002 vsync edge comes together with a sync edge
+// of the composite sync; when it was registered first the parity reference
+// was the previous edge, half a line earlier: the field read as the other
+// one, its start one line early (VHS: a field placed one line off every
+// ~30 fields). 1/16 line later the edge is always in, the next one is half
+// a line away. Both domains (output side / measurement).
+reg vs_pend, meas_vs_pend;
+reg [7:0] vs_dly, meas_vs_dly;
 reg [3:0] h_ctr;
 
 reg [7:0] R_pp[PP_PL_START:PP_PL_END] /* synthesis ramstyle = "logic" */;
@@ -234,8 +243,17 @@ always @(posedge PCLK_i) begin
         end
     end
 
-    // vsync leading edge processing per quadrant
+    // vsync leading edge processing per quadrant (sync separated: 1/16 line
+    // after the edge)
     if (VS_i_np_prev & ~VS_i_np) begin
+        vs_pend <= (vsync_i_type == VSYNC_SEPARATED);
+        vs_dly <= 8'h0;
+    end else if (vs_pend) begin
+        vs_dly <= vs_dly + 1'b1;
+        if (vs_dly == H_TOTAL[11:4])
+            vs_pend <= 1'b0;
+    end
+    if ((VS_i_np_prev & ~VS_i_np & (vsync_i_type == VSYNC_RAW)) | (vs_pend & (vs_dly == H_TOTAL[11:4]))) begin
         if ((HS_i_prev & ~HS_i) | (h_cnt_ref < even_min_thold)) begin
             fid_next <= FID_ODD;
             fid_next_ctr <= 2'h1;
@@ -547,6 +565,14 @@ always @(posedge CLK_MEAS_i) begin
     end
 
     if (VSYNC_i_np_prev & ~VSYNC_i_np) begin
+        meas_vs_pend <= (vsync_i_type == VSYNC_SEPARATED);
+        meas_vs_dly <= 8'h0;
+    end else if (meas_vs_pend) begin
+        meas_vs_dly <= meas_vs_dly + 1'b1;
+        if (meas_vs_dly == pcnt_line[11:4])
+            meas_vs_pend <= 1'b0;
+    end
+    if ((VSYNC_i_np_prev & ~VSYNC_i_np & (vsync_i_type == VSYNC_RAW)) | (meas_vs_pend & (meas_vs_dly == pcnt_line[11:4]))) begin
         if ((meas_h_cnt_ref < meas_even_min_thold) | (meas_h_cnt_ref > meas_even_max_thold)) begin
             meas_fid <= FID_ODD;
             interlace_flag <= (meas_fid == FID_EVEN);
