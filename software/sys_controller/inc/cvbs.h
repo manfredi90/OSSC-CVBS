@@ -63,6 +63,7 @@ int cvbs_sync_diag();
 int cvbs_xtal_diag();
 int cvbs_vhs_diag();
 int cvbs_vhs_events();
+int cvbs_vhs_fields();
 int cvbs_event_diag();
 // reset the automatic detection (new input or mode)
 void cvbs_reset_auto();

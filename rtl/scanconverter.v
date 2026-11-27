@@ -91,6 +91,11 @@ module scanconverter (
     output reg [7:0] ds_resync_cnt,
     output reg [9:0] ds_fperiod_lo,
     output reg [7:0] lock_err,  // VHS: |offset| at the last input frame start / 4 (255: resync)
+    // VHS diagnostics, since boot (mod 256): output frames whose bob parity
+    // repeats the previous one's (interlaced source, progressive output) /
+    // output frames begun with the source interlace flag off
+    output reg [7:0] dg_bobrep,
+    output reg [7:0] dg_ilace0,
     input lt_active,
     input [1:0] lt_mode,
     input emif_br_clk,
@@ -231,6 +236,7 @@ reg [12:0] h_cnt;
 reg [10:0] v_cnt;
 reg h_avidstart, v_avidstart;
 reg src_fid, dst_fid;
+reg dg_src_prev;
 wire [6:0] panasonic_adjust = (MISC_PANASONIC_HACK & (Y_RPT == 4'h1) & (v_cnt == V_SYNCLEN+V_BACKPORCH+V_ACTIVE-1)) ? 8'd128 : 7'd0;
 
 reg [10:0] xpos_lb;
@@ -639,6 +645,11 @@ always @(posedge PCLK_OUT_i) begin
         if (v_avidstart) begin
             ypos_pp[1] <= 11'(-1);
             ypos_pp_init <= 1'b1;
+            dg_src_prev <= src_fid;
+            if (interlaced_in_i & ~V_INTERLACED & (src_fid == dg_src_prev))
+                dg_bobrep <= dg_bobrep + 1'b1;
+            if (~interlaced_in_i)
+                dg_ilace0 <= dg_ilace0 + 1'b1;
             // Bob deinterlace adjusts linebuf start position and y_ctr for even source fields if
             // output is progressive mode. Noninterlace restore as raw output mode is an exception
             // which ignores LM deinterlace mode setting.

@@ -270,8 +270,12 @@ end
 wire [7:0] lock_err;
 wire [7:0] blk_pp;
 wire [2:0] dg_sel = {sl_config[14], sl_config2[31:30]};
+wire [7:0] dg_bobrep, dg_ilace0, fe_fidfix;
+reg [7:0] fe_fidfix_s;      // (frontend clock domain, slow counter)
+always @(posedge clk27) fe_fidfix_s <= fe_fidfix;
 wire [7:0] dg_val = (dg_sel == 3'h0) ? dg_pp : ((dg_sel == 3'h1) ? dg_ppA : ((dg_sel == 3'h2) ? lock_err :
-                    ((dg_sel == 3'h3) ? {3'h0, dg_genF} : blk_pp)));
+                    ((dg_sel == 3'h3) ? {3'h0, dg_genF} : ((dg_sel == 3'h4) ? blk_pp :
+                    ((dg_sel == 3'h5) ? dg_bobrep : ((dg_sel == 3'h6) ? fe_fidfix_s : dg_ilace0))))));
 
 
 // TVP7002 RGB digitizer
@@ -340,6 +344,7 @@ tvp7002_frontend u_tvp_frontend (
     .pcnt_field(TVP_fe_pcnt_field),
     .hsync_width(TVP_hsync_width),
     .sync_active(TVP_sync_active),
+    .fid_fix_cnt(fe_fidfix),
     .lumacode_addr(lumacode_addr),
     .lumacode_rden(lumacode_rden)
 );
@@ -697,6 +702,8 @@ scanconverter #(
     .ds_resync_cnt(ds_resync_cnt),
     .ds_fperiod_lo(ds_fperiod_lo),
     .lock_err(lock_err),
+    .dg_bobrep(dg_bobrep),
+    .dg_ilace0(dg_ilace0),
     .lt_active(lt_active),
     .lt_mode(lt_mode_synced),
     .emif_br_clk(1'b0),

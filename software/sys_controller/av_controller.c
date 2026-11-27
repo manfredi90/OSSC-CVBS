@@ -1190,6 +1190,24 @@ int cvbs_vhs_events() {
     return 1;
 }
 
+// <VHS fields>: since boot (mod 256), S = output frames whose bob parity
+// repeated the previous one's (View: a field one line off), F = field parity
+// readings corrected by the alternation rule (frontend), I = output frames
+// begun with the source interlace flag off
+int cvbs_vhs_fields() {
+    unsigned s, f, i;
+
+    if (!cv_mode || (cm.id < 0)) {
+        strncpy(func_ret_status, "No CVBS input", LCD_ROW_LEN+1);
+        return 1;
+    }
+    s = vhs_diag_max(5);
+    f = vhs_diag_max(6);
+    i = vhs_diag_max(7);
+    sniprintf(func_ret_status, LCD_ROW_LEN+1, "S%u F%u I%u", s, f, i);
+    return 1;
+}
+
 // <Event count.>: since boot, P = setups (program_mode), U = register
 // updates (update_sc_config, also at every setup)
 int cvbs_event_diag() {

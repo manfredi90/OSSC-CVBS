@@ -54,6 +54,7 @@ module tvp7002_frontend (
     output reg [19:0] pcnt_field,
     output reg [7:0] hsync_width,
     output reg sync_active,
+    output reg [7:0] fid_fix_cnt,   // VHS diagnostics: parity corrections (alternation), mod 256
     output [7:0] lumacode_addr,
     output lumacode_rden
 );
@@ -270,6 +271,8 @@ always @(posedge PCLK_i) begin
     if (fid_decide) begin
         fid_raw2 <= fid_raw1;
         fid_raw1 <= fid_raw;
+        if (fid_fix)
+            fid_fix_cnt <= fid_fix_cnt + 1'b1;
         if (fid_fix) begin
             // parity against the alternation: the expected one. Field
             // start: even as an even field (vsync edge in the middle of the
