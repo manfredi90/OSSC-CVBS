@@ -1,6 +1,15 @@
 Changelog
 =========
 
+CVBS decoder 1.0.5 (test)
+-------------------------
+
+### Fixed
+- Aspect to / from 4:3 pillarbox did nothing (1.0.3 / 1.0.4): the HDMI
+  flag update of the main loop took the setting as applied before the mode
+  change was checked. The flag update now only handles 4:3 <-> 16:9
+  anamorphic; the pillarbox goes through the mode change.
+
 CVBS decoder 1.0.4 (test)
 -------------------------
 

@@ -1872,12 +1872,19 @@ int main(int argc, char **argv, char **envp)
             cm.clkcnt = 0; //TODO: proper invalidate
         }
         if (tc.tx_mode != TX_DVI) {
-            if ((tc.hdmi_itc != cm.cc.hdmi_itc) || (tc.hdmi_ar != cm.cc.hdmi_ar)) {
+            // Aspect to / from 4:3 pillarbox: other output timings, left to the
+            // mode change (update_sc_config / get_status: the flag is sent
+            // there); here only the flag (1.0.4: copied here first, the mode
+            // change never came)
+            int ar_flag_only = (tc.hdmi_ar != cm.cc.hdmi_ar) &&
+                               ((tc.hdmi_ar == CV_AR_PILLARBOX) == (cm.cc.hdmi_ar == CV_AR_PILLARBOX));
+            if ((tc.hdmi_itc != cm.cc.hdmi_itc) || ar_flag_only) {
                 //EnableAVIInfoFrame(FALSE, NULL);
                 printf("setting ITC to %d\nsetting Aspect-Ratio to %d\n", tc.hdmi_itc, tc.hdmi_ar);
-                HDMITX_SetAVIInfoFrame(vmode_out.vic, (tc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, avi_ar(tc.hdmi_ar), 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
+                HDMITX_SetAVIInfoFrame(vmode_out.vic, (tc.tx_mode == TX_HDMI_RGB) ? F_MODE_RGB444 : F_MODE_YUV444, avi_ar(ar_flag_only ? tc.hdmi_ar : cm.cc.hdmi_ar), 0, tc.hdmi_itc, vm_conf.hdmitx_pixr_ifr);
                 cm.cc.hdmi_itc = tc.hdmi_itc;
-                cm.cc.hdmi_ar = tc.hdmi_ar;
+                if (ar_flag_only)
+                    cm.cc.hdmi_ar = tc.hdmi_ar;
             }
             if (tc.hdmi_vrr != cm.cc.hdmi_vrr) {
                 printf("setting VRR flag to %d\n", tc.hdmi_vrr);
