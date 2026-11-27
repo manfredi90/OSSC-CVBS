@@ -128,8 +128,8 @@ static void pixels_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, LNG("%u 
 static void value_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", v); }
 static void ds_width_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d%%", 100+(alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void signed_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
-// CVBS firmware: AV2 composite / S-Video only, AV2_RGsB+1 = last used
-static void def_input_disp(alt_u8 v) { strncpy(menu_row2, (v <= AV2_RGsB) ? avinput_str[v] : "Last used", LCD_ROW_LEN+1); }
+// CVBS firmware: AV2 / VGA composite and S-Video, AV_LAST = last used
+static void def_input_disp(alt_u8 v) { strncpy(menu_row2, avinput_str[(v <= AV_LAST) ? v : AV_LAST], LCD_ROW_LEN+1); }
 static void cv_sharp_disp(alt_u8 v) { if (v) sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", (unsigned)v); else strncpy(menu_row2, "Off", LCD_ROW_LEN+1); }
 static void cv_pct5_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*5); }
 static void cv_pct2_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u%%", (unsigned)v*2); }
@@ -274,7 +274,7 @@ MENU(menu_audio, P99_PROTECT({ \
 #define AUDIO_MENU { LNG("Audio options  >","ｵｰﾃﾞｨｵｵﾌﾟｼｮﾝ     >"),                  OPT_SUBMENU,            { .sub = { &menu_audio, NULL, NULL } } },
 
 MENU(menu_settings, P99_PROTECT({ \
-    { LNG("Initial input","ｼｮｷﾆｭｳﾘｮｸ"),          OPT_AVCONFIG_NUMVALUE,  { .num = { (alt_u8*)&ts.def_input, OPT_WRAP, AV2_YPBPR, AV2_RGsB+1, def_input_disp } } },
+    { LNG("Initial input","ｼｮｷﾆｭｳﾘｮｸ"),          OPT_AVCONFIG_NUMVALUE,  { .num = { (alt_u8*)&ts.def_input, OPT_WRAP, AV2_YPBPR, AV_LAST, def_input_disp } } },
     { "LCD BL timeout",                         OPT_AVCONFIG_SELECTION, { .sel = { &ts.lcd_bl_timeout,  OPT_WRAP, SETTING_ITEM(lcd_bl_timeout_desc) } } },
     { "OSD",                                    OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_enable,   OPT_WRAP,   SETTING_ITEM(osd_enable_desc) } } },
     { "OSD status disp.",                       OPT_AVCONFIG_SELECTION, { .sel = { &ts.osd_status_timeout,   OPT_WRAP,   SETTING_ITEM(osd_status_desc) } } },
@@ -512,6 +512,10 @@ void display_menu(alt_u8 forcedisp)
                     *val = (*val > val_min) ? (*val-1) : (val_wrap ? val_max : val_min);
                 else
                     *val = (*val < val_max) ? (*val+1) : (val_wrap ? val_min : val_max);
+                // CVBS firmware: Initial input skips AV3 RGBHV / RGBS (between
+                // AV2 and the VGA composite / S-Video inputs)
+                if ((val == (alt_u8*)&ts.def_input) && (*val != AV_LAST) && !cvbs_input_mode((avinput_t)*val))
+                    *val = (code == VAL_MINUS) ? AV2_RGsB : AV3_RGsB;
                 break;
             case OPT_AVCONFIG_NUMVAL_U16:
                 val_u16 = item->num_u16.data;

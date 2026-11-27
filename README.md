@@ -112,7 +112,7 @@ Installation
 3. Start it with **Launch 2nd FW**. The LCD shows `CV vX.Y 15kHz` and the
    OSSC outputs the test pattern until a source is found.
 4. Press button 5 on the remote control for **AV2 Composite**, 2 for **AV2
-   S-Video**, 8 for **VGA Composite** or 9 for **VGA S-Video**.
+   S-Video**, 6 for **VGA Composite** or 3 for **VGA S-Video**.
 5. In the **CVBS decoder** menu, select the **Output** for your display:
    15kHz for CRTs and 15kHz monitors, Line2x / Line3x / Line4x for HDMI TVs
    (see **Safety**).
@@ -123,8 +123,8 @@ Installation
 Buttons on the OSSC: the 1st one goes through AV2 Composite, AV2 S-Video,
 VGA Composite and VGA S-Video; the 2nd one has no function in this firmware.
 The other inputs (AV1 SCART, RGB / component on AV2 and VGA) are not
-available. **Initial input** (Settings opt.): AV2 Composite (default), AV2
-S-Video or Last used (also VGA).
+available. **Initial input** (Settings opt.): AV2 S-Video, AV2 Composite
+(default), VGA Composite, VGA S-Video or Last used.
 
 To return to the official firmware, power cycle the OSSC.
 

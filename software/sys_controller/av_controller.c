@@ -83,7 +83,7 @@ const settings_t ts_default = {
     .osd_status_timeout = 1,
     .osd_highlight_color = 4,
     .auto_av2_ypbpr = 1,
-    .def_input = AV2_RGsB,      // CVBS firmware: AV2 composite / S-Video only
+    .def_input = AV2_RGsB,      // CVBS firmware: AV2 composite
 };
 
 alt_u8 profile_sel, profile_sel_menu, sd_profile_sel_menu, input_profiles[AV_LAST], lt_sel;
@@ -1652,10 +1652,10 @@ void update_settings(int init_setup) {
         osd->osd_config.highlight_color = 2+ts.osd_highlight_color;
         refresh_osd();
     }
-    // CVBS firmware: AV2 / VGA composite and S-Video; Initial input AV2
-    // composite / S-Video or AV2_RGsB+1 = last used (also VGA)
+    // CVBS firmware: AV2 / VGA composite and S-Video; Initial input one of
+    // them or AV_LAST = last used
     if (init_setup)
-        target_input = ((ts.def_input == AV2_YPBPR) || (ts.def_input == AV2_RGsB)) ? ts.def_input :
+        target_input = cvbs_input_mode(ts.def_input) ? ts.def_input :
                        (cvbs_input_mode(last_input) ? last_input : AV2_RGsB);
 
     memcpy(&cs, &ts, sizeof(settings_t));

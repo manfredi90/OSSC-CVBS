@@ -235,13 +235,12 @@ int parse_control()
         i = REMOTE_MAX_KEYS;
 
     switch (i) {
-        // CVBS firmware: AV2 (5 composite, 2 S-Video) and VGA (8 composite,
-        // 9 S-Video, the stock AV3 RGsB / YPbPr keys); the other input keys
-        // ignored
+        // CVBS firmware: AV2 (5 composite, 2 S-Video) and VGA (6 composite,
+        // 3 S-Video); the other input keys ignored
         case RC_BTN2: man_target_input = AV2_YPBPR; break;
         case RC_BTN5: man_target_input = AV2_RGsB; break;
-        case RC_BTN8: man_target_input = AV3_RGsB; break;
-        case RC_BTN9: man_target_input = AV3_YPBPR; break;
+        case RC_BTN6: man_target_input = AV3_RGsB; break;
+        case RC_BTN3: man_target_input = AV3_YPBPR; break;
         case RC_MENU:
             menu_active = !menu_active;
             osd->osd_config.menu_active = menu_active;

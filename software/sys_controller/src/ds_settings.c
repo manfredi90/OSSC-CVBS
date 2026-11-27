@@ -182,11 +182,11 @@ int ds_settings_load() {
     memcpy(&ts, &blob.ts, sizeof(settings_t));
     if (ts.phase_hotkey_enable > 1)
         ts.phase_hotkey_enable = 0;
-    // CVBS firmware: AV2 composite / S-Video only, no input autodetection
-    // (Initial input AV2_RGsB+1 = last used, was AV_LAST)
-    if (ts.def_input == AV_LAST)
-        ts.def_input = AV2_RGsB+1;
-    else if ((ts.def_input < AV2_YPBPR) || (ts.def_input > AV2_RGsB+1))
+    // CVBS firmware: AV2 / VGA composite and S-Video, no input autodetection
+    // (Initial input AV_LAST = last used, 1.0-1.0.6 saved it as AV2_RGsB+1)
+    if (ts.def_input == AV2_RGsB+1)
+        ts.def_input = AV_LAST;
+    else if ((ts.def_input != AV_LAST) && ((ts.def_input > AV_LAST) || !cvbs_input_mode(ts.def_input)))
         ts.def_input = AV2_RGsB;
     ts.auto_input = AUTO_OFF;
     memcpy(rc_keymap, blob.rc_keymap, sizeof(blob.rc_keymap));

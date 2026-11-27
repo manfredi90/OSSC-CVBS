@@ -28,7 +28,7 @@
 
 // CVBS decoder firmware version (shown at boot). DS_FW_TAG names the image
 // (ossc_cv_vX.Y.bin)
-#define DS_VERSION "1.0.6"
+#define DS_VERSION "1.0.7"
 #define DS_FW_TAG               "cv"
 
 #ifdef OSDLANG_JP
