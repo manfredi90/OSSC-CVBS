@@ -207,7 +207,7 @@ typedef struct {
     /* VHS firmware */
     alt_u8 cv_lockstep;     // soft frame lock: at most 1 << n clocks per back porch line (0-3)
     alt_u8 cv_paldl_off;    // PAL delay line (chroma of two lines averaged, PAL standards): 0 = on, 1 = off
-    alt_u8 cv_syncsrc;      // line timing from: 0 = TVP7002 HSOUT (sync processor), 1 = SOG (raw sync slicer)
+    alt_u8 cv_rsv1;         // (VHS 0.12 test option Line sync, now always the raw SOG; kept for the settings layout)
 } __attribute__((packed)) avconfig_t;
 
 int set_default_profile(int update_cc);

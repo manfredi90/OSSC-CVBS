@@ -1,6 +1,25 @@
 Changelog
 =========
 
+VHS firmware 0.13 (test)
+------------------------
+
+### Fixed
+- "Shadows": gone. The line timing now always comes from SOGOUT, the raw sync
+  slicer of the TVP7002, instead of HSOUT of its sync processor (automatic
+  HSYNC polarity detection, coast), which went wrong for a field now and
+  then on VHS (the field shifted right by the sync width, the line start
+  taken on the trailing edge, the burst in red at the left edge and the next
+  field washed out; or ~100 lines skewed in streaks). Hardware test with
+  0.12, same stretch of tape: 16 disturbed frames in 99 s with HSOUT, 0 in
+  106 s with SOGOUT; 49 s of the same tape on a CRT: 0. SOGOUT leads HSOUT
+  by 18 clocks (picture 9 pixels further right, measured): the regenerated
+  hsync comes 18 clocks after the edge, so picture position, burst gate and
+  clamp are as before.
+
+### Removed
+- The 0.12 test option Line sync (settings layout kept, no reset).
+
 VHS firmware 0.12 (test)
 ------------------------
 

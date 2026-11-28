@@ -226,7 +226,10 @@ always @(posedge TVP_PCLK_i) begin
         fw_locked <= 1'b0;
         fw_good <= 4'd0;
     end
-    TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
+    // (SOGOUT leads HSOUT by 18 clocks, measured: the regenerated hsync 18
+    // clocks after the edge, the picture position, burst gate and clamp as
+    // with HSOUT)
+    TVP_HS <= fw_en ? ~((fw_cnt >= 12'd18) & (fw_cnt < 12'd50)) : TVP_HS_i;
 end
 
 wire [7:0] lock_err;
@@ -244,10 +247,12 @@ always @(posedge TVP_PCLK_i) begin
     TVP_R <= TVP_R_i;
     TVP_G <= TVP_G_i;
     TVP_B <= TVP_B_i;
-    // line timing: TVP7002 HSOUT (sync processor) or, misc_config[16] (VHS
-    // test option, 0.12), SOGOUT (the raw sync slicer: no polarity detection
-    // or coast of the sync processor)
-    TVP_HS_raw <= misc_config[16] ? TVP_HSYNC_i : TVP_HS_i;
+    // VHS firmware: line timing from SOGOUT, the raw sync slicer (0.13).
+    // HSOUT of the TVP7002 sync processor (automatic HSYNC polarity
+    // detection, coast) went wrong for a field now and then on VHS: a field
+    // shifted by the sync width (line start on the trailing edge) or ~100
+    // lines skewed; with SOGOUT none (hardware test, 0.12)
+    TVP_HS_raw <= TVP_HSYNC_i;
     TVP_VS <= TVP_VSYNC_i;
 
     // sync to pclk

@@ -101,8 +101,7 @@ int ds_settings_load() {
         tc.cv_lockstep = 3;
     if (tc.cv_paldl_off > 1)
         tc.cv_paldl_off = 0;
-    if (tc.cv_syncsrc > 1)
-        tc.cv_syncsrc = 0;
+    tc.cv_rsv1 = 0;
     if (tc.ds_out_range > 2)
         tc.ds_out_range = 0;
     // decoder settings out of range: defaults
