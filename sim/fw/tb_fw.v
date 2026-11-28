@@ -2,7 +2,7 @@
 module tb;
 reg TVP_PCLK_i = 0; always #18.5 TVP_PCLK_i = ~TVP_PCLK_i;
 wire [31:0] sl_config2 = 32'h00002100;   // cfg[0] and cfg[5]: flywheel on
-integer VA, VP, VJ, MISS, MV, NL, tc = 0, k, ln, start, off, nacc = 0, ngen = 0, err, maxerr = 0, p;
+integer VA, VP, VJ, MISS, MV, NL, HLV, tc = 0, k, ln, start, off, nacc = 0, ngen = 0, err, maxerr = 0, p;
 reg [63:0] rs;
 reg hs_in = 1;
 reg TVP_HS_raw = 1, fw_hs_prev, fw_locked;
@@ -12,6 +12,10 @@ wire fw_en = sl_config2[8] & sl_config2[13];
 wire fw_edge = fw_hs_prev & ~TVP_HS_raw;
 wire [12:0] fw_diff = {1'b0, fw_cnt} - {1'b0, fw_len};
 wire fw_near = (fw_diff[12] ? (fw_diff[11:0] > 12'hff7) : (fw_diff[11:0] < 12'd9));
+wire [31:0] hv_in_config = 32'd864;          // input h_total (pixels)
+wire [31:0] hv_in_config3 = 32'h01000000;    // H_SKIP = 1
+wire [12:0] fw_line = hv_in_config3[24] ? {hv_in_config[11:0], 1'b0} : {1'b0, hv_in_config[11:0]};
+wire fw_long = ({1'b0, fw_cnt} >= fw_line - {2'b0, fw_line[12:2]});
 wire fw_accept = fw_edge & (~fw_locked | (fw_cnt >= fw_len - {3'b0, fw_len[11:3]}));
 // (VHS firmware: missing edge generated 1/8 line after the expected end, the
 // late side of the window as wide as the early one; CVBS: 4 clocks, a tape's
@@ -26,8 +30,8 @@ always @(posedge TVP_PCLK_i) begin
             if (fw_near | ~fw_locked)
                 fw_len <= fw_cnt;
             if (~fw_locked) begin
-                fw_good <= fw_near ? fw_good + 1'b1 : 4'd0;
-                fw_locked <= fw_near & (fw_good == 4'd7);
+                fw_good <= (fw_near & fw_long) ? fw_good + 1'b1 : 4'd0;
+                fw_locked <= fw_near & fw_long & (fw_good == 4'd7);
             end
         end
     end else if (fw_cnt != 12'hfff)
@@ -52,6 +56,7 @@ initial begin
     if (!$value$plusargs("MISS=%d", MISS)) MISS = 0;
     if (!$value$plusargs("MV=%d", MV)) MV = 0;
     if (!$value$plusargs("NL=%d", NL)) NL = 3000;
+    if (!$value$plusargs("HLV=%d", HLV)) HLV = 0;     // vertical interval: 8 lines with half line pulses every 312 lines, from line 0 (the flywheel starts there)
     for (ln = 0; ln < NL; ln = ln + 1) begin
         off = $rtoi(VA * $sin(6.283185307 * ln / VP));
         if (VJ > 0) off = off + ($urandom % (2*VJ+1)) - VJ;
@@ -59,12 +64,16 @@ initial begin
         while (tc < start) @(posedge TVP_PCLK_i);
         laststart = start;
         if (!(MISS > 0 && (ln % MISS) == 0)) begin hs_in = 0; repeat (127) @(posedge TVP_PCLK_i); hs_in = 1; end
+        if (HLV && (ln % 312) < 8) begin
+            while (tc < start + 864) @(posedge TVP_PCLK_i);
+            hs_in = 0; repeat (63) @(posedge TVP_PCLK_i); hs_in = 1;
+        end
         if (MV && (ln % 312) < 15) for (p = 270; p < 1500; p = p + 216) begin
             while (tc < start + p) @(posedge TVP_PCLK_i);
             hs_in = 0; repeat (62) @(posedge TVP_PCLK_i); hs_in = 1;
         end
     end
-    $display("accepted %0d generated %0d max offset of accepted edges vs real %0d", nacc, ngen, maxerr);
+    $display("fw_len %0d locked %0d; accepted %0d generated %0d max offset of accepted edges vs real %0d", fw_len, fw_locked, nacc, ngen, maxerr);
     $finish;
 end
 endmodule

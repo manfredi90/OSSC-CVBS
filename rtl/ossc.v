@@ -202,6 +202,13 @@ wire fw_en = sl_config2[8] & sl_config2[13];
 wire fw_edge = fw_hs_prev & ~TVP_HS_raw;
 wire [12:0] fw_diff = {1'b0, fw_cnt} - {1'b0, fw_len};
 wire fw_near = (fw_diff[12] ? (fw_diff[11:0] > 12'hff7) : (fw_diff[11:0] < 12'd9));
+// lock only to a period of at least 3/4 of the line length of the mode (VHS
+// 0.15: with the raw SOG (0.13) the half line pulses of the vertical interval
+// are 15 edges in a row half a line apart; a restart there (setup after VCR
+// pause / play) locked to half a line: two output lines per line, the picture
+// garbled until the next setup). Input line in clocks: H_TOTAL << H_SKIP (0/1)
+wire [12:0] fw_line = hv_in_config3[24] ? {hv_in_config[11:0], 1'b0} : {1'b0, hv_in_config[11:0]};
+wire fw_long = ({1'b0, fw_cnt} >= fw_line - {2'b0, fw_line[12:2]});
 wire fw_accept = fw_edge & (~fw_locked | (fw_cnt >= fw_len - {3'b0, fw_len[11:3]}));
 // (VHS firmware: missing edge generated 1/8 line after the expected end, the
 // late side of the window as wide as the early one; CVBS: 4 clocks, a tape's
@@ -216,8 +223,8 @@ always @(posedge TVP_PCLK_i) begin
             if (fw_near | ~fw_locked)
                 fw_len <= fw_cnt;
             if (~fw_locked) begin
-                fw_good <= fw_near ? fw_good + 1'b1 : 4'd0;
-                fw_locked <= fw_near & (fw_good == 4'd7);
+                fw_good <= (fw_near & fw_long) ? fw_good + 1'b1 : 4'd0;
+                fw_locked <= fw_near & fw_long & (fw_good == 4'd7);
             end
         end
     end else if (fw_cnt != 12'hfff)

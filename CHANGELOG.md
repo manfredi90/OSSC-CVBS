@@ -1,6 +1,18 @@
 Changelog
 =========
 
+VHS firmware 0.15 (test)
+------------------------
+
+### Fixed
+- Picture garbled after VCR pause / play (until the next setup): the hsync
+  flywheel, restarted at the setup, could lock to half a line. With the raw
+  SOG of 0.13 the vertical interval has 15 edges in a row half a line apart;
+  a restart there locked to them: two output lines per line (half lines,
+  the sync in the middle of the picture). The flywheel now locks only to a
+  period of at least 3/4 of the line length of the mode. sim/fw `+HLV=1`:
+  locked to 863 clocks before, 1727 now.
+
 VHS firmware 0.14 (test)
 ------------------------
 
