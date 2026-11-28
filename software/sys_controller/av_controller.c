@@ -731,6 +731,25 @@ void update_sc_config()
     xy_out_config.y_size = vm_conf.y_size;
     xy_out_config.y_offset = vm_conf.y_offset;
     xy_out_config2.x_offset = vm_conf.x_offset;
+    // VHS firmware: picture borders masked (Mask left / right in pixels of
+    // the 720 wide picture, top / bottom in lines of a field), on top of the
+    // picture window: the same part of the picture in every output
+    if (cv_mode) {
+        int sx = (vm_out->timings.h_active >= 1440) ? 2 : 1;
+        int sy = vm_conf.y_rpt + 1;
+        int x0 = vm_conf.x_offset + avconfig->cv_mask_l*sx;
+        int x1 = vm_conf.x_offset + (int)vm_conf.x_size - avconfig->cv_mask_r*sx;
+        int y0 = vm_conf.y_offset + avconfig->cv_mask_t*sy;
+        int y1 = vm_conf.y_offset + (int)vm_conf.y_size - avconfig->cv_mask_b*sy;
+        if (x1 < x0)
+            x1 = x0;
+        if (y1 < y0)
+            y1 = y0;
+        xy_out_config2.x_offset = x0;
+        xy_out_config.x_size = x1 - x0;
+        xy_out_config.y_offset = y0;
+        xy_out_config.y_size = y1 - y0;
+    }
     xy_out_config2.x_start_lb = vm_conf.x_start_lb;
     xy_out_config2.y_start_lb = vm_conf.y_start_lb;
     xy_out_config2.x_rpt = vm_conf.x_rpt;

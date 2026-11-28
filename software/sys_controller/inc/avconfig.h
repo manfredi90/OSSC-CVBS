@@ -207,8 +207,14 @@ typedef struct {
     /* VHS firmware */
     alt_u8 cv_lockstep;     // soft frame lock: at most 1 << n clocks per back porch line (0-3)
     alt_u8 cv_paldl_off;    // PAL delay line (chroma of two lines averaged, PAL standards): 0 = on, 1 = off
-    alt_u8 cv_rsv1;         // (VHS 0.12 test option Line sync, now always the raw SOG; kept for the settings layout)
+    alt_u8 cv_mask_l;       // picture border masked: left / right (pixels of the 720 wide picture, 0-CV_MASK_H_MAX),
+    alt_u8 cv_mask_r;
+    alt_u8 cv_mask_t;       // top / bottom (lines of a field, 0-CV_MASK_V_MAX)
+    alt_u8 cv_mask_b;
 } __attribute__((packed)) avconfig_t;
+
+#define CV_MASK_H_MAX 64
+#define CV_MASK_V_MAX 40
 
 int set_default_profile(int update_cc);
 int reset_profile();

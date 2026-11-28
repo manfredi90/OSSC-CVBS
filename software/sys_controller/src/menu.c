@@ -124,6 +124,7 @@ static void sl_hybr_str_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u
 static void lines_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, LNG("%u lines","%u ﾗｲﾝ"), v); }
 static void pixels_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, LNG("%u pixels","%u ﾄﾞｯﾄ"), v); }
 static void value_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u", v); }
+static void px_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%u px", v); }
 static void ds_width_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d%%", 100+(alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 static void signed_disp(alt_u8 v) { sniprintf(menu_row2, LCD_ROW_LEN+1, "%d", (alt_8)(v-SIGNED_NUMVAL_ZERO)); }
 // CVBS firmware: AV2 composite / S-Video only, AV2_RGsB+1 = last used
@@ -318,6 +319,10 @@ MENU(menu_downscaler, P99_PROTECT({ \
     { "HDMI range",                             OPT_AVCONFIG_SELECTION, { .sel = { &tc.ds_out_range, OPT_WRAP,   SETTING_ITEM(ds_range_desc) } } },
     { "H. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_hpos,       OPT_NOWRAP, DS_HPOS_MIN, DS_HPOS_MAX, signed_disp } } },
     { "V. position",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.ds_vpos,       OPT_NOWRAP, DS_VPOS_MIN, DS_VPOS_MAX, signed_disp } } },
+    { "Mask left",                              OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_mask_l,     OPT_NOWRAP, 0, CV_MASK_H_MAX, px_disp } } },
+    { "Mask right",                             OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_mask_r,     OPT_NOWRAP, 0, CV_MASK_H_MAX, px_disp } } },
+    { "Mask top",                               OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_mask_t,     OPT_NOWRAP, 0, CV_MASK_V_MAX, lines_disp } } },
+    { "Mask bottom",                            OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_mask_b,     OPT_NOWRAP, 0, CV_MASK_V_MAX, lines_disp } } },
 }))
 
 

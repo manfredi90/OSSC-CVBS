@@ -29,7 +29,7 @@
 // VHS firmware: own magic (the CVBS / downscaler / HD firmware settings in
 // the same sector have another format and are not loaded)
 #define DS_SETTINGS_MAGIC   0x4F535648  // "OSVH"
-#define DS_SETTINGS_VERSION 3     // 1: VHS 0.1, 2: 0.5 (PAL delay line), 3: 0.12 (line sync source)
+#define DS_SETTINGS_VERSION 4     // 1: VHS 0.1, 2: 0.5 (PAL delay line), 3: 0.12 (line sync source), 4: 0.14 (border masks)
 #define V5_TC_LESS          1     // bytes added to avconfig_t in v6
 #define V3_TC_LESS          (2 + V5_TC_LESS)    // bytes added to avconfig_t in v4 and v6
 
@@ -101,7 +101,14 @@ int ds_settings_load() {
         tc.cv_lockstep = 3;
     if (tc.cv_paldl_off > 1)
         tc.cv_paldl_off = 0;
-    tc.cv_rsv1 = 0;
+    if (tc.cv_mask_l > CV_MASK_H_MAX)
+        tc.cv_mask_l = 0;
+    if (tc.cv_mask_r > CV_MASK_H_MAX)
+        tc.cv_mask_r = 0;
+    if (tc.cv_mask_t > CV_MASK_V_MAX)
+        tc.cv_mask_t = 0;
+    if (tc.cv_mask_b > CV_MASK_V_MAX)
+        tc.cv_mask_b = 0;
     if (tc.ds_out_range > 2)
         tc.ds_out_range = 0;
     // decoder settings out of range: defaults

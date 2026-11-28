@@ -1,6 +1,19 @@
 Changelog
 =========
 
+VHS firmware 0.14 (test)
+------------------------
+
+### Added
+- VHS decoder > Mask left / right (pixels of the 720 wide picture, 0-64) and
+  Mask top / bottom (lines of a field, 0-40): the picture borders shown black
+  (the picture window of the scan converter, no FPGA change), the same part
+  of the picture in View and Archive, PAL and NTSC; applied at once. The 720
+  pixel window (53.3us) is wider than the 52us of a picture line: on the
+  right it shows the line end, a few pixels before the next sync (a light /
+  disturbed strip); at the bottom the head switch. Settings reset (four
+  settings more).
+
 VHS firmware 0.13 (test)
 ------------------------
 
