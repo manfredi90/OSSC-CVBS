@@ -27,6 +27,9 @@ VHS firmware 0.11 (test)
 ### Changed
 - Base: VHS 0.9 (frontend parity changes of 0.8 / 0.9 back), without the
   0.10 diagnostics.
+- <VHS timing> shows only E (frame lock offset; "E lost" for a lock loss): the
+  flywheel line length ranges J / A and the generated edges M removed for
+  FPGA space.
 
 VHS firmware 0.10 (diagnostics)
 -------------------------------

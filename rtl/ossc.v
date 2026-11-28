@@ -229,49 +229,14 @@ always @(posedge TVP_PCLK_i) begin
     TVP_HS <= fw_en ? (fw_cnt >= 12'd32) : TVP_HS_i;     // (same timing as before when off)
 end
 
-// VHS diagnostics, per field (latched at the TVP7002 vsync edge): range of
-// the line lengths seen by the flywheel (27MHz clocks, edge to edge) in the
-// middle of the field (lines 24-223, away from the vertical interval and the
-// head switch) and over the whole field, and the number of edges the
-// flywheel generated (missing / rejected syncs). Read by the CPU through the
-// decoder status (cv_status[23:16], selected by sl_config2[31:30]).
-reg dg_vs_prev;
-reg [8:0] dg_line;
-reg [11:0] dg_mn, dg_mx, dg_mnA, dg_mxA;
-reg [7:0] dg_pp, dg_ppA;
-reg [4:0] dg_gen, dg_genF;
-wire [11:0] dg_d = dg_mx - dg_mn;
-wire [11:0] dg_dA = dg_mxA - dg_mnA;
-always @(posedge TVP_PCLK_i) begin
-    dg_vs_prev <= TVP_VS;
-    if (dg_vs_prev & ~TVP_VS) begin
-        dg_pp <= (dg_mn > dg_mx) ? 8'h0 : ((dg_d > 12'd255) ? 8'hff : dg_d[7:0]);
-        dg_ppA <= (dg_mnA > dg_mxA) ? 8'h0 : ((dg_dA > 12'd255) ? 8'hff : dg_dA[7:0]);
-        dg_genF <= dg_gen;
-        dg_line <= 9'h0;
-        dg_mn <= 12'hfff; dg_mx <= 12'h0;
-        dg_mnA <= 12'hfff; dg_mxA <= 12'h0;
-        dg_gen <= 5'h0;
-    end else if (fw_locked & (fw_accept | fw_gen)) begin
-        if (dg_line != 9'h1ff)
-            dg_line <= dg_line + 1'b1;
-        if ((dg_line >= 9'd24) && (dg_line < 9'd224)) begin
-            if (fw_cnt < dg_mn) dg_mn <= fw_cnt;
-            if (fw_cnt > dg_mx) dg_mx <= fw_cnt;
-        end
-        if (dg_line >= 9'd2) begin
-            if (fw_cnt < dg_mnA) dg_mnA <= fw_cnt;
-            if (fw_cnt > dg_mxA) dg_mxA <= fw_cnt;
-        end
-        if (fw_gen && (dg_gen != 5'h1f))
-            dg_gen <= dg_gen + 1'b1;
-    end
-end
 wire [7:0] lock_err;
 wire [7:0] blk_pp;
 wire [2:0] dg_sel = {sl_config[14], sl_config2[31:30]};
-wire [7:0] dg_val = (dg_sel == 3'h0) ? dg_pp : ((dg_sel == 3'h1) ? dg_ppA : ((dg_sel == 3'h2) ? lock_err :
-                    ((dg_sel == 3'h3) ? {3'h0, dg_genF} : blk_pp)));
+// VHS diagnostics read by the CPU through the decoder status (cv_status[23:16],
+// selected by sl_config2[31:30] / sl_config[14]): 2 = frame lock offset,
+// 4 = blank level range (VHS 0.11: the flywheel line length ranges J / A and
+// generated edges M removed, FPGA space)
+wire [7:0] dg_val = (dg_sel == 3'h2) ? lock_err : blk_pp;
 
 
 // TVP7002 RGB digitizer
