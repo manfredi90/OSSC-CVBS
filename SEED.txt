@@ -1,0 +1,5 @@
+seeds/seed-3 worst setup slack 0.890
+seeds/seed-1: 0.646
+seeds/seed-2: 0.152
+seeds/seed-3: 0.890
+seeds/seed-4: 0.355
