@@ -12,7 +12,7 @@ module tb;
 reg clk = 0;
 always #18.5 clk = ~clk;     // 27MHz
 
-integer PAL, NF, VA, VP, VHS, VJ, VSD, VSJ, SKIP, V, EPE, EPO, PROG;
+integer PAL, NF, VA, VP, VHS, VJ, VSD, VSJ, SKIP, V, EPE, EPO, PROG, VMISS, VEXTRA;
 integer HL, FHL, NEQ, LINE;
 initial begin
     if (!$value$plusargs("PAL=%d", PAL)) PAL = 1;
@@ -27,6 +27,8 @@ initial begin
     if (!$value$plusargs("V=%d", V)) V = 0;
     if (!$value$plusargs("EPE=%d", EPE)) EPE = 0;   // per mille: vsync half a line early, even fields
     if (!$value$plusargs("EPO=%d", EPO)) EPO = 0;   // odd fields
+    if (!$value$plusargs("VMISS=%d", VMISS)) VMISS = 0;   // per mille: vsync missing
+    if (!$value$plusargs("VEXTRA=%d", VEXTRA)) VEXTRA = 0; // per mille: spurious vsync in the field
     if (!$value$plusargs("PROG=%d", PROG)) PROG = 0; // progressive source (312 / 262 lines, VCR pause)
     LINE = PAL ? 1728 : 1716;
     HL = LINE / 2;
@@ -36,9 +38,9 @@ initial begin
 end
 
 reg sog = 1, vs = 1, hs = 1;
-integer vs_at = -100000, hs_at = -100000;
+integer vs_at = -100000, hs_at = -100000, vs2_at = -100000;
 always @(posedge clk) begin
-    vs <= ~((tc >= vs_at) && (tc < vs_at + 6*HL));
+    vs <= ~(((tc >= vs_at) && (tc < vs_at + 6*HL)) || ((tc >= vs2_at) && (tc < vs2_at + 3*HL)));
     hs <= ~((tc >= hs_at) && (tc < hs_at + 32));
 end
 integer tc = 0;
@@ -47,6 +49,9 @@ always @(posedge clk) tc <= tc + 1;
 // true field starts (time of the first broad pulse) and the field parity:
 // odd = the broad pulses start at a line start
 integer fstart [0:255]; integer fpar [0:255]; integer nfld = 0;
+reg fstarted [0:255];
+integer n_miss = 0, n_extra = 0;
+initial begin : clr integer q; for (q = 0; q < 256; q = q + 1) fstarted[q] = 0; end
 
 initial begin : gen
     integer k, kk, f, start, base, j, w, off, d, dropped;
@@ -73,7 +78,14 @@ initial begin : gen
             fstart[nfld] = start; fpar[nfld] = ((k % 2) == 0); nfld = nfld + 1;
             d = VSD + ((VSJ > 0) ? (($urandom % (2*VSJ+1)) - VSJ) : 0);
             if (((k % 2) ? EPE : EPO) > ($urandom % 1000)) d = d - HL;
-            vs_at = start + d;
+            if (VMISS <= ($urandom % 1000)) vs_at = start + d;
+            else if (V) $display("  (field %0d: vsync missing)", nfld - 1);
+            if (VEXTRA > ($urandom % 1000)) begin
+                vs2_at = start + (40 + ($urandom % (FHL - 120))) * HL + ($urandom % HL);
+                if (V) $display("  (field %0d: spurious vsync)", nfld - 1);
+            end
+            // a field begun with no start in the frontend for the one before
+            if ((nfld >= 9) && !fstarted[nfld-2]) n_miss = n_miss + 1;
         end
         while (tc < start) @(posedge clk);
         // regenerated line start (flywheel): every line start, 32 clocks low
@@ -81,7 +93,7 @@ initial begin : gen
         if (w) begin sog = 0; repeat (w) @(posedge clk); sog = 1; end
     end
     #1000;
-    $display("SUMMARY fields %0d alternation_errors %0d placement_errors %0d progressive_reads %0d even_fids %0d", nf_seen, n_alt, n_pos, n_prog, n_even);
+    $display("SUMMARY fields %0d alternation_errors %0d placement_errors %0d missed_starts %0d extra_starts %0d progressive_reads %0d even_fids %0d", nf_seen, n_alt, n_pos, n_miss, n_extra, n_prog, n_even);
     $finish;
 end
 
@@ -116,18 +128,23 @@ always @(posedge clk) begin
         // the true field this start belongs to: the last one begun
         fi = nfld - 1;
         dl = (tc - fstart[fi]);
+        if (fstarted[fi] && nf_seen >= 10) n_extra = n_extra + 1;
+        fstarted[fi] = 1;
         // expected: odd (broad at line start) starts 1 line after, even 1.5
         exp_dl = fpar[fi] ? LINE : LINE + HL;
-        if (nf_seen >= 6 && !interlace_flag) n_prog = n_prog + 1;
-        if (nf_seen >= 6 && (dut.fid_next == 0)) n_even = n_even + 1;
-        if (nf_seen >= 6 && interlace_flag) begin
+        if (nf_seen >= 10 && !interlace_flag) n_prog = n_prog + 1;
+        if (nf_seen >= 10 && (dut.fid_next == 0)) n_even = n_even + 1;
+        if (nf_seen >= 10 && interlace_flag) begin
             if ((last_fid >= 0) && (dut.fid_next == last_fid) && (fpar[fi] != last_true)) n_alt = n_alt + 1;
             if ((dut.fid_next != fpar[fi]) || (dl < exp_dl - HL/2) || (dl > exp_dl + HL/2)) n_pos = n_pos + 1;
         end
-        if (V || (nf_seen >= 6 && interlace_flag && ((dut.fid_next != fpar[fi]) || (dl < exp_dl - HL/2) || (dl > exp_dl + HL/2))))
+        if (V || (nf_seen >= 10 && interlace_flag && ((dut.fid_next != fpar[fi]) || (dl < exp_dl - HL/2) || (dl > exp_dl + HL/2))))
             $display("field %0d true_par %0d fid %0d start %0d (exp %0d) ilace %0d", fi, fpar[fi], dut.fid_next, dl, exp_dl, interlace_flag);
         last_fid = dut.fid_next; last_true = fpar[fi];
         nf_seen = nf_seen + 1;
     end
 end
+// V=2: every parity decision
+always @(posedge clk) if ((V == 2) && dut.fid_decide)
+    $display("  DBG decide tc %0d v_cnt %0d lpred %0d exp %0d lock %0d bad %0d good %0d raw %0d fix %0d", tc, dut.v_cnt, dut.vf_lpred, dut.vf_exp, dut.vf_lock, dut.vf_bad, dut.vf_good, dut.fid_raw, dut.fid_fix);
 endmodule

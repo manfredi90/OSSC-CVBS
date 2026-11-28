@@ -54,7 +54,6 @@ module tvp7002_frontend (
     output reg [19:0] pcnt_field,
     output reg [7:0] hsync_width,
     output reg sync_active,
-    output reg [7:0] fid_rep_cnt,   // VHS diagnostics: fields with the parity of the previous one (interlaced), mod 256
     output [7:0] lumacode_addr,
     output lumacode_rden
 );
@@ -90,6 +89,35 @@ reg HS_i_prev, VS_i_np_prev;
 reg HSYNC_i_np_prev, VSYNC_i_np_prev;
 reg [1:0] fid_next_ctr;
 reg fid_next;
+// VHS firmware: field parity taken 1/16 line after the vsync edge (sync
+// separated mode). The TVP7002 vsync edge comes together with a sync edge
+// of the composite sync; when it was registered first the parity reference
+// was the previous edge, half a line earlier: the field read as the other
+// one, its start one line early (VHS: a field placed one line off every
+// ~30 fields). 1/16 line later the edge is always in, the next one is half
+// a line away. Both domains (output side / measurement).
+reg vs_pend, meas_vs_pend;
+// VHS firmware: the fields of an interlaced source alternate. A parity read
+// once against the alternation (the reading equal to the previous one, which
+// itself differed from the one before) is taken as the expected parity; a
+// repeated one is real (a dropped field, a progressive source). VHS: the
+// vsync edge of the TVP7002 sometimes on the wrong half line (a field read
+// as the other one every ~50 fields, also with the delay above). Both domains.
+reg fid_raw1, fid_raw2, meas_raw1, meas_raw2;
+// VHS firmware: vertical flywheel (output side). A field lasts as long as the
+// one two fields before (VCR: 312 / 313 lines, 262 / 263 NTSC): when locked,
+// a vsync giving another field length is ignored and a missing one is
+// replaced at the expected line; a field begun that way with a vsync
+// elsewhere in it, or two vsyncs elsewhere in a row (a splice, search),
+// unlock it and the next vsync is taken. (A CRT does the
+// same; VHS: fields with a missing / spurious vsync of the TVP7002, the line
+// count lost for a field and the decoder levels with it, ~10 a minute.)
+reg [10:0] vf_l1, vf_l2;     // length of the last field / of the one before
+reg vf_par;                  // parity of the current field
+reg vf_lock, vf_syn;
+reg [1:0] vf_good, vf_bad;
+reg [1:0] ilace_cnt;
+reg [7:0] vs_dly, meas_vs_dly;
 reg [3:0] h_ctr;
 
 reg [7:0] R_pp[PP_PL_START:PP_PL_END] /* synthesis ramstyle = "logic" */;
@@ -147,6 +175,17 @@ wire [11:0] even_max_thold = (H_TOTAL / 12'd2) + (H_TOTAL / 12'd4);
 wire [11:0] meas_h_cnt_ref = (vsync_i_type == VSYNC_SEPARATED) ? meas_h_cnt_sogref : meas_h_cnt;
 wire [11:0] meas_even_min_thold = (pcnt_line / 12'd4);
 wire [11:0] meas_even_max_thold = (pcnt_line / 12'd2) + (pcnt_line / 12'd4);
+wire meas_raw = ((meas_h_cnt_ref < meas_even_min_thold) | (meas_h_cnt_ref > meas_even_max_thold)) ? FID_ODD : FID_EVEN;
+wire meas_fix = (meas_raw == meas_raw1) & (meas_raw1 != meas_raw2);
+wire fid_decide = (VS_i_np_prev & ~VS_i_np & (vsync_i_type == VSYNC_RAW)) | (vs_pend & (vs_dly == H_TOTAL[11:4]));
+wire fid_raw = ((HS_i_prev & ~HS_i) | (h_cnt_ref < even_min_thold) | (h_cnt_ref > even_max_thold) | ~interlace_flag) ? FID_ODD : FID_EVEN;
+wire [1:0] fid_raw_ctr = ((HS_i_prev & ~HS_i) | (h_cnt_ref < even_min_thold)) ? 2'h1 : 2'h2;
+wire fid_fix = (fid_raw == fid_raw1) & (fid_raw1 != fid_raw2);
+wire [1:0] fid_dec_ctr = fid_fix ? (((fid_raw == FID_ODD) | (h_cnt >= even_min_thold)) ? 2'h2 : 2'h1) : fid_raw_ctr;
+wire [10:0] vf_exp = vf_l2;
+wire [10:0] vf_lpred = v_cnt + {9'h0, fid_dec_ctr} - 11'd1;   // field length if this vsync is taken
+wire vf_inwin = (vf_lpred == vf_exp);
+
 wire meas_vblank_region = (pcnt_frame_ctr < 8*pcnt_line) | (pcnt_frame_ctr > (({1'b0, pcnt_field}<<interlace_flag) - 4*pcnt_line)) |
                           (interlace_flag & (pcnt_frame_ctr < (pcnt_field+8*pcnt_line)) & (pcnt_frame_ctr > (pcnt_field - 4*pcnt_line)));
 wire [11:0] glitch_filt_thold = meas_vblank_region ? (pcnt_line/4) : (pcnt_line/8);
@@ -207,6 +246,28 @@ always @(posedge PCLK_i) begin
             fid_next_ctr <= fid_next_ctr - 1'b1;
 
         if (fid_next_ctr == 2'h1) begin
+            // field lengths; lock after two fields in a row as long as the
+            // ones two fields before
+            vf_par <= fid_next;
+            vf_l1 <= v_cnt;
+            vf_l2 <= vf_l1;
+            // a field begun with no vsync: its parity as a reading for the
+            // alternation rule
+            vf_syn <= 1'b0;
+            if (vf_syn) begin
+                fid_raw2 <= fid_raw1;
+                fid_raw1 <= fid_next;
+                // with a vsync elsewhere in that field (a splice): unlocked,
+                // the next vsync is taken
+                if (vf_bad != 2'h0) begin
+                    vf_lock <= 1'b0;
+                    vf_good <= 2'h0;
+                end
+            end
+            if (~vf_lock) begin
+                vf_good <= (v_cnt == vf_exp) ? ((vf_good == 2'h3) ? 2'h3 : vf_good + 1'b1) : 2'h0;
+                vf_lock <= (v_cnt == vf_exp) & (vf_good != 2'h0);
+            end
             // regenerated output timings start lagging by one scanline due to vsync detection,
             // compensate by starting v_cnt from 1 (effectively reduces V_SYNCLEN by 1)
             v_cnt <= 1;
@@ -221,6 +282,13 @@ always @(posedge PCLK_i) begin
             v_cnt <= v_cnt + 1'b1;
             vmax_cnt <= vmax_cnt + 1'b1;
             frame_change <= 1'b0;
+            // locked, no field start pending one line before the expected
+            // one: the field starts there anyway (alternating parity)
+            if (vf_lock & (fid_next_ctr == 2'h0) & (v_cnt + 1'b1 == vf_exp)) begin
+                fid_next <= interlace_flag ? ~vf_par : FID_ODD;
+                fid_next_ctr <= 2'h1;
+                vf_syn <= 1'b1;
+            end
         end
 
         sof_scaler <= (vmax_cnt == V_SOF_LINE);
@@ -235,21 +303,40 @@ always @(posedge PCLK_i) begin
         end
     end
 
-    // vsync leading edge processing per quadrant
+    // vsync leading edge processing per quadrant (sync separated: 1/16 line
+    // after the edge)
     if (VS_i_np_prev & ~VS_i_np) begin
-        if ((HS_i_prev & ~HS_i) | (h_cnt_ref < even_min_thold)) begin
-            fid_next <= FID_ODD;
-            fid_next_ctr <= 2'h1;
-        end else if ((h_cnt_ref > even_max_thold) | ~interlace_flag) begin
-            fid_next <= FID_ODD;
-            fid_next_ctr <= 2'h2;
-        end else begin
-            fid_next <= FID_EVEN;
-            fid_next_ctr <= 2'h2;
+        vs_pend <= (vsync_i_type == VSYNC_SEPARATED);
+        vs_dly <= 8'h0;
+    end else if (vs_pend) begin
+        vs_dly <= vs_dly + 1'b1;
+        if (vs_dly == H_TOTAL[11:4])
+            vs_pend <= 1'b0;
+    end
+    if (fid_decide & vf_lock & ~vf_inwin) begin
+        // vsync elsewhere: ignored (two in a row: unlocked)
+        if (vf_bad == 2'h1) begin
+            vf_lock <= 1'b0;
+            vf_good <= 2'h0;
         end
-        // (diagnostics: parity read equal to the previous field's)
-        if (interlace_flag & ((((HS_i_prev & ~HS_i) | (h_cnt_ref < even_min_thold) | (h_cnt_ref > even_max_thold)) ? FID_ODD : FID_EVEN) == fid_next))
-            fid_rep_cnt <= fid_rep_cnt + 1'b1;
+        vf_bad <= vf_bad + 1'b1;
+    end else if (fid_decide) begin
+        vf_syn <= 1'b0;
+        if (vf_lock)
+            vf_bad <= 2'h0;
+        fid_raw2 <= fid_raw1;
+        fid_raw1 <= fid_raw;
+        if (fid_fix) begin
+            // parity against the alternation: the expected one. Field
+            // start: even as an even field (vsync edge in the middle of the
+            // line or half a line early); odd at the next line start if the
+            // edge came just after one, else at the one after it
+            fid_next <= ~fid_raw;
+            fid_next_ctr <= ((fid_raw == FID_ODD) | (h_cnt >= even_min_thold)) ? 2'h2 : 2'h1;
+        end else begin
+            fid_next <= fid_raw;
+            fid_next_ctr <= fid_raw_ctr;
+        end
     end
 
     // record starting position of csync leading edge for later FID detection
@@ -551,9 +638,27 @@ always @(posedge CLK_MEAS_i) begin
     end
 
     if (VSYNC_i_np_prev & ~VSYNC_i_np) begin
-        if ((meas_h_cnt_ref < meas_even_min_thold) | (meas_h_cnt_ref > meas_even_max_thold)) begin
+        meas_vs_pend <= (vsync_i_type == VSYNC_SEPARATED);
+        meas_vs_dly <= 8'h0;
+    end else if (meas_vs_pend) begin
+        meas_vs_dly <= meas_vs_dly + 1'b1;
+        if (meas_vs_dly == pcnt_line[11:4])
+            meas_vs_pend <= 1'b0;
+    end
+    if ((VSYNC_i_np_prev & ~VSYNC_i_np & (vsync_i_type == VSYNC_RAW)) | (meas_vs_pend & (meas_vs_dly == pcnt_line[11:4]))) begin
+        meas_raw2 <= meas_raw1;
+        meas_raw1 <= meas_raw;
+        // interlace flag: changed after 4 fields in a row read the other way
+        // (VHS firmware: not by a single missing / spurious vsync)
+        if (((meas_fix ? ~meas_raw : meas_raw) != meas_fid) == interlace_flag) begin
+            ilace_cnt <= 2'h0;
+        end else begin
+            ilace_cnt <= ilace_cnt + 1'b1;
+            if (ilace_cnt == 2'h3)
+                interlace_flag <= ~interlace_flag;
+        end
+        if ((meas_fix ? ~meas_raw : meas_raw) == FID_ODD) begin
             meas_fid <= FID_ODD;
-            interlace_flag <= (meas_fid == FID_EVEN);
 
             if (vsync_i_type == VSYNC_RAW) begin
                 // vsync leading edge may occur at hsync edge or either side of it
@@ -573,7 +678,6 @@ always @(posedge CLK_MEAS_i) begin
             end
         end else begin
             meas_fid <= FID_EVEN;
-            interlace_flag <= (meas_fid == FID_ODD);
             if (meas_fid == FID_EVEN) begin
                 meas_v_cnt <= 0;
                 vtotal <= meas_v_cnt;

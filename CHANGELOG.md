@@ -1,6 +1,33 @@
 Changelog
 =========
 
+VHS firmware 0.11 (test)
+------------------------
+
+### Fixed
+- "Shadows" (a frame in streaks or with a coloured band at the left edge,
+  the next one too dark / washed out; about every 8 s on a nearly new tape,
+  the same stretch steady on a CRT): fields with a missing or spurious vsync
+  from the TVP7002, the line count lost for that field and the decoder black
+  level measured on the wrong lines with it. Vertical flywheel (output side):
+  a field lasts as long as the one two fields before (312 / 313 lines, 262 /
+  263 NTSC); when locked a vsync giving another length is ignored and a
+  missing one is replaced at the expected line; a field begun that way with a
+  vsync elsewhere in it, or two such vsyncs in a row (splice, search), unlock
+  it and the next vsync is taken. The measured interlace flag changes after 4
+  fields in a row read the other way (not by a single missing / spurious
+  vsync). sim/fe `runfid.sh` with `VMISS` / `VEXTRA` (5% of the fields): 3
+  placed off, 2 missed starts / 7 placed off, 5 extra starts -> 0 / 0 (PAL
+  and NTSC); a splice: 2 fields off (0.9: 1 plus a progressive read).
+- The field one line off in View captures with some dongles (MS2130):
+  Frame lock step default 2 clocks (was 8); the dongle took the frame one
+  line off when a blanking line was 8 clocks longer / shorter. Same lock
+  margin on the hardware test (no resync, no lock loss).
+
+### Changed
+- Base: VHS 0.9 (frontend parity changes of 0.8 / 0.9 back), without the
+  0.10 diagnostics.
+
 VHS firmware 0.10 (diagnostics)
 -------------------------------
 
