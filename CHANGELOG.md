@@ -1,6 +1,22 @@
 Changelog
 =========
 
+VHS firmware 0.12 (test)
+------------------------
+
+### Added
+- Test option VHS advanced > Line sync: TVP7002 (HSOUT of the sync
+  processor, as before) / SOG raw (SOGOUT, the raw sync slicer). The shadows
+  are still there with 0.11 (same rate): not the vertical sync. In them the
+  whole field is shifted right by ~5.3us (about the sync width: the line
+  start taken on the trailing edge of the sync, the burst seen at the left
+  edge in red, the next field washed out) or the top third of a field is in
+  streaks (lines skewed, the line period lost for ~100 lines): the line
+  timing from the TVP7002 sync processor (automatic HSYNC polarity
+  detection, coast) going wrong for a field. SOG raw takes the line timing
+  from the raw slicer instead, to compare on the hardware. Settings reset
+  (one more setting).
+
 VHS firmware 0.11 (test)
 ------------------------
 

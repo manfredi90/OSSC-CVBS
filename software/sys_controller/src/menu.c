@@ -110,6 +110,7 @@ static const char* const cv_std_desc[] = { "Auto", "PAL", "NTSC", "PAL-60", "NTS
 static const char* const cv_notch_desc[] = { "On", "Off" };   // cv_notch_off, cv_paldl_off
 static const char* const cv_out_desc[] = { "Archive (interl)", "View (progress)" };
 static const char* const cv_lockstep_desc[] = { "1 clock", "2 clocks", "4 clocks", "8 clocks" };
+static const char* const cv_syncsrc_desc[] = { "TVP7002", "SOG raw" };
 static const char* const cv_reffilt_desc[] = { "Auto", "Off", "On" };
 static const char* const cv_setup_desc[] = { "Auto", "Off", "On" };
 
@@ -298,6 +299,7 @@ MENU(menu_cvbs_adv, P99_PROTECT({ \
     { "Burst position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_bgate,      OPT_NOWRAP, CV_BGATE_MIN, CV_BGATE_MAX, value_disp } } },
     { "Clamp position",                         OPT_AVCONFIG_NUMVALUE,  { .num = { &tc.cv_clamp,      OPT_NOWRAP, CV_CLAMP_MIN, CV_CLAMP_MAX, value_disp } } },
     { "Frame lock step",                        OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_lockstep,  OPT_WRAP,   SETTING_ITEM(cv_lockstep_desc) } } },
+    { "Line sync",                              OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_syncsrc,   OPT_WRAP,   SETTING_ITEM(cv_syncsrc_desc) } } },
     { "Line re-timing",                         OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_retime_off, OPT_WRAP,  SETTING_ITEM(on_off_desc) } } },
     { "Ref. filter",                            OPT_AVCONFIG_SELECTION, { .sel = { &tc.cv_reffilt,   OPT_WRAP,   SETTING_ITEM(cv_reffilt_desc) } } },
     { LNG("<Adv. timing   >","<ｶｸｼｭﾀｲﾐﾝｸﾞ>"),    OPT_SUBMENU,            { .sub = { &menu_advtiming,     &vm_arg_info, vm_select } } },

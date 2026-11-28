@@ -244,7 +244,10 @@ always @(posedge TVP_PCLK_i) begin
     TVP_R <= TVP_R_i;
     TVP_G <= TVP_G_i;
     TVP_B <= TVP_B_i;
-    TVP_HS_raw <= TVP_HS_i;
+    // line timing: TVP7002 HSOUT (sync processor) or, misc_config[16] (VHS
+    // test option, 0.12), SOGOUT (the raw sync slicer: no polarity detection
+    // or coast of the sync processor)
+    TVP_HS_raw <= misc_config[16] ? TVP_HSYNC_i : TVP_HS_i;
     TVP_VS <= TVP_VSYNC_i;
 
     // sync to pclk

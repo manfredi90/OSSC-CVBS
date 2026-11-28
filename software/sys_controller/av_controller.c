@@ -742,7 +742,7 @@ void update_sc_config()
     misc_config.tp_sel = avconfig->ds_tp_sel;         // test pattern design
     hdmitx_rgb_limited = (avconfig->ds_out_range != 0);  // AVI InfoFrame (set with the next InfoFrame update)
     misc_config.shmask_enable = (avconfig->shmask_mode != 0);
-    misc_config.cv_hfrac = 0;      // (stock shadow mask interval bits, unused)
+    misc_config.cv_hfrac = avconfig->cv_syncsrc & 1;   // [16]: VHS line sync source (ossc.v); (stock shadow mask interval bits)
     misc_config.lumacode_mode = lc_cfg_arr[avconfig->lumacode_mode].mode;
     misc_config.panasonic_hack = avconfig->panasonic_hack;
     misc_config.ds_vdec = vm_conf.ds_vdec & 3;     // bit 2 in sl_config
